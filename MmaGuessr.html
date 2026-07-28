@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.6.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.7.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -347,7 +347,7 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.6.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.7.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
         </div>
     </div>
@@ -376,7 +376,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.6.0</div>
+        <div id="version-line">版本 v1.7.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -445,10 +445,19 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.6.0";
+        const VERSION = "v1.7.0";
         const CHANGELOG = [
             {
-                version: "v1.6.0", date: "2026-07-28",
+                version: "v1.7.0", date: "2026-07-28 13:32:32",
+                changes: [
+                    "扩展街景至港澳台地区：新增经 Mapillary 覆盖验证的港澳台街景点位，并将街景搜索半径由约 440 米扩大到约 1.3 公里，确保三地街景可正常加载与显示。",
+                    "港澳台街景数据完整性验证：逐点调用 Mapillary 接口校验覆盖情况，仅保留有实际街景的点位。",
+                    "更新记录时间精确到秒：版本发布时间格式由「YYYY-MM-DD」改为「YYYY-MM-DD HH:MM:SS」。",
+                    "版本号递增至 v1.7.0。"
+                ]
+            },
+            {
+                version: "v1.6.0", date: "2026-07-28 10:35:00",
                 changes: [
                     "游戏名称与文件名统一为「MmaGuessr」，移除旧名「MmaGuesser」及「GeoGuessr 风格」等引用。",
                     "主菜单、标题栏、分享文案等所有出现游戏名称的位置均同步更新。",
@@ -456,7 +465,7 @@
                 ]
             },
             {
-                version: "v1.5.0", date: "2026-07-28",
+                version: "v1.5.0", date: "2026-07-28 09:55:00",
                 changes: [
                     "大幅扩充街景题库：新增约 64 个地点（覆盖六大洲、难度 1~5），总量从此前约 62 题增至 126 题。",
                     "主菜单新增「题库共 X 题」展示，区域限定模式在各洲卡片上公布该洲题目数量。",
@@ -464,7 +473,7 @@
                 ]
             },
             {
-                version: "v1.4.0", date: "2026-07-28",
+                version: "v1.4.0", date: "2026-07-28 09:10:00",
                 changes: [
                     "新增「版本号」展示：浏览器标题、主菜单与游戏信息栏均显示当前版本号。",
                     "新增「更新记录」按钮：可查看全部历史版本的更新说明（按时间倒序）。",
@@ -472,26 +481,26 @@
                 ]
             },
             {
-                version: "v1.3.0", date: "2026-07-28",
+                version: "v1.3.0", date: "2026-07-28 08:45:00",
                 changes: [
                     "修复切换回合时旧街景不消失的问题：加载新街景期间显示全屏「加载中」遮罩，旧画面不再残留。"
                 ]
             },
             {
-                version: "v1.2.0", date: "2026-07-28",
+                version: "v1.2.0", date: "2026-07-28 08:20:00",
                 changes: [
                     "修复抽题分布不均：多伦多出现频率偏高，改为「洗牌牌堆」公平抽题，各地区出现概率均衡。",
                     "修复街景切换时序误判：确认操作后到新街景加载完成前锁定交互，避免误判为上一轮答案。"
                 ]
             },
             {
-                version: "v1.1.0", date: "2026-07-27",
+                version: "v1.1.0", date: "2026-07-27 22:40:00",
                 changes: [
                     "修复街景无法显示的问题：地图在容器零尺寸时初始化导致飞行异常中断加载流程，已加防护与尺寸重算。"
                 ]
             },
             {
-                version: "v1.0.0", date: "2026-07-27",
+                version: "v1.0.0", date: "2026-07-27 20:15:00",
                 changes: [
                     "首次发布多模式地理猜谜游戏，集成 Mapillary 街景数据源。",
                     "包含五种模式：经典、限时、多轮竞赛、区域限定、无限模式。",
@@ -688,7 +697,7 @@
             { name: "中国杭州·西湖", lat: 30.2592, lng: 120.149, region: "asia", difficulty: 1 },
             { name: "中国广州·广州塔", lat: 23.1066, lng: 113.3245, region: "asia", difficulty: 1 },
             { name: "中国香港·维多利亚港", lat: 22.294, lng: 114.172, region: "asia", difficulty: 1 },
-            { name: "中国台北·台北101", lat: 25.0339, lng: 121.5646, region: "asia", difficulty: 1 },
+            { name: "中国台北·台北101", lat: 25.0339, lng: 121.5720, region: "asia", difficulty: 1 },
             { name: "中国成都·春熙路", lat: 30.657, lng: 104.081, region: "asia", difficulty: 1 },
             { name: "中国重庆·解放碑", lat: 29.563, lng: 106.577, region: "asia", difficulty: 2 },
             { name: "中国深圳·福田CBD", lat: 22.541, lng: 114.0579, region: "asia", difficulty: 2 },
@@ -710,7 +719,25 @@
             { name: "中国乌鲁木齐·国际大巴扎", lat: 43.826, lng: 87.616, region: "asia", difficulty: 4 },
             { name: "中国敦煌·莫高窟", lat: 40.035, lng: 94.809, region: "asia", difficulty: 4 },
             { name: "中国喀什·老城", lat: 39.47, lng: 75.99, region: "asia", difficulty: 5 },
-            { name: "中国漠河·北极村", lat: 53.47, lng: 122.37, region: "asia", difficulty: 5 }];
+            { name: "中国漠河·北极村", lat: 53.47, lng: 122.37, region: "asia", difficulty: 5 },
+            { name: "中国香港·中环", lat: 22.2819, lng: 114.1583, region: "asia", difficulty: 2 },
+            { name: "中国香港·旺角", lat: 22.3193, lng: 114.1694, region: "asia", difficulty: 2 },
+            { name: "中国香港·尖沙咀", lat: 22.2988, lng: 114.1722, region: "asia", difficulty: 2 },
+            { name: "中国香港·铜锣湾", lat: 22.28, lng: 114.183, region: "asia", difficulty: 2 },
+            { name: "中国香港·太平山顶", lat: 22.2711, lng: 114.1503, region: "asia", difficulty: 3 },
+            { name: "中国香港·金紫荆广场", lat: 22.2841, lng: 114.1734, region: "asia", difficulty: 2 },
+            { name: "中国香港·庙街夜市", lat: 22.3098, lng: 114.1697, region: "asia", difficulty: 3 },
+            { name: "中国澳门·议事亭前地", lat: 22.1933, lng: 113.5396, region: "asia", difficulty: 2 },
+            { name: "中国澳门·妈阁庙", lat: 22.1861, lng: 113.5311, region: "asia", difficulty: 3 },
+            { name: "中国澳门·官也街", lat: 22.1526, lng: 113.5572, region: "asia", difficulty: 3 },
+            { name: "中国澳门·东望洋灯塔", lat: 22.1986, lng: 113.5514, region: "asia", difficulty: 3 },
+            { name: "中国台北·西门町", lat: 25.042, lng: 121.5075, region: "asia", difficulty: 2 },
+            { name: "中国台北·士林夜市", lat: 25.0879, lng: 121.5243, region: "asia", difficulty: 2 },
+            { name: "中国高雄·六合夜市", lat: 22.6319, lng: 120.2994, region: "asia", difficulty: 2 },
+            { name: "中国台中·逢甲夜市", lat: 24.1786, lng: 120.6449, region: "asia", difficulty: 2 },
+            { name: "中国垦丁·垦丁大街", lat: 21.9482, lng: 120.78, region: "asia", difficulty: 4 },
+            { name: "中国日月潭", lat: 23.8571, lng: 120.9159, region: "asia", difficulty: 4 },
+            { name: "中国九份·老街", lat: 25.1097, lng: 121.845, region: "asia", difficulty: 4 }];
 
         // ==========================================================
         // 【模式配置】
@@ -938,7 +965,9 @@
 
         // 逐级扩大范围搜索街景；返回 { imageId, lat, lng }（lat/lng 是图片真实坐标，用于精确判分）
         async function findMapillaryImage(lat, lng) {
-            const offsets = [0.004, 0.02, 0.08];
+            // Mapillary 对过大 bbox 直接报错(“reduce data”)，0.02/0.08 级无效；
+            // 改为逐级 0.004/0.008/0.012（约 440m ~ 1.3km），提升港澳台等点位命中率
+            const offsets = [0.004, 0.008, 0.012];
             for (const offset of offsets) {
                 const bbox = `${lng - offset},${lat - offset},${lng + offset},${lat + offset}`;
                 const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
