@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 MmaGuessr · 街景猜位置游戏 (OSM + Mapillary)</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" />
+    <script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Microsoft YaHei", Arial, sans-serif; width: 100vw; height: 100vh; overflow: hidden; background: #1a1a2e; }
+        #game-container { display: flex; width: 100%; height: 100%; }
+        #panorama-area { flex: 1; position: relative; background: #333; }
+        #panorama-view { width: 100%; height: 100%; }
+        
+        #panorama-loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; text-align: center; z-index: 10;
+        }
+        #panorama-loading .spinner {
+            width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3);
+            border-top: 5px solid #4CAF50; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #panorama-fallback {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; text-align: center; padding: 20px;
+        }
+
+        #minimap-container {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 320px; height: 240px;
+            border: 3px solid #fff; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: all 0.3s ease; z-index: 1000;
+        }
+        #minimap-container.enlarged { width: 60vw; height: 70vh; bottom: 50px; right: 50px; }
+        #guess-map { width: 100%; height: 100%; z-index: 1; }
+        #map-toggle-btn {
+            position: absolute; top: 8px; right: 8px;
+            width: 30px; height: 30px; border: none; border-radius: 50%;
+            background: rgba(0,0,0,0.7); color: white; font-size: 18px;
+            cursor: pointer; z-index: 1001;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #submit-btn {
+            position: fixed; bottom: 270px; right: 20px;
+            padding: 14px 32px; background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white; border: none; border-radius: 25px;
+            font-size: 16px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4); transition: all 0.3s ease; z-index: 1000;
+        }
+        #submit-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6); }
+        #submit-btn:disabled { background: #999; cursor: not-allowed; box-shadow: none; }
+
+        #info-bar {
+            position: fixed; top: 15px; left: 15px;
+            background: rgba(0, 0, 0, 0.75); color: white;
+            padding: 12px 20px; border-radius: 10px; font-size: 14px;
+            z-index: 1000; backdrop-filter: blur(10px);
+        }
+        #info-bar .score { color: #4CAF50; font-weight: bold; font-size: 18px; }
+        #info-bar .round { color: #FFD700; font-weight: bold; }
+
+        #result-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); z-index: 9999;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+            /* 增加一个淡入动画 */
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        #result-overlay.show { display: flex; }
+        #result-box {
+            background: white; border-radius: 16px; padding: 40px;
+            text-align: center; max-width: 450px; width: 90%; animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { from { transform: scale(0.8) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        #result-box h2 { color: #333; margin-bottom: 20px; font-size: 22px; }
+        #result-box .distance { font-size: 36px; font-weight: bold; color: #e74c3c; margin: 10px 0; }
+        #result-box .score-gained { font-size: 24px; color: #4CAF50; margin: 10px 0; }
+        #result-box .location-name { font-size: 16px; color: #666; margin-bottom: 25px; }
+        #next-btn {
+            padding: 12px 30px; background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white; border: none; border-radius: 25px;
+            font-size: 16px; cursor: pointer; transition: all 0.3s;
+        }
+        #next-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(52, 152, 219, 0.5); }
+
+        #hint-text {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8); color: #FFD700;
+            padding: 15px 25px; border-radius: 10px; font-size: 16px;
+            z-index: 999; display: none; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info-bar">
+        <div>第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">5</span> 轮</div>
+        <div>总分：<span class="score" id="total-score">0</span> 分</div>
+    </div>
+
+    <div id="game-container">
+        <div id="panorama-area">
+            <div id="panorama-view"></div>
+            <div id="panorama-loading" style="display:none;">
+                <div class="spinner"></div>
+                <div>正在寻找并加载街景...</div>
+            </div>
+            <div id="panorama-fallback">
+                <h2>⚠️ 街景加载失败</h2>
+                <p>请按 F12 打开控制台(Console)查看具体报错信息。<br>可能原因：Token权限不足、该坐标无覆盖、或网络拦截。</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="minimap-container">
+        <button id="map-toggle-btn" onclick="toggleMapSize()">⛶</button>
+        <div id="guess-map"></div>
+    </div>
+
+    <button id="submit-btn" onclick="submitGuess()" disabled>🎯 提交选择</button>
+
+    <div id="result-overlay">
+        <div id="result-box">
+            <h2 id="result-title">📊 本轮结果</h2>
+            <div class="location-name" id="result-location">位置：-</div>
+            <div class="distance" id="result-distance">0 公里</div>
+            <div class="score-gained" id="result-score">+0 分</div>
+            <button id="next-btn" onclick="nextRound()">下一轮 ▶</button>
+        </div>
+    </div>
+
+    <div id="hint-text">👆 请在右下角地图上点击标记位置</div>
+
+    <script>
+        // ==========================================================
+        // 【⚠️ 核心配置区：请在这里填入你的 Mapillary Token】
+        // ==========================================================
+        const MAPILLARY_TOKEN = "MLY|27847157814868912|297a1717444edeb373bb94009d2df54a"; 
+
+        const GAME_ROUNDS = [
+            { name: "纽约时代广场", lng: -73.9857, lat: 40.7580 },
+            { name: "巴黎埃菲尔铁塔", lng: 2.2945, lat: 48.8584 },
+            { name: "伦敦大本钟", lng: -0.1246, lat: 51.5007 },
+            { name: "东京塔", lng: 139.7454, lat: 35.6586 },
+            { name: "悉尼歌剧院", lng: 151.2153, lat: -33.8568 }
+        ];
+
+        let currentRound = 0, totalScore = 0;
+        let map = null, guessMarker = null, guessPoint = null, answerMarker = null, routeLine = null;
+        let mapillaryViewer = null, isMapEnlarged = false;
+        
+        // 【新增】状态锁：防止在看红线动画时误触地图
+        let isSubmitting = false; 
+
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        const blueIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        window.onload = function() {
+            if (!MAPILLARY_TOKEN || MAPILLARY_TOKEN.includes("在这里粘贴")) {
+                alert("⚠️ 开发者提示：\n请先在代码的 <script> 标签顶部配置你的 MAPILLARY_TOKEN！");
+            }
+            document.getElementById('total-rounds').textContent = GAME_ROUNDS.length;
+            showHint();
+            initGuessMap(); 
+            loadRound(currentRound);
+        };
+
+        function initGuessMap() {
+            map = L.map('guess-map').setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap', maxZoom: 19
+            }).addTo(map);
+
+            map.on('click', function(e) {
+                // 【修改】如果在提交动画期间，禁止点击地图
+                if (isSubmitting) return; 
+
+                if (guessMarker) map.removeLayer(guessMarker);
+                guessMarker = L.marker(e.latlng, {icon: redIcon}).addTo(map);
+                guessPoint = e.latlng; 
+                document.getElementById('submit-btn').disabled = false;
+            });
+        }
+
+        function initMapillaryViewer(imageId) {
+            document.getElementById('panorama-loading').style.display = 'block';
+            document.getElementById('panorama-fallback').style.display = 'none';
+
+            try {
+                if (!mapillaryViewer) {
+                    mapillaryViewer = new mapillary.Viewer({
+                        container: 'panorama-view',
+                        accessToken: MAPILLARY_TOKEN,
+                        imageId: imageId
+                    });
+                    mapillaryViewer.on('image', () => document.getElementById('panorama-loading').style.display = 'none');
+                    mapillaryViewer.on('error', () => {
+                        document.getElementById('panorama-loading').style.display = 'none';
+                        document.getElementById('panorama-fallback').style.display = 'flex';
+                    });
+                } else {
+                    mapillaryViewer.moveTo(imageId).catch(() => document.getElementById('panorama-fallback').style.display = 'flex');
+                }
+            } catch (e) {
+                document.getElementById('panorama-loading').style.display = 'none';
+                document.getElementById('panorama-fallback').style.display = 'flex';
+            }
+        }
+
+        async function getMapillaryImageId(lat, lng) {
+            if (!MAPILLARY_TOKEN || MAPILLARY_TOKEN.includes("在这里粘贴")) return null;
+            const offset = 0.001; 
+            const bbox = `${lng - offset},${lat - offset},${lng + offset},${lat + offset}`;
+            const apiUrl = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry&bbox=${bbox}&limit=5`;
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) return null;
+                const data = await response.json();
+                if (data.data && data.data.length > 0) {
+                    return data.data[Math.floor(Math.random() * data.data.length)].id;
+                }
+                return null;
+            } catch (error) { return null; }
+        }
+
+        async function loadRound(roundIndex) {
+            // 解锁状态，允许点击地图
+            isSubmitting = false; 
+
+            var round = GAME_ROUNDS[roundIndex];
+            var imageId = await getMapillaryImageId(round.lat, round.lng);
+            if (imageId) initMapillaryViewer(imageId);
+            else document.getElementById('panorama-fallback').style.display = 'flex';
+
+            if (guessMarker) map.removeLayer(guessMarker);
+            if (answerMarker) map.removeLayer(answerMarker);
+            if (routeLine) map.removeLayer(routeLine);
+            
+            guessMarker = null; guessPoint = null; answerMarker = null; routeLine = null;
+
+            // 使用 flyTo 让地图平滑飞回全球视角
+            map.flyTo([20, 0], 2, { duration: 1.0 }); 
+            
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('submit-btn').textContent = '🎯 提交选择';
+            document.getElementById('round-num').textContent = roundIndex + 1;
+            showHint();
+        }
+
+        // ==========================
+        // 【核心修改区：提交选择并计算得分】
+        // ==========================
+        function submitGuess() {
+            if (!guessPoint) return;
+            
+            // 1. 锁定状态，禁用按钮，防止动画期间重复点击
+            isSubmitting = true;
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('submit-btn').textContent = '📏 测量中...';
+
+            var round = GAME_ROUNDS[currentRound];
+            var targetLatLng = L.latLng(round.lat, round.lng);
+            var distanceMeters = guessPoint.distanceTo(targetLatLng);
+            var distanceKm = distanceMeters / 1000;
+
+            var maxDistance = 2000, maxScore = 5000;
+            var scoreThisRound = distanceKm >= maxDistance ? 0 : Math.round(maxScore * (1 - distanceKm / maxDistance));
+
+            totalScore += scoreThisRound;
+            document.getElementById('total-score').textContent = totalScore;
+
+            // 2. 显示正确答案蓝点
+            answerMarker = L.marker(targetLatLng, {icon: blueIcon}).addTo(map);
+            
+            // 3. 画红线（加粗、改色，使其更醒目）
+            routeLine = L.polyline([guessPoint, targetLatLng], {
+                color: '#ff4757', 
+                weight: 4, 
+                opacity: 0.9,
+                dashArray: '8, 8',
+                lineCap: 'round'
+            }).addTo(map);
+
+            // 4. 【视觉优化】地图平滑“飞行”到能同时看到两个点的视野
+            var group = L.featureGroup([guessMarker, answerMarker]);
+            map.flyToBounds(group.getBounds().pad(0.4), {
+                duration: 1.5, // 飞行动画持续 1.5 秒
+                easeLinearity: 0.25
+            }); 
+
+            // 5. 提前把文字写进弹窗（但此时弹窗还是隐藏的）
+            document.getElementById('result-location').textContent = '📍 正确答案：' + round.name;
+            document.getElementById('result-distance').textContent = distanceKm.toFixed(2) + ' 公里';
+            document.getElementById('result-score').textContent = '+' + scoreThisRound + ' 分';
+
+            if (currentRound >= GAME_ROUNDS.length - 1) {
+                document.getElementById('next-btn').textContent = '🏆 查看总分';
+            } else {
+                document.getElementById('next-btn').textContent = '下一轮 ▶';
+            }
+
+            // 6. 【核心体验优化】延迟 2500 毫秒（2.5秒）后再弹出结果面板！
+            // 这 2.5 秒留给玩家欣赏地图飞行、红线蔓延以及感受距离的震撼
+            setTimeout(function() {
+                document.getElementById('result-overlay').classList.add('show');
+            }, 2500); // 如果觉得短，可以改成 3000 (3秒)
+        }
+
+        function nextRound() {
+            document.getElementById('result-overlay').classList.remove('show');
+            if (currentRound >= GAME_ROUNDS.length - 1) { showFinalScore(); return; }
+            currentRound++;
+            loadRound(currentRound);
+        }
+
+        function showFinalScore() {
+            var maxPossible = GAME_ROUNDS.length * 5000;
+            var percentage = ((totalScore / maxPossible) * 100).toFixed(1);
+            var rank = percentage >= 90 ? "🏆 地理大师！" : percentage >= 70 ? "🌟 旅行达人！" : percentage >= 50 ? "👍 还不错！" : percentage >= 30 ? "📚 继续学习~" : "🌍 下次更好！";
+
+            document.getElementById('result-title').textContent = '🎮 游戏结束！';
+            document.getElementById('result-location').textContent = '共 ' + GAME_ROUNDS.length + ' 轮完成';
+            document.getElementById('result-distance').textContent = totalScore + ' / ' + maxPossible + ' 分';
+            document.getElementById('result-score').textContent = rank;
+            document.getElementById('next-btn').textContent = '🔄 重新开始';
+            document.getElementById('next-btn').onclick = restartGame;
+            document.getElementById('result-overlay').classList.add('show');
+        }
+
+        function restartGame() {
+            currentRound = 0; totalScore = 0;
+            document.getElementById('total-score').textContent = 0;
+            document.getElementById('next-btn').onclick = nextRound;
+            document.getElementById('result-overlay').classList.remove('show');
+            loadRound(currentRound);
+        }
+
+        function toggleMapSize() {
+            var container = document.getElementById('minimap-container');
+            var btn = document.getElementById('map-toggle-btn');
+            isMapEnlarged = !isMapEnlarged;
+            if (isMapEnlarged) { container.classList.add('enlarged'); btn.textContent = '✕'; }
+            else { container.classList.remove('enlarged'); btn.textContent = '⛶'; }
+            setTimeout(function() { map.invalidateSize(); }, 350);
+        }
+
+        function showHint() {
+            var hint = document.getElementById('hint-text');
+            hint.style.display = 'block';
+            setTimeout(function() { hint.style.display = 'none'; }, 3000);
+        }
+    </script>
+</body>
+</html>

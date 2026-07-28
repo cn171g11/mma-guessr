@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🌍 MmaGuessr v1.6.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" />
+    <script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+
+    <style>
+        /* ============ 基础 ============ */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            width: 100vw; height: 100vh; overflow: hidden; background: #1a1a2e; color: #fff;
+        }
+        button { font-family: inherit; }
+
+        /* ============ 主菜单 ============ */
+        #home-screen {
+            position: fixed; inset: 0; z-index: 5000;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex; flex-direction: column; align-items: center;
+            overflow-y: auto; padding: 40px 20px;
+        }
+        #home-screen h1 {
+            font-size: 42px; margin-bottom: 6px; letter-spacing: 2px;
+            background: linear-gradient(90deg, #4CAF50, #FFD700, #3498db);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        #home-screen .subtitle { color: #8899bb; margin-bottom: 30px; font-size: 15px; }
+        .mode-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px; width: 100%; max-width: 900px;
+        }
+        .mode-card {
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px; padding: 22px 20px; cursor: pointer;
+            transition: all 0.25s ease; position: relative; overflow: hidden;
+        }
+        .mode-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.12); border-color: #4CAF50; box-shadow: 0 8px 30px rgba(76,175,80,0.25); }
+        .mode-card .icon { font-size: 34px; margin-bottom: 10px; }
+        .mode-card h3 { font-size: 18px; margin-bottom: 6px; color: #fff; }
+        .mode-card p { font-size: 13px; color: #99a8c7; line-height: 1.5; }
+        .mode-card .best {
+            margin-top: 12px; font-size: 12px; color: #FFD700;
+            border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 8px;
+        }
+
+        /* ============ 版本号 & 更新记录 ============ */
+        .home-footer {
+            margin-top: 30px; display: flex; align-items: center; gap: 14px;
+            flex-wrap: wrap; justify-content: center;
+        }
+        .home-footer .ver-badge {
+            font-size: 13px; color: #8899bb; background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12); padding: 6px 16px; border-radius: 20px;
+        }
+        .home-footer .bank-badge {
+            font-size: 13px; color: #c8d4ee; background: rgba(76,175,80,0.14);
+            border: 1px solid rgba(76,175,80,0.4); padding: 6px 16px; border-radius: 20px;
+        }
+        .home-footer .changelog-btn {
+            font-size: 13px; color: #fff; background: rgba(52,152,219,0.22);
+            border: 1px solid #3498db; padding: 6px 18px; border-radius: 20px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .home-footer .changelog-btn:hover { background: rgba(52,152,219,0.45); }
+        #version-line { font-size: 12px; color: #8899bb; margin-top: 8px; }
+
+        #changelog-overlay {
+            position: fixed; inset: 0; z-index: 9000; display: none;
+            background: rgba(10,15,35,0.92); backdrop-filter: blur(6px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #changelog-overlay.show { display: flex; }
+        #changelog-box {
+            background: #16213e; border: 1px solid rgba(255,255,255,0.15); border-radius: 18px;
+            width: 100%; max-width: 660px; max-height: 84vh; overflow-y: auto; padding: 26px 30px;
+        }
+        #changelog-box h2 {
+            font-size: 23px; margin-bottom: 20px; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px;
+        }
+        .clog-close {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: #fff; border-radius: 10px; padding: 6px 14px; cursor: pointer; font-size: 14px; white-space: nowrap;
+        }
+        .clog-close:hover { background: rgba(255,255,255,0.22); }
+        .clog-entry { border-left: 3px solid #3498db; padding: 8px 0 8px 16px; margin-bottom: 18px; }
+        .clog-entry .clog-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+        .clog-entry .clog-ver { font-size: 16px; font-weight: bold; color: #4CAF50; }
+        .clog-entry .clog-date { font-size: 12px; color: #8899bb; }
+        .clog-entry .clog-current {
+            font-size: 11px; background: #FFD700; color: #333; padding: 1px 9px; border-radius: 10px; font-weight: bold;
+        }
+        .clog-entry ul { margin: 4px 0 0 18px; }
+        .clog-entry li { font-size: 13px; color: #c8d4ee; line-height: 1.7; }
+
+        /* ============ 区域选择 ============ */
+        #region-screen {
+            position: fixed; inset: 0; z-index: 5100; display: none;
+            background: rgba(10, 15, 35, 0.96); backdrop-filter: blur(6px);
+            flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+        }
+        #region-screen.show { display: flex; }
+        #region-screen h2 { margin-bottom: 24px; font-size: 26px; }
+        .region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; width: 100%; max-width: 700px; }
+        .region-card {
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 14px; padding: 20px 10px; text-align: center; cursor: pointer; transition: all 0.2s;
+        }
+        .region-card:hover { background: rgba(52,152,219,0.25); border-color: #3498db; transform: translateY(-3px); }
+        .region-card .icon { font-size: 30px; margin-bottom: 8px; }
+        .region-card .rcount { font-size: 12px; color: #4CAF50; margin-top: 6px; font-weight: bold; }
+        .back-btn {
+            margin-top: 26px; padding: 10px 30px; background: transparent; color: #99a8c7;
+            border: 1px solid rgba(255,255,255,0.3); border-radius: 25px; cursor: pointer; font-size: 14px;
+        }
+        .back-btn:hover { color: #fff; border-color: #fff; }
+
+        /* ============ 游戏区 ============ */
+        #game-container { display: none; width: 100%; height: 100%; }
+        #game-container.show { display: flex; }
+        #panorama-area { flex: 1; position: relative; background: #333; }
+        #panorama-view { width: 100%; height: 100%; }
+
+        #panorama-loading {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: #2a2a35; color: white; text-align: center; z-index: 10;
+        }
+        #panorama-loading .spinner {
+            width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3);
+            border-top: 5px solid #4CAF50; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #panorama-fallback {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; text-align: center; padding: 20px; z-index: 11;
+        }
+        #panorama-fallback button {
+            margin-top: 16px; padding: 10px 26px; border: none; border-radius: 20px;
+            background: rgba(255,255,255,0.9); color: #333; font-weight: bold; cursor: pointer;
+        }
+
+        /* ============ 信息栏 ============ */
+        #info-bar {
+            position: fixed; top: 15px; left: 15px;
+            background: rgba(0, 0, 0, 0.75); color: white;
+            padding: 12px 20px; border-radius: 10px; font-size: 14px;
+            z-index: 1000; backdrop-filter: blur(10px); display: none; min-width: 180px;
+        }
+        #info-bar.show { display: block; }
+        #info-bar .score { color: #4CAF50; font-weight: bold; font-size: 18px; }
+        #info-bar .round { color: #FFD700; font-weight: bold; }
+        #info-bar .mode-tag { display: inline-block; font-size: 11px; background: #3498db; padding: 2px 8px; border-radius: 8px; margin-bottom: 6px; }
+
+        /* 无限模式等级条 */
+        #level-panel { display: none; margin-top: 8px; }
+        #level-panel.show { display: block; }
+        #level-panel .lv { color: #FFD700; font-weight: bold; }
+        #xp-bar-bg { width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; margin-top: 5px; overflow: hidden; }
+        #xp-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #FFD700, #ff9f43); border-radius: 4px; transition: width 0.8s ease; }
+        #diff-stars { font-size: 12px; color: #ff6b81; margin-top: 4px; }
+
+        /* 倒计时 */
+        #timer-box {
+            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.75); padding: 10px 26px; border-radius: 30px;
+            font-size: 24px; font-weight: bold; color: #4CAF50; z-index: 1000;
+            display: none; backdrop-filter: blur(10px); border: 2px solid rgba(76,175,80,0.4);
+        }
+        #timer-box.show { display: block; }
+        #timer-box.danger { color: #ff4757; border-color: #ff4757; animation: pulse 0.8s infinite; }
+        @keyframes pulse { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
+
+        /* 退出按钮 */
+        #quit-btn {
+            position: fixed; top: 15px; right: 15px; z-index: 1000; display: none;
+            padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ccc;
+            border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; cursor: pointer; font-size: 13px;
+        }
+        #quit-btn.show { display: block; }
+        #quit-btn:hover { color: #fff; border-color: #ff4757; background: rgba(255,71,87,0.3); }
+
+        /* ============ 小地图 ============ */
+        #minimap-container {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 320px; height: 240px;
+            border: 3px solid #fff; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: all 0.3s ease; z-index: 1000;
+            display: none;
+        }
+        #minimap-container.show { display: block; }
+        #minimap-container.enlarged { width: 60vw; height: 70vh; bottom: 50px; right: 50px; }
+        #guess-map { width: 100%; height: 100%; z-index: 1; }
+        #map-toggle-btn {
+            position: absolute; top: 8px; right: 8px;
+            width: 30px; height: 30px; border: none; border-radius: 50%;
+            background: rgba(0,0,0,0.7); color: white; font-size: 18px;
+            cursor: pointer; z-index: 1001;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #submit-btn {
+            position: fixed; bottom: 270px; right: 20px;
+            padding: 14px 32px; background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white; border: none; border-radius: 25px;
+            font-size: 16px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4); transition: all 0.3s ease; z-index: 1000;
+            display: none;
+        }
+        #submit-btn.show { display: block; }
+        #submit-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6); }
+        #submit-btn:disabled { background: #999; cursor: not-allowed; box-shadow: none; }
+
+        /* ============ 结果弹窗 ============ */
+        #result-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); z-index: 9999;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #result-overlay.show { display: flex; }
+        #result-box {
+            background: white; border-radius: 16px; padding: 36px 40px;
+            text-align: center; max-width: 480px; width: 92%;
+            max-height: 88vh; overflow-y: auto;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            color: #333;
+        }
+        @keyframes popIn { from { transform: scale(0.8) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        #result-box h2 { color: #333; margin-bottom: 16px; font-size: 22px; }
+        #result-box .distance { font-size: 34px; font-weight: bold; color: #e74c3c; margin: 8px 0; }
+        #result-box .score-gained { font-size: 26px; color: #4CAF50; margin: 8px 0; font-weight: bold; }
+        #result-box .location-name { font-size: 15px; color: #666; margin-bottom: 10px; }
+        #result-box .xp-gained { font-size: 15px; color: #ff9f43; font-weight: bold; margin-bottom: 6px; display: none; }
+
+        /* 得分进度条动画 */
+        #score-bar-bg { width: 100%; height: 12px; background: #eee; border-radius: 6px; margin: 14px 0 20px; overflow: hidden; }
+        #score-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4CAF50, #8BC34A); border-radius: 6px; transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1); }
+
+        .result-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .result-btns button {
+            padding: 12px 26px; border: none; border-radius: 25px;
+            font-size: 15px; cursor: pointer; transition: all 0.3s; font-weight: bold;
+        }
+        #next-btn { background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
+        #next-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(52, 152, 219, 0.5); }
+        #share-btn { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; display: none; }
+        #share-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(155, 89, 182, 0.5); }
+        #home-btn2 { background: #eee; color: #555; display: none; }
+
+        /* 总结回合明细 */
+        #round-summary { display: none; text-align: left; margin: 14px 0; max-height: 180px; overflow-y: auto; border: 1px solid #eee; border-radius: 10px; }
+        #round-summary .row { display: flex; justify-content: space-between; padding: 8px 14px; font-size: 13px; border-bottom: 1px solid #f2f2f2; color: #555; }
+        #round-summary .row:last-child { border-bottom: none; }
+        #round-summary .row .pts { color: #4CAF50; font-weight: bold; }
+        .new-record { display: none; color: #fff; background: linear-gradient(90deg, #ff9f43, #FFD700); padding: 6px 16px; border-radius: 16px; font-size: 14px; font-weight: bold; margin-bottom: 12px; animation: pulse2 1s infinite; }
+        @keyframes pulse2 { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+        /* 升级提示 */
+        #levelup-toast {
+            position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            background: linear-gradient(135deg, #FFD700, #ff9f43); color: #5a3c00;
+            padding: 20px 44px; border-radius: 20px; font-size: 26px; font-weight: bold;
+            z-index: 10001; box-shadow: 0 10px 40px rgba(255, 200, 0, 0.5); pointer-events: none;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #levelup-toast.show { transform: translate(-50%, -50%) scale(1); }
+
+        #hint-text {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8); color: #FFD700;
+            padding: 15px 25px; border-radius: 10px; font-size: 16px;
+            z-index: 999; display: none; pointer-events: none;
+        }
+        #toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.85); color: #fff; padding: 10px 24px; border-radius: 20px;
+            font-size: 14px; z-index: 10002; display: none;
+        }
+
+        /* ============ 响应式（移动端） ============ */
+        @media (max-width: 768px) {
+            #home-screen h1 { font-size: 30px; }
+            #minimap-container { width: 52vw; height: 30vh; bottom: 12px; right: 12px; border-width: 2px; }
+            #minimap-container.enlarged { width: 94vw; height: 55vh; bottom: 12px; right: 3vw; }
+            #submit-btn { bottom: calc(30vh + 24px); right: 12px; padding: 12px 22px; font-size: 14px; }
+            #info-bar { top: 10px; left: 10px; padding: 8px 12px; font-size: 12px; min-width: 140px; }
+            #info-bar .score { font-size: 15px; }
+            #timer-box { top: auto; bottom: 12px; left: 12px; transform: none; font-size: 18px; padding: 8px 18px; }
+            #timer-box.danger { animation: none; }
+            #quit-btn { top: 10px; right: 10px; font-size: 12px; }
+            #result-box { padding: 24px 20px; }
+            #result-box .distance { font-size: 26px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============ 主菜单 ============ -->
+    <div id="home-screen">
+        <h1>🌍 MmaGuessr</h1>
+        <div class="subtitle">观察街景线索，在地图上标记你认为的位置 · 数据源 Mapillary</div>
+        <div class="mode-grid">
+            <div class="mode-card" onclick="chooseMode('classic')">
+                <div class="icon">🎯</div>
+                <h3>经典模式</h3>
+                <p>单轮游戏，距离越近得分越高，满分 5000。</p>
+                <div class="best" id="best-classic">历史最佳：--</div>
+            </div>
+            <div class="mode-card" onclick="chooseMode('timed')">
+                <div class="icon">⏱️</div>
+                <h3>限时模式</h3>
+                <p>每轮 60 秒倒计时，共 3 轮，在时间压力下快速判断！</p>
+                <div class="best" id="best-timed">历史最佳：--</div>
+            </div>
+            <div class="mode-card" onclick="chooseMode('championship')">
+                <div class="icon">🏆</div>
+                <h3>多轮竞赛</h3>
+                <p>连续 5 轮累积总分，结束后获得称号排名与成绩总结。</p>
+                <div class="best" id="best-championship">历史最佳：--</div>
+            </div>
+            <div class="mode-card" onclick="chooseMode('region')">
+                <div class="icon">🗺️</div>
+                <h3>区域限定</h3>
+                <p>限定某个大洲范围内出题，范围更小、判分更严格。</p>
+                <div class="best" id="best-region">历史最佳：--</div>
+            </div>
+            <div class="mode-card" onclick="chooseMode('endless')">
+                <div class="icon">♾️</div>
+                <h3>无限模式</h3>
+                <p>从最简单的地标起步，凭得分赚经验、升等级。等级越高题目越难，难题经验也越多！</p>
+                <div class="best" id="best-endless">历史最佳：--</div>
+            </div>
+        </div>
+        <div class="home-footer">
+            <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
+            <span class="ver-badge" id="home-version">版本 v1.6.0</span>
+            <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
+        </div>
+    </div>
+
+    <!-- ============ 区域选择 ============ -->
+    <div id="region-screen">
+        <h2>🗺️ 选择限定区域</h2>
+        <div class="region-grid">
+            <div class="region-card" onclick="startGame('region','asia')"><div class="icon">🏯</div>亚洲<div class="rcount" id="rc-asia"></div></div>
+            <div class="region-card" onclick="startGame('region','europe')"><div class="icon">🏰</div>欧洲<div class="rcount" id="rc-europe"></div></div>
+            <div class="region-card" onclick="startGame('region','northamerica')"><div class="icon">🗽</div>北美洲<div class="rcount" id="rc-northamerica"></div></div>
+            <div class="region-card" onclick="startGame('region','southamerica')"><div class="icon">🌴</div>南美洲<div class="rcount" id="rc-southamerica"></div></div>
+            <div class="region-card" onclick="startGame('region','africa')"><div class="icon">🦁</div>非洲<div class="rcount" id="rc-africa"></div></div>
+            <div class="region-card" onclick="startGame('region','oceania')"><div class="icon">🦘</div>大洋洲<div class="rcount" id="rc-oceania"></div></div>
+        </div>
+        <button class="back-btn" onclick="hideRegionScreen()">← 返回</button>
+    </div>
+
+    <!-- ============ 游戏界面 ============ -->
+    <div id="info-bar">
+        <span class="mode-tag" id="mode-tag">经典模式</span>
+        <div id="round-info">第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">5</span> 轮</div>
+        <div>总分：<span class="score" id="total-score">0</span> 分</div>
+        <div id="level-panel">
+            <div>等级 <span class="lv" id="level-num">1</span> · 经验 <span id="xp-num">0</span>/<span id="xp-need">200</span></div>
+            <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+            <div id="diff-stars">难度 ★☆☆☆☆</div>
+        </div>
+        <div id="version-line">版本 v1.6.0</div>
+    </div>
+
+    <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
+    <button id="quit-btn" onclick="quitGame()">✕ 退出</button>
+
+    <div id="game-container">
+        <div id="panorama-area">
+            <div id="panorama-view"></div>
+            <div id="panorama-loading" style="display:none;">
+                <div class="spinner"></div>
+                <div>正在寻找并加载街景...</div>
+            </div>
+            <div id="panorama-fallback">
+                <h2>⚠️ 街景加载失败</h2>
+                <p>该地点街景暂时无法加载，可能是网络或覆盖问题。</p>
+                <button onclick="skipLocation()">🔄 换一个地点</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="minimap-container">
+        <button id="map-toggle-btn" onclick="toggleMapSize()">⛶</button>
+        <div id="guess-map"></div>
+    </div>
+
+    <button id="submit-btn" onclick="submitGuess()" disabled>🎯 提交选择</button>
+
+    <!-- ============ 结果弹窗 ============ -->
+    <div id="result-overlay">
+        <div id="result-box">
+            <div class="new-record" id="new-record">🎉 新纪录！</div>
+            <h2 id="result-title">📊 本轮结果</h2>
+            <div class="location-name" id="result-location">位置：-</div>
+            <div class="distance" id="result-distance">0 公里</div>
+            <div class="score-gained" id="result-score">+0 分</div>
+            <div class="xp-gained" id="result-xp">✨ +0 经验</div>
+            <div id="score-bar-bg"><div id="score-bar-fill"></div></div>
+            <div id="round-summary"></div>
+            <div class="result-btns">
+                <button id="next-btn" onclick="nextRound()">下一轮 ▶</button>
+                <button id="share-btn" onclick="shareResult()">📤 分享成绩</button>
+                <button id="home-btn2" onclick="backHome()">🏠 主菜单</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="levelup-toast">⬆️ 升级！Lv.<span id="levelup-num">2</span></div>
+    <div id="hint-text">👆 请在右下角地图上点击标记位置</div>
+    <div id="toast"></div>
+
+    <!-- ============ 更新记录弹窗 ============ -->
+    <div id="changelog-overlay" onclick="if(event.target===this)closeChangelog()">
+        <div id="changelog-box">
+            <h2>📋 更新记录 <button class="clog-close" onclick="closeChangelog()">✕ 关闭</button></h2>
+            <div id="changelog-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================================
+        // 【⚠️ 核心配置：Mapillary Token】
+        // ==========================================================
+        const MAPILLARY_TOKEN = "MLY|27847157814868912|297a1717444edeb373bb94009d2df54a";
+
+        // ==========================================================
+        // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
+        // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
+        // ==========================================================
+        const VERSION = "v1.6.0";
+        const CHANGELOG = [
+            {
+                version: "v1.6.0", date: "2026-07-28",
+                changes: [
+                    "游戏名称与文件名统一为「MmaGuessr」，移除旧名「MmaGuesser」及「GeoGuessr 风格」等引用。",
+                    "主菜单、标题栏、分享文案等所有出现游戏名称的位置均同步更新。",
+                    "版本号递增至 v1.6.0。"
+                ]
+            },
+            {
+                version: "v1.5.0", date: "2026-07-28",
+                changes: [
+                    "大幅扩充街景题库：新增约 64 个地点（覆盖六大洲、难度 1~5），总量从此前约 62 题增至 126 题。",
+                    "主菜单新增「题库共 X 题」展示，区域限定模式在各洲卡片上公布该洲题目数量。",
+                    "题目数量仅公示统计，不暴露具体题目内容。"
+                ]
+            },
+            {
+                version: "v1.4.0", date: "2026-07-28",
+                changes: [
+                    "新增「版本号」展示：浏览器标题、主菜单与游戏信息栏均显示当前版本号。",
+                    "新增「更新记录」按钮：可查看全部历史版本的更新说明（按时间倒序）。",
+                    "统一版本号格式为语义化版本（v主版本.次版本.修订号）。"
+                ]
+            },
+            {
+                version: "v1.3.0", date: "2026-07-28",
+                changes: [
+                    "修复切换回合时旧街景不消失的问题：加载新街景期间显示全屏「加载中」遮罩，旧画面不再残留。"
+                ]
+            },
+            {
+                version: "v1.2.0", date: "2026-07-28",
+                changes: [
+                    "修复抽题分布不均：多伦多出现频率偏高，改为「洗牌牌堆」公平抽题，各地区出现概率均衡。",
+                    "修复街景切换时序误判：确认操作后到新街景加载完成前锁定交互，避免误判为上一轮答案。"
+                ]
+            },
+            {
+                version: "v1.1.0", date: "2026-07-27",
+                changes: [
+                    "修复街景无法显示的问题：地图在容器零尺寸时初始化导致飞行异常中断加载流程，已加防护与尺寸重算。"
+                ]
+            },
+            {
+                version: "v1.0.0", date: "2026-07-27",
+                changes: [
+                    "首次发布多模式地理猜谜游戏，集成 Mapillary 街景数据源。",
+                    "包含五种模式：经典、限时、多轮竞赛、区域限定、无限模式。",
+                    "实现猜测机制、得分动画、距离可视化、历史最佳记录与成绩分享功能。"
+                ]
+            }
+        ];
+
+        function renderVersion() {
+            document.title = `🌍 MmaGuessr v${VERSION} · 街景猜位置游戏 (OSM + Mapillary)`;
+            const text = `版本 ${VERSION}`;
+            const hv = $('home-version'), vl = $('version-line');
+            if (hv) hv.textContent = text;
+            if (vl) vl.textContent = text;
+
+            // 题库总数 & 各区数量（仅公示统计，不暴露题目内容）
+            const total = LOCATIONS.length;
+            const bc = $('bank-count');
+            if (bc) bc.textContent = `📚 题库共 ${total} 题`;
+            ['asia', 'europe', 'northamerica', 'southamerica', 'africa', 'oceania'].forEach(r => {
+                const el = $('rc-' + r);
+                if (el) el.textContent = LOCATIONS.filter(l => l.region === r).length + ' 题';
+            });
+        }
+
+        function openChangelog() {
+            const list = $('changelog-list');
+            list.innerHTML = CHANGELOG.map(e => {
+                const isCurrent = e.version === VERSION;
+                const items = e.changes.map(c => `<li>${c}</li>`).join('');
+                return `<div class="clog-entry">
+                    <div class="clog-head">
+                        <span class="clog-ver">${e.version}</span>
+                        <span class="clog-date">${e.date}</span>
+                        ${isCurrent ? '<span class="clog-current">当前版本</span>' : ''}
+                    </div>
+                    <ul>${items}</ul>
+                </div>`;
+            }).join('');
+            $('changelog-overlay').classList.add('show');
+        }
+
+        function closeChangelog() {
+            $('changelog-overlay').classList.remove('show');
+        }
+
+        // ==========================================================
+        // 【地点题库】difficulty: 1(超著名地标) ~ 5(偏远超难)
+        // region: asia / europe / northamerica / southamerica / africa / oceania
+        // ==========================================================
+        const LOCATIONS = [
+            // ---- 难度1：世界级地标 ----
+            { name: "美国纽约·时代广场", lat: 40.7580, lng: -73.9857, region: "northamerica", difficulty: 1 },
+            { name: "法国巴黎·埃菲尔铁塔", lat: 48.8584, lng: 2.2945, region: "europe", difficulty: 1 },
+            { name: "英国伦敦·大本钟", lat: 51.5007, lng: -0.1246, region: "europe", difficulty: 1 },
+            { name: "日本东京·东京塔", lat: 35.6586, lng: 139.7454, region: "asia", difficulty: 1 },
+            { name: "澳大利亚悉尼·歌剧院", lat: -33.8568, lng: 151.2153, region: "oceania", difficulty: 1 },
+            { name: "意大利罗马·斗兽场", lat: 41.8902, lng: 12.4922, region: "europe", difficulty: 1 },
+            { name: "美国旧金山·金门大桥", lat: 37.8078, lng: -122.4750, region: "northamerica", difficulty: 1 },
+            { name: "俄罗斯莫斯科·红场", lat: 55.7539, lng: 37.6208, region: "europe", difficulty: 1 },
+            { name: "巴西里约·科帕卡巴纳海滩", lat: -22.9711, lng: -43.1822, region: "southamerica", difficulty: 1 },
+            { name: "阿联酋迪拜·哈利法塔", lat: 25.1972, lng: 55.2744, region: "asia", difficulty: 1 },
+            { name: "西班牙巴塞罗那·圣家堂", lat: 41.4036, lng: 2.1744, region: "europe", difficulty: 1 },
+            { name: "德国柏林·勃兰登堡门", lat: 52.5163, lng: 13.3777, region: "europe", difficulty: 1 },
+            // ---- 难度2：大城市市中心 ----
+            { name: "荷兰阿姆斯特丹·水坝广场", lat: 52.3731, lng: 4.8932, region: "europe", difficulty: 2 },
+            { name: "日本大阪·道顿堀", lat: 34.6687, lng: 135.5013, region: "asia", difficulty: 2 },
+            { name: "泰国曼谷·大皇宫周边", lat: 13.7500, lng: 100.4913, region: "asia", difficulty: 2 },
+            { name: "加拿大多伦多·央街", lat: 43.6560, lng: -79.3802, region: "northamerica", difficulty: 2 },
+            { name: "奥地利维也纳·斯蒂芬广场", lat: 48.2085, lng: 16.3721, region: "europe", difficulty: 2 },
+            { name: "新加坡·滨海湾", lat: 1.2838, lng: 103.8591, region: "asia", difficulty: 2 },
+            { name: "美国芝加哥·密歇根大道", lat: 41.8917, lng: -87.6244, region: "northamerica", difficulty: 2 },
+            { name: "阿根廷布宜诺斯艾利斯·方尖碑", lat: -34.6037, lng: -58.3816, region: "southamerica", difficulty: 2 },
+            { name: "捷克布拉格·老城广场", lat: 50.0875, lng: 14.4213, region: "europe", difficulty: 2 },
+            { name: "韩国首尔·明洞", lat: 37.5636, lng: 126.9838, region: "asia", difficulty: 2 },
+            { name: "南非开普敦·长街", lat: -33.9224, lng: 18.4192, region: "africa", difficulty: 2 },
+            { name: "墨西哥城·宪法广场", lat: 19.4326, lng: -99.1332, region: "northamerica", difficulty: 2 },
+            { name: "葡萄牙里斯本·商业广场", lat: 38.7075, lng: -9.1364, region: "europe", difficulty: 2 },
+            { name: "新西兰奥克兰·皇后街", lat: -36.8485, lng: 174.7645, region: "oceania", difficulty: 2 },
+            // ---- 难度3：中等城市 / 特色街区 ----
+            { name: "瑞典哥德堡", lat: 57.7089, lng: 11.9746, region: "europe", difficulty: 3 },
+            { name: "波兰克拉科夫", lat: 50.0619, lng: 19.9369, region: "europe", difficulty: 3 },
+            { name: "日本札幌", lat: 43.0621, lng: 141.3544, region: "asia", difficulty: 3 },
+            { name: "美国波特兰", lat: 45.5231, lng: -122.6765, region: "northamerica", difficulty: 3 },
+            { name: "巴西库里蒂巴", lat: -25.4290, lng: -49.2671, region: "southamerica", difficulty: 3 },
+            { name: "芬兰坦佩雷", lat: 61.4978, lng: 23.7610, region: "europe", difficulty: 3 },
+            { name: "澳大利亚阿德莱德", lat: -34.9285, lng: 138.6007, region: "oceania", difficulty: 3 },
+            { name: "马来西亚槟城·乔治市", lat: 5.4141, lng: 100.3288, region: "asia", difficulty: 3 },
+            { name: "加拿大哈利法克斯", lat: 44.6488, lng: -63.5752, region: "northamerica", difficulty: 3 },
+            { name: "肯尼亚内罗毕", lat: -1.2864, lng: 36.8172, region: "africa", difficulty: 3 },
+            { name: "智利瓦尔帕莱索", lat: -33.0472, lng: -71.6127, region: "southamerica", difficulty: 3 },
+            { name: "立陶宛维尔纽斯", lat: 54.6872, lng: 25.2797, region: "europe", difficulty: 3 },
+            { name: "印度孟买", lat: 18.9388, lng: 72.8354, region: "asia", difficulty: 3 },
+            { name: "土耳其伊兹密尔", lat: 38.4237, lng: 27.1428, region: "asia", difficulty: 3 },
+            // ---- 难度4：小城镇 ----
+            { name: "冰岛阿克雷里", lat: 65.6835, lng: -18.1002, region: "europe", difficulty: 4 },
+            { name: "挪威特罗姆瑟", lat: 69.6492, lng: 18.9553, region: "europe", difficulty: 4 },
+            { name: "日本高山市", lat: 36.1408, lng: 137.2520, region: "asia", difficulty: 4 },
+            { name: "新西兰皇后镇", lat: -45.0312, lng: 168.6626, region: "oceania", difficulty: 4 },
+            { name: "美国蒙大拿州博兹曼", lat: 45.6770, lng: -111.0429, region: "northamerica", difficulty: 4 },
+            { name: "爱沙尼亚塔尔图", lat: 58.3776, lng: 26.7290, region: "europe", difficulty: 4 },
+            { name: "乌拉圭埃斯特角城", lat: -34.9608, lng: -54.9433, region: "southamerica", difficulty: 4 },
+            { name: "泰国清莱", lat: 19.9105, lng: 99.8406, region: "asia", difficulty: 4 },
+            { name: "加拿大育空白马市", lat: 60.7212, lng: -135.0568, region: "northamerica", difficulty: 4 },
+            { name: "斯洛文尼亚布莱德", lat: 46.3683, lng: 14.1146, region: "europe", difficulty: 4 },
+            { name: "摩洛哥舍夫沙万", lat: 35.1688, lng: -5.2636, region: "africa", difficulty: 4 },
+            { name: "澳大利亚凯恩斯", lat: -16.9186, lng: 145.7781, region: "oceania", difficulty: 4 },
+            // ---- 难度5：偏远 / 超难 ----
+            { name: "法罗群岛托尔斯港", lat: 62.0079, lng: -6.7716, region: "europe", difficulty: 5 },
+            { name: "智利蓬塔阿雷纳斯", lat: -53.1638, lng: -70.9171, region: "southamerica", difficulty: 5 },
+            { name: "冰岛西峡湾伊萨菲厄泽", lat: 66.0749, lng: -23.1240, region: "europe", difficulty: 5 },
+            { name: "挪威斯瓦尔巴朗伊尔城", lat: 78.2232, lng: 15.6469, region: "europe", difficulty: 5 },
+            { name: "纳米比亚斯瓦科普蒙德", lat: -22.6784, lng: 14.5258, region: "africa", difficulty: 5 },
+            { name: "蒙古乌兰巴托郊区", lat: 47.9077, lng: 106.8832, region: "asia", difficulty: 5 },
+            { name: "秘鲁伊基托斯", lat: -3.7437, lng: -73.2516, region: "southamerica", difficulty: 5 },
+            { name: "澳大利亚爱丽斯泉", lat: -23.6980, lng: 133.8807, region: "oceania", difficulty: 5 },
+            { name: "美国阿拉斯加费尔班克斯", lat: 64.8378, lng: -147.7164, region: "northamerica", difficulty: 5 },
+            { name: "格陵兰努克", lat: 64.1814, lng: -51.6941, region: "northamerica", difficulty: 5 },
+
+            // ===== 以下为扩充题库（新增地点） =====
+            // ---- 难度1：世界级地标（扩充）----
+            { name: "中国北京·天安门广场", lat: 39.9055, lng: 116.3976, region: "asia", difficulty: 1 },
+            { name: "中国上海·外滩", lat: 31.2397, lng: 121.4905, region: "asia", difficulty: 1 },
+            { name: "美国华盛顿·国家广场", lat: 38.8899, lng: -77.0091, region: "northamerica", difficulty: 1 },
+            { name: "埃及吉萨·金字塔", lat: 29.9792, lng: 31.1342, region: "africa", difficulty: 1 },
+            { name: "印度阿格拉·泰姬陵", lat: 27.1751, lng: 78.0421, region: "asia", difficulty: 1 },
+            { name: "希腊雅典·卫城", lat: 37.9715, lng: 23.7267, region: "europe", difficulty: 1 },
+            { name: "土耳其伊斯坦布尔·圣索菲亚", lat: 41.0086, lng: 28.9802, region: "europe", difficulty: 1 },
+            { name: "加拿大温哥华·煤气镇", lat: 49.2839, lng: -123.1084, region: "northamerica", difficulty: 1 },
+            { name: "巴西圣保罗·保利斯塔大道", lat: -23.5614, lng: -46.6562, region: "southamerica", difficulty: 1 },
+            { name: "墨西哥奇琴伊察", lat: 20.6843, lng: -88.5678, region: "northamerica", difficulty: 1 },
+            { name: "比利时布鲁塞尔·大广场", lat: 50.8467, lng: 4.3525, region: "europe", difficulty: 1 },
+            { name: "匈牙利布达佩斯·链子桥", lat: 47.4981, lng: 19.0409, region: "europe", difficulty: 1 },
+            // ---- 难度2：大城市市中心（扩充）----
+            { name: "中国香港·尖沙咀", lat: 22.2975, lng: 114.1722, region: "asia", difficulty: 2 },
+            { name: "中国广州·北京路", lat: 23.1289, lng: 113.2644, region: "asia", difficulty: 2 },
+            { name: "美国洛杉矶·好莱坞大道", lat: 34.1016, lng: -118.3267, region: "northamerica", difficulty: 2 },
+            { name: "美国纽约·中央公园", lat: 40.7829, lng: -73.9654, region: "northamerica", difficulty: 2 },
+            { name: "法国里昂·贝勒库尔广场", lat: 45.7578, lng: 4.8320, region: "europe", difficulty: 2 },
+            { name: "德国慕尼黑·玛利亚广场", lat: 48.1374, lng: 11.5755, region: "europe", difficulty: 2 },
+            { name: "西班牙马德里·太阳门广场", lat: 40.4168, lng: -3.7038, region: "europe", difficulty: 2 },
+            { name: "意大利米兰·大教堂广场", lat: 45.4642, lng: 9.1900, region: "europe", difficulty: 2 },
+            { name: "埃及开罗·解放广场", lat: 30.0444, lng: 31.2357, region: "africa", difficulty: 2 },
+            { name: "南非约翰内斯堡·桑顿", lat: -26.1076, lng: 28.0567, region: "africa", difficulty: 2 },
+            { name: "阿根廷门多萨", lat: -32.8895, lng: -68.8458, region: "southamerica", difficulty: 2 },
+            { name: "哥伦比亚波哥大·玻利瓦尔广场", lat: 4.5981, lng: -74.0758, region: "southamerica", difficulty: 2 },
+            { name: "新西兰惠灵顿·古巴街", lat: -41.2865, lng: 174.7762, region: "oceania", difficulty: 2 },
+            { name: "澳大利亚墨尔本·联邦广场", lat: -37.8175, lng: 144.9670, region: "oceania", difficulty: 2 },
+            // ---- 难度3：中等城市 / 特色街区（扩充）----
+            { name: "中国成都·宽窄巷子", lat: 30.6697, lng: 104.0563, region: "asia", difficulty: 3 },
+            { name: "中国西安·钟楼", lat: 34.2608, lng: 108.9450, region: "asia", difficulty: 3 },
+            { name: "中国杭州·西湖", lat: 30.2447, lng: 120.1489, region: "asia", difficulty: 3 },
+            { name: "美国波士顿·自由之路", lat: 42.3631, lng: -71.0694, region: "northamerica", difficulty: 3 },
+            { name: "美国西雅图·派克市场", lat: 47.6097, lng: -122.3422, region: "northamerica", difficulty: 3 },
+            { name: "法国马赛·旧港", lat: 43.2951, lng: 5.3752, region: "europe", difficulty: 3 },
+            { name: "西班牙塞维利亚·西班牙广场", lat: 37.3886, lng: -5.9922, region: "europe", difficulty: 3 },
+            { name: "德国汉堡·市政厅", lat: 53.5504, lng: 9.9922, region: "europe", difficulty: 3 },
+            { name: "波兰华沙·老城广场", lat: 52.2497, lng: 21.0122, region: "europe", difficulty: 3 },
+            { name: "印尼雅加达·独立纪念碑", lat: -6.1702, lng: 106.8243, region: "asia", difficulty: 3 },
+            { name: "越南河内·还剑湖", lat: 21.0285, lng: 105.8520, region: "asia", difficulty: 3 },
+            { name: "秘鲁库斯科", lat: -13.5319, lng: -71.9675, region: "southamerica", difficulty: 3 },
+            { name: "厄瓜多尔基多·独立广场", lat: -0.2202, lng: -78.5123, region: "southamerica", difficulty: 3 },
+            { name: "摩洛哥卡萨布兰卡", lat: 33.5731, lng: -7.5898, region: "africa", difficulty: 3 },
+            { name: "尼日利亚拉各斯", lat: 6.5244, lng: 3.3792, region: "africa", difficulty: 3 },
+            { name: "澳大利亚珀斯·北桥", lat: -31.9461, lng: 115.8586, region: "oceania", difficulty: 3 },
+            { name: "菲律宾马尼拉·王城区", lat: 14.5894, lng: 120.9730, region: "asia", difficulty: 3 },
+            // ---- 难度4：小城镇（扩充）----
+            { name: "中国丽江·古城", lat: 26.8721, lng: 100.2299, region: "asia", difficulty: 4 },
+            { name: "日本金泽", lat: 36.5613, lng: 136.6562, region: "asia", difficulty: 4 },
+            { name: "日本京都·祇园", lat: 35.0036, lng: 135.7752, region: "asia", difficulty: 4 },
+            { name: "法国斯特拉斯堡", lat: 48.5734, lng: 7.7521, region: "europe", difficulty: 4 },
+            { name: "意大利佛罗伦萨", lat: 43.7696, lng: 11.2558, region: "europe", difficulty: 4 },
+            { name: "葡萄牙波尔图", lat: 41.1579, lng: -8.6291, region: "europe", difficulty: 4 },
+            { name: "瑞士卢塞恩", lat: 47.0502, lng: 8.3093, region: "europe", difficulty: 4 },
+            { name: "美国圣塔菲", lat: 35.6870, lng: -105.9378, region: "northamerica", difficulty: 4 },
+            { name: "加拿大魁北克城", lat: 46.8139, lng: -71.2080, region: "northamerica", difficulty: 4 },
+            { name: "新西兰但尼丁", lat: -45.8742, lng: 170.5036, region: "oceania", difficulty: 4 },
+            { name: "南非德班", lat: -29.8587, lng: 31.0218, region: "africa", difficulty: 4 },
+            { name: "玻利维亚苏克雷", lat: -19.0367, lng: -65.2623, region: "southamerica", difficulty: 4 },
+            { name: "智利康塞普西翁", lat: -36.8270, lng: -73.0499, region: "southamerica", difficulty: 4 },
+            // ---- 难度5：偏远 / 超难（扩充）----
+            { name: "中国拉萨", lat: 29.6520, lng: 91.1721, region: "asia", difficulty: 5 },
+            { name: "冰岛维克", lat: 63.4194, lng: -19.0060, region: "europe", difficulty: 5 },
+            { name: "加拿大黄刀镇", lat: 62.4540, lng: -114.3718, region: "northamerica", difficulty: 5 },
+            { name: "俄罗斯符拉迪沃斯托克", lat: 43.1198, lng: 131.8869, region: "asia", difficulty: 5 },
+            { name: "澳大利亚达尔文", lat: -12.4634, lng: 130.8456, region: "oceania", difficulty: 5 },
+            { name: "巴西马瑙斯", lat: -3.1190, lng: -60.0217, region: "southamerica", difficulty: 5 },
+            { name: "玻利维亚乌尤尼", lat: -20.1338, lng: -67.4891, region: "southamerica", difficulty: 5 },
+            { name: "格陵兰伊卢利萨特", lat: 69.2167, lng: -51.1000, region: "northamerica", difficulty: 5 }
+        ];
+
+        // ==========================================================
+        // 【模式配置】
+        // ==========================================================
+        const MODES = {
+            classic:      { label: "🎯 经典模式",  rounds: 1, timer: 0,  scale: 2000, diffPool: [1,2,3] },
+            timed:        { label: "⏱️ 限时模式",  rounds: 3, timer: 60, scale: 2000, diffPool: [1,2,3] },
+            championship: { label: "🏆 多轮竞赛",  rounds: 5, timer: 0,  scale: 2000, diffPool: [1,2,3,4] },
+            region:       { label: "🗺️ 区域限定",  rounds: 5, timer: 0,  scale: 1200, diffPool: [1,2,3,4] },
+            endless:      { label: "♾️ 无限模式",  rounds: Infinity, timer: 0, scale: 2000, diffPool: null }
+        };
+        const REGION_NAMES = { asia: "亚洲", europe: "欧洲", northamerica: "北美洲", southamerica: "南美洲", africa: "非洲", oceania: "大洋洲" };
+        const REGION_VIEWS = {
+            asia: [[ -10, 40 ], [ 55, 150 ]], europe: [[ 35, -12 ], [ 70, 45 ]],
+            northamerica: [[ 8, -170 ], [ 72, -50 ]], southamerica: [[ -56, -82 ], [ 13, -33 ]],
+            africa: [[ -35, -20 ], [ 38, 52 ]], oceania: [[ -48, 110 ], [ 0, 180 ]]
+        };
+        const MAX_SCORE = 5000;
+
+        // ==========================================================
+        // 【全局状态】
+        // ==========================================================
+        const state = {
+            mode: null, region: null,
+            round: 0, totalScore: 0,
+            current: null,          // 当前地点 { name, lat, lng, ... } (lat/lng 为街景图片真实坐标)
+            history: [],            // [{name, distanceKm, score}]
+            usedNames: new Set(),
+            drawKey: null,          // 当前抽题牌堆对应的题库 key（模式/区域/难度变化时重建）
+            drawBag: [],            // 洗牌后的地点牌堆，抽完才允许重复，保证各地区均衡出现
+            timerId: null, timeLeft: 0,
+            endless: { level: 1, xp: 0, totalXp: 0, roundsPlayed: 0 },
+            finished: false
+        };
+        let map = null, guessMarker = null, guessPoint = null, answerMarker = null, routeLine = null;
+        let mapillaryViewer = null, isMapEnlarged = false, isSubmitting = false;
+
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        const blueIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        const $ = id => document.getElementById(id);
+
+        // ==========================================================
+        // 【历史最佳成绩 localStorage】
+        // ==========================================================
+        function bestKey(mode) { return 'geo_best_' + mode; }
+        function getBest(mode) {
+            try { return JSON.parse(localStorage.getItem(bestKey(mode))); } catch (e) { return null; }
+        }
+        function saveBestIfHigher(mode, data, cmpField) {
+            const old = getBest(mode);
+            if (!old || data[cmpField] > old[cmpField]) {
+                localStorage.setItem(bestKey(mode), JSON.stringify(data));
+                return true;
+            }
+            return false;
+        }
+        function renderBests() {
+            const c = getBest('classic');
+            $('best-classic').textContent = c ? `历史最佳：${c.score} 分` : '历史最佳：--';
+            const t = getBest('timed');
+            $('best-timed').textContent = t ? `历史最佳：${t.score} 分` : '历史最佳：--';
+            const ch = getBest('championship');
+            $('best-championship').textContent = ch ? `历史最佳：${ch.score} 分` : '历史最佳：--';
+            const r = getBest('region');
+            $('best-region').textContent = r ? `历史最佳：${r.score} 分（${REGION_NAMES[r.region] || ''}）` : '历史最佳：--';
+            const e = getBest('endless');
+            $('best-endless').textContent = e ? `历史最佳：Lv.${e.level} · ${e.totalXp} 经验` : '历史最佳：--';
+        }
+
+        // ==========================================================
+        // 【初始化】
+        // ==========================================================
+        window.onload = function () {
+            renderBests();
+            initGuessMap();
+        };
+
+        function initGuessMap() {
+            map = L.map('guess-map', { worldCopyJump: true }).setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap', maxZoom: 19
+            }).addTo(map);
+            map.on('click', function (e) {
+                if (isSubmitting || state.finished) return;
+                if (guessMarker) map.removeLayer(guessMarker);
+                guessMarker = L.marker(e.latlng, { icon: redIcon }).addTo(map);
+                guessPoint = e.latlng;
+                $('submit-btn').disabled = false;
+            });
+        }
+
+        // ==========================================================
+        // 【模式选择 / 启动】
+        // ==========================================================
+        function chooseMode(mode) {
+            if (mode === 'region') { $('region-screen').classList.add('show'); return; }
+            startGame(mode, null);
+        }
+        function hideRegionScreen() { $('region-screen').classList.remove('show'); }
+
+        function startGame(mode, region) {
+            hideRegionScreen();
+            state.mode = mode; state.region = region;
+            state.round = 0; state.totalScore = 0; state.history = [];
+            state.usedNames.clear(); state.finished = false;
+            state.drawKey = null; state.drawBag = [];
+            state.endless = { level: 1, xp: 0, totalXp: 0, roundsPlayed: 0 };
+
+            $('home-screen').style.display = 'none';
+            $('game-container').classList.add('show');
+            $('info-bar').classList.add('show');
+            $('minimap-container').classList.add('show');
+            $('submit-btn').classList.add('show');
+            $('quit-btn').classList.add('show');
+
+            const cfg = MODES[mode];
+            $('mode-tag').textContent = cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
+            $('total-score').textContent = '0';
+
+            if (mode === 'endless') {
+                $('round-info').innerHTML = '第 <span class="round" id="round-num">1</span> 题';
+                $('level-panel').classList.add('show');
+                updateLevelPanel();
+            } else {
+                $('round-info').innerHTML = '第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">' + cfg.rounds + '</span> 轮';
+                $('level-panel').classList.remove('show');
+            }
+            // 【修复】地图容器刚从 display:none 变为可见，必须先让 Leaflet 重算尺寸，
+            // 否则 flyTo 会在零尺寸地图上计算出 NaN 并抛异常，中断 loadRound
+            setTimeout(() => { map.invalidateSize(); loadRound(); }, 150);
+        }
+
+        function quitGame() {
+            if (state.mode === 'endless' && state.endless.roundsPlayed > 0) {
+                stopTimer(); showFinalScore(); return;
+            }
+            if (confirm('确定退出本局游戏吗？当前进度将丢失。')) backHome();
+        }
+
+        function backHome() {
+            stopTimer();
+            state.finished = true;
+            $('result-overlay').classList.remove('show');
+            $('game-container').classList.remove('show');
+            $('info-bar').classList.remove('show');
+            $('minimap-container').classList.remove('show');
+            $('submit-btn').classList.remove('show');
+            $('quit-btn').classList.remove('show');
+            $('timer-box').classList.remove('show');
+            $('home-screen').style.display = 'flex';
+            clearMapLayers();
+            renderBests();
+        }
+
+        // ==========================================================
+        // 【出题：选地点 + 搜索 Mapillary 街景】
+        // ==========================================================
+        function currentDifficulty() {
+            // 无限模式：等级越高难度越大 (Lv1-2→★1, 3-4→★2, 5-6→★3, 7-8→★4, 9+→★5)
+            return Math.min(5, Math.ceil(state.endless.level / 2));
+        }
+
+        // 题库 key：模式/区域/难度任一变化则重建牌堆，保证同难度内各地区均衡
+        function poolKeyFor() {
+            if (state.mode === 'endless') return 'endless:' + currentDifficulty();
+            if (state.mode === 'region') return 'region:' + state.region;
+            return 'mode:' + state.mode;
+        }
+
+        // 构建当前模式/区域/难度对应的候选地点池
+        function buildPool() {
+            let pool;
+            if (state.mode === 'endless') {
+                const d = currentDifficulty();
+                pool = LOCATIONS.filter(l => l.difficulty === d);
+                if (!pool.length) pool = LOCATIONS.filter(l => Math.abs(l.difficulty - d) <= 1);
+            } else if (state.mode === 'region') {
+                pool = LOCATIONS.filter(l => l.region === state.region && MODES.region.diffPool.includes(l.difficulty));
+                if (!pool.length) pool = LOCATIONS.filter(l => l.region === state.region);
+            } else {
+                pool = LOCATIONS.filter(l => MODES[state.mode].diffPool.includes(l.difficulty));
+            }
+            return pool;
+        }
+
+        // Fisher–Yates 洗牌
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // 公平抽题：从洗牌牌堆顺序抽取，整副抽完才重洗，避免纯随机造成的地区聚集/重复
+        // roundTried：本轮已尝试过（街景未命中）的地点，本回合内不再重复尝试
+        function pickLocation(roundTried) {
+            const key = poolKeyFor();
+            if (state.drawKey !== key || !state.drawBag || state.drawBag.length === 0) {
+                state.drawKey = key;
+                state.drawBag = shuffle(buildPool().slice());
+            }
+            // 优先：本轮未试过 且 整局未用过
+            for (let i = state.drawBag.length - 1; i >= 0; i--) {
+                const loc = state.drawBag[i];
+                if (roundTried && roundTried.has(loc.name)) continue;
+                if (!state.usedNames.has(loc.name)) return loc;
+            }
+            // 兜底：本轮都试过，则接受整局用过但本轮未试的
+            for (let i = state.drawBag.length - 1; i >= 0; i--) {
+                const loc = state.drawBag[i];
+                if (!(roundTried && roundTried.has(loc.name))) return loc;
+            }
+            return state.drawBag[state.drawBag.length - 1];
+        }
+
+        // 逐级扩大范围搜索街景；返回 { imageId, lat, lng }（lat/lng 是图片真实坐标，用于精确判分）
+        async function findMapillaryImage(lat, lng) {
+            const offsets = [0.004, 0.02, 0.08];
+            for (const offset of offsets) {
+                const bbox = `${lng - offset},${lat - offset},${lng + offset},${lat + offset}`;
+                const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    if (data.data && data.data.length) {
+                        // 优先全景图，体验更好
+                        const panos = data.data.filter(i => i.is_pano);
+                        const list = panos.length ? panos : data.data;
+                        const img = list[Math.floor(Math.random() * list.length)];
+                        const [ilng, ilat] = img.geometry.coordinates;
+                        return { imageId: img.id, lat: ilat, lng: ilng };
+                    }
+                } catch (e) { /* 网络错误，继续尝试 */ }
+            }
+            return null;
+        }
+
+        // 【修复】安全的地图视角切换：容器尺寸异常时 flyTo/flyToBounds 会抛 NaN 异常，
+        // 这里捕获并降级为无动画的 setView/fitBounds，保证不中断游戏流程
+        function safeFly(fn, fallback) {
+            try { fn(); } catch (e) { try { fallback(); } catch (e2) { /* 忽略 */ } }
+        }
+        function resetMapView(animate) {
+            if (state.mode === 'region' && REGION_VIEWS[state.region]) {
+                const b = REGION_VIEWS[state.region];
+                safeFly(
+                    () => animate ? map.flyToBounds(b, { duration: 1.0 }) : map.fitBounds(b),
+                    () => map.fitBounds(b, { animate: false })
+                );
+            } else {
+                safeFly(
+                    () => animate ? map.flyTo([20, 0], 2, { duration: 1.0 }) : map.setView([20, 0], 2),
+                    () => map.setView([20, 0], 2, { animate: false })
+                );
+            }
+        }
+
+        async function loadRound() {
+            isSubmitting = true;   // 【修复2】进入新回合先锁定，直到新街景答案就绪才解锁
+            state.round++;
+            $('round-num').textContent = state.round;
+            $('submit-btn').disabled = true;
+            $('submit-btn').textContent = '🎯 提交选择';
+            clearMapLayers();
+            guessPoint = null;
+
+            // 【修复】先显示街景 loading 并开始搜索街景，地图动画放后面且加防护，
+            // 避免地图异常阻断街景加载
+            $('panorama-loading').style.display = 'flex';
+            $('panorama-fallback').style.display = 'none';
+
+            map.invalidateSize();
+            resetMapView(true);
+
+            // 选点 + 搜街景，最多尝试 4 个不同地点（本轮已尝试的不再重复）
+            const roundTried = new Set();
+            let found = null, loc = null;
+            for (let i = 0; i < 4 && !found; i++) {
+                loc = pickLocation(roundTried);
+                roundTried.add(loc.name);
+                found = await findMapillaryImage(loc.lat, loc.lng);
+            }
+            if (state.finished) return;
+
+            if (!found) {
+                $('panorama-loading').style.display = 'none';
+                $('panorama-fallback').style.display = 'flex';
+                return;
+            }
+            // 仅当街景成功加载、答案坐标确定后才“消费”该地点，避免无覆盖地点被白白消耗
+            state.usedNames.add(loc.name);
+            const bi = state.drawBag.indexOf(loc);
+            if (bi >= 0) state.drawBag.splice(bi, 1);
+
+            // 用街景图片的真实坐标作为答案坐标（更精确）
+            state.current = { name: loc.name, lat: found.lat, lng: found.lng, difficulty: loc.difficulty };
+            isSubmitting = false;   // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
+            showPanorama(found.imageId);
+            showHint();
+            startTimer();
+        }
+
+        function skipLocation() { $('panorama-fallback').style.display = 'none'; state.round--; loadRound(); }
+
+        function showPanorama(imageId) {
+            $('panorama-loading').style.display = 'flex';
+            $('panorama-fallback').style.display = 'none';
+            try {
+                if (!mapillaryViewer) {
+                    // MapillaryJS 自带旋转(拖拽)、缩放(滚轮/双指)、序列导航等交互
+                    mapillaryViewer = new mapillary.Viewer({
+                        container: 'panorama-view',
+                        accessToken: MAPILLARY_TOKEN,
+                        imageId: imageId,
+                        component: { cover: false, bearing: true, zoom: true }
+                    });
+                    mapillaryViewer.on('image', () => $('panorama-loading').style.display = 'none');
+                    mapillaryViewer.on('error', () => {
+                        $('panorama-loading').style.display = 'none';
+                        $('panorama-fallback').style.display = 'flex';
+                    });
+                    // 【修复】容器刚由隐藏变为可见，强制让查看器重算画布尺寸，避免黑屏
+                    setTimeout(() => { try { mapillaryViewer.resize(); } catch (e) {} }, 300);
+                    window.addEventListener('resize', () => { try { mapillaryViewer.resize(); } catch (e) {} });
+                } else {
+                    mapillaryViewer.moveTo(imageId)
+                        .then(() => $('panorama-loading').style.display = 'none')
+                        .catch(() => {
+                            $('panorama-loading').style.display = 'none';
+                            $('panorama-fallback').style.display = 'flex';
+                        });
+                }
+            } catch (e) {
+                $('panorama-loading').style.display = 'none';
+                $('panorama-fallback').style.display = 'flex';
+            }
+        }
+
+        function clearMapLayers() {
+            if (guessMarker) { map.removeLayer(guessMarker); guessMarker = null; }
+            if (answerMarker) { map.removeLayer(answerMarker); answerMarker = null; }
+            if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        }
+
+        // ==========================================================
+        // 【倒计时（限时模式）】
+        // ==========================================================
+        function startTimer() {
+            stopTimer();
+            const cfg = MODES[state.mode];
+            if (!cfg.timer) { $('timer-box').classList.remove('show'); return; }
+            state.timeLeft = cfg.timer;
+            $('timer-box').classList.add('show');
+            $('timer-box').classList.remove('danger');
+            $('timer-num').textContent = state.timeLeft;
+            state.timerId = setInterval(() => {
+                state.timeLeft--;
+                $('timer-num').textContent = Math.max(0, state.timeLeft);
+                if (state.timeLeft <= 10) $('timer-box').classList.add('danger');
+                if (state.timeLeft <= 0) {
+                    stopTimer();
+                    if (guessPoint) submitGuess();       // 有标记 → 按当前标记结算
+                    else timeoutNoGuess();               // 没标记 → 0 分
+                }
+            }, 1000);
+        }
+        function stopTimer() { if (state.timerId) { clearInterval(state.timerId); state.timerId = null; } }
+
+        function timeoutNoGuess() {
+            isSubmitting = true;
+            const round = state.current;
+            state.history.push({ name: round.name, distanceKm: null, score: 0 });
+            const targetLatLng = L.latLng(round.lat, round.lng);
+            answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
+            safeFly(
+                () => map.flyTo(targetLatLng, 5, { duration: 1.2 }),
+                () => map.setView(targetLatLng, 5, { animate: false })
+            );
+
+            $('new-record').style.display = 'none';
+            $('result-title').textContent = '⏰ 时间到！';
+            $('result-location').textContent = '📍 正确答案：' + round.name;
+            $('result-distance').textContent = '未提交猜测';
+            $('result-score').textContent = '+0 分';
+            $('result-xp').style.display = 'none';
+            $('score-bar-fill').style.width = '0%';
+            setupNextButton();
+            setTimeout(() => $('result-overlay').classList.add('show'), 1300);
+        }
+
+        // ==========================================================
+        // 【提交猜测 & 计分】
+        // ==========================================================
+        function calcScore(distanceKm) {
+            // 指数衰减计分：0km=5000分；scale 越小判分越严格
+            const scale = MODES[state.mode].scale;
+            let s = Math.round(MAX_SCORE * Math.exp(-distanceKm / (scale / 4)));
+            if (distanceKm < 0.05) s = MAX_SCORE;
+            return Math.max(0, Math.min(MAX_SCORE, s));
+        }
+
+        function calcXp(score, difficulty) {
+            // 无限模式经验：得分占比 × 100 × 难度系数（难度越大经验越多）
+            const ratio = score / MAX_SCORE;
+            const diffMult = 1 + (difficulty - 1) * 0.75;   // ★1=1x, ★5=4x
+            return Math.max(score > 0 ? 5 : 0, Math.round(ratio * 100 * diffMult));
+        }
+        function xpNeeded(level) { return 200 + (level - 1) * 150; }
+
+        function submitGuess() {
+            if (!guessPoint || isSubmitting) return;
+            stopTimer();
+            isSubmitting = true;
+            $('submit-btn').disabled = true;
+            $('submit-btn').textContent = '📏 测量中...';
+
+            const round = state.current;
+            const targetLatLng = L.latLng(round.lat, round.lng);
+            const distanceKm = guessPoint.distanceTo(targetLatLng) / 1000;
+            const score = calcScore(distanceKm);
+            state.totalScore += score;
+            state.history.push({ name: round.name, distanceKm, score });
+
+            // ---- 距离可视化：答案蓝点 + 虚线 + 飞行取景 ----
+            answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
+            routeLine = L.polyline([guessPoint, targetLatLng], {
+                color: '#ff4757', weight: 4, opacity: 0.9, dashArray: '8, 8', lineCap: 'round'
+            }).addTo(map);
+            const group = L.featureGroup([guessMarker, answerMarker]);
+            safeFly(
+                () => map.flyToBounds(group.getBounds().pad(0.4), { duration: 1.5, easeLinearity: 0.25 }),
+                () => map.fitBounds(group.getBounds().pad(0.4), { animate: false })
+            );
+
+            // ---- 结果弹窗内容 ----
+            $('new-record').style.display = 'none';
+            $('result-title').textContent = '📊 本轮结果';
+            $('result-location').textContent = '📍 正确答案：' + round.name;
+            $('result-distance').textContent = distanceKm < 1
+                ? Math.round(distanceKm * 1000) + ' 米'
+                : distanceKm.toFixed(distanceKm < 100 ? 2 : 0) + ' 公里';
+
+            // 无限模式：结算经验 & 升级
+            let xpGain = 0, leveledUp = false;
+            if (state.mode === 'endless') {
+                state.endless.roundsPlayed++;
+                xpGain = calcXp(score, round.difficulty);
+                state.endless.xp += xpGain;
+                state.endless.totalXp += xpGain;
+                while (state.endless.xp >= xpNeeded(state.endless.level)) {
+                    state.endless.xp -= xpNeeded(state.endless.level);
+                    state.endless.level++;
+                    leveledUp = true;
+                }
+                $('result-xp').style.display = 'block';
+                $('result-xp').textContent = `✨ +${xpGain} 经验（难度 ${'★'.repeat(round.difficulty)}）`;
+            } else {
+                $('result-xp').style.display = 'none';
+            }
+
+            setupNextButton();
+
+            // ---- 延迟弹窗：先欣赏地图飞行与红线 ----
+            setTimeout(() => {
+                $('result-overlay').classList.add('show');
+                // 得分数字滚动动画 + 进度条动画
+                animateNumber($('result-score'), 0, score, 1200, v => '+' + v + ' 分');
+                animateNumber($('total-score'), state.totalScore - score, state.totalScore, 1200, v => v);
+                requestAnimationFrame(() => {
+                    $('score-bar-fill').style.width = (score / MAX_SCORE * 100) + '%';
+                });
+                if (state.mode === 'endless') {
+                    updateLevelPanel();
+                    if (leveledUp) showLevelUp(state.endless.level);
+                }
+            }, 2200);
+        }
+
+        function setupNextButton() {
+            const cfg = MODES[state.mode];
+            const isLast = state.mode !== 'endless' && state.round >= cfg.rounds;
+            $('next-btn').textContent = isLast ? '🏁 查看总成绩' : (state.mode === 'endless' ? '下一题 ▶' : '下一轮 ▶');
+            $('next-btn').style.display = 'inline-block';
+            $('share-btn').style.display = 'none';
+            $('home-btn2').style.display = 'none';
+            $('round-summary').style.display = 'none';
+            $('next-btn').onclick = nextRound;
+        }
+
+        function nextRound() {
+            $('result-overlay').classList.remove('show');
+            const cfg = MODES[state.mode];
+            if (state.mode !== 'endless' && state.round >= cfg.rounds) { showFinalScore(); return; }
+            loadRound();
+        }
+
+        // ==========================================================
+        // 【游戏结束：总结 / 记录 / 分享】
+        // ==========================================================
+        function showFinalScore() {
+            state.finished = true;
+            stopTimer();
+            let isRecord = false;
+
+            $('score-bar-fill').style.width = '0%';
+            $('result-xp').style.display = 'none';
+
+            if (state.mode === 'endless') {
+                const e = state.endless;
+                isRecord = saveBestIfHigher('endless', { level: e.level, totalXp: e.totalXp, rounds: e.roundsPlayed, date: Date.now() }, 'totalXp');
+                $('result-title').textContent = '♾️ 无限模式结算';
+                $('result-location').textContent = `共挑战 ${e.roundsPlayed} 题 · 总分 ${state.totalScore}`;
+                $('result-distance').textContent = 'Lv.' + e.level;
+                $('result-score').textContent = '累计 ' + e.totalXp + ' 经验';
+            } else {
+                const maxPossible = MODES[state.mode].rounds * MAX_SCORE;
+                const pct = maxPossible ? (state.totalScore / maxPossible * 100) : 0;
+                const rank = pct >= 90 ? "🏆 地理大师！" : pct >= 70 ? "🌟 旅行达人！" : pct >= 50 ? "👍 还不错！" : pct >= 30 ? "📚 继续学习~" : "🌍 下次更好！";
+                isRecord = saveBestIfHigher(state.mode, { score: state.totalScore, region: state.region, date: Date.now() }, 'score');
+                $('result-title').textContent = '🎮 游戏结束！' + MODES[state.mode].label;
+                $('result-location').textContent = state.region ? '区域：' + REGION_NAMES[state.region] : ('共 ' + state.history.length + ' 轮完成');
+                $('result-distance').textContent = state.totalScore + ' / ' + maxPossible + ' 分';
+                $('result-score').textContent = rank;
+            }
+
+            // 回合明细
+            const sum = $('round-summary');
+            sum.innerHTML = state.history.map((h, i) =>
+                `<div class="row"><span>R${i + 1} · ${h.name}</span><span>${h.distanceKm == null ? '超时' : (h.distanceKm < 1 ? Math.round(h.distanceKm * 1000) + 'm' : h.distanceKm.toFixed(0) + 'km')} · <span class="pts">${h.score}分</span></span></div>`
+            ).join('');
+            sum.style.display = state.history.length ? 'block' : 'none';
+
+            $('new-record').style.display = isRecord ? 'inline-block' : 'none';
+            $('next-btn').style.display = 'none';
+            $('share-btn').style.display = 'inline-block';
+            $('home-btn2').style.display = 'inline-block';
+            $('result-overlay').classList.add('show');
+        }
+
+        function buildShareText() {
+            const modeLabel = MODES[state.mode].label + (state.region ? '·' + REGION_NAMES[state.region] : '');
+            let text = `🌍 MmaGuessr ${modeLabel}\n`;
+            if (state.mode === 'endless') {
+                text += `♾️ 挑战 ${state.endless.roundsPlayed} 题，达到 Lv.${state.endless.level}，累计 ${state.endless.totalXp} 经验！\n`;
+            } else {
+                text += `🏆 总分 ${state.totalScore} / ${state.history.length * MAX_SCORE}\n`;
+            }
+            state.history.slice(0, 8).forEach((h, i) => {
+                const em = h.score >= 4500 ? '🟩' : h.score >= 3000 ? '🟨' : h.score >= 1500 ? '🟧' : '🟥';
+                text += `${em} R${i + 1} ${h.distanceKm == null ? '超时' : (h.distanceKm < 1 ? Math.round(h.distanceKm * 1000) + 'm' : h.distanceKm.toFixed(0) + 'km')} +${h.score}\n`;
+            });
+            text += '你也来挑战吧！';
+            return text;
+        }
+
+        async function shareResult() {
+            const text = buildShareText();
+            if (navigator.share) {
+                try { await navigator.share({ title: 'MmaGuessr 成绩', text }); return; } catch (e) { /* 用户取消则降级复制 */ }
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('✅ 成绩已复制到剪贴板，快去分享吧！');
+            } catch (e) {
+                // 最后兜底
+                const ta = document.createElement('textarea');
+                ta.value = text; document.body.appendChild(ta); ta.select();
+                document.execCommand('copy'); document.body.removeChild(ta);
+                showToast('✅ 成绩已复制到剪贴板！');
+            }
+        }
+
+        // ==========================================================
+        // 【UI 辅助：动画 / 提示】
+        // ==========================================================
+        function animateNumber(el, from, to, duration, fmt) {
+            const start = performance.now();
+            function frame(now) {
+                const p = Math.min(1, (now - start) / duration);
+                const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+                el.textContent = fmt(Math.round(from + (to - from) * eased));
+                if (p < 1) requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
+
+        function updateLevelPanel() {
+            const e = state.endless;
+            $('level-num').textContent = e.level;
+            $('xp-num').textContent = e.xp;
+            $('xp-need').textContent = xpNeeded(e.level);
+            $('xp-bar-fill').style.width = Math.min(100, e.xp / xpNeeded(e.level) * 100) + '%';
+            const d = currentDifficulty();
+            $('diff-stars').textContent = '难度 ' + '★'.repeat(d) + '☆'.repeat(5 - d);
+        }
+
+        function showLevelUp(level) {
+            $('levelup-num').textContent = level;
+            $('levelup-toast').classList.add('show');
+            setTimeout(() => $('levelup-toast').classList.remove('show'), 2200);
+        }
+
+        function showToast(msg) {
+            const t = $('toast');
+            t.textContent = msg; t.style.display = 'block';
+            clearTimeout(t._tid);
+            t._tid = setTimeout(() => t.style.display = 'none', 2500);
+        }
+
+        function toggleMapSize() {
+            const container = $('minimap-container');
+            const btn = $('map-toggle-btn');
+            isMapEnlarged = !isMapEnlarged;
+            container.classList.toggle('enlarged', isMapEnlarged);
+            btn.textContent = isMapEnlarged ? '✕' : '⛶';
+            setTimeout(() => map.invalidateSize(), 350);
+        }
+
+        function showHint() {
+            const hint = $('hint-text');
+            hint.style.display = 'block';
+            setTimeout(() => hint.style.display = 'none', 3000);
+        }
+
+        // 启动：渲染版本号到标题与界面
+        renderVersion();
+    </script>
+</body>
+</html>
