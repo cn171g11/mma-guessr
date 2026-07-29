@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.7.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.8.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -71,6 +71,19 @@
         }
         .home-footer .changelog-btn:hover { background: rgba(52,152,219,0.45); }
         #version-line { font-size: 12px; color: #8899bb; margin-top: 8px; }
+
+        /* Notion 文档入口（链接卡片式按钮，与全站风格一致） */
+        .home-footer .notion-btn {
+            font-size: 13px; color: #fff; background: rgba(26,188,156,0.20);
+            border: 1px solid #1abc9c; padding: 6px 18px; border-radius: 20px;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        .home-footer .notion-btn:hover {
+            background: rgba(26,188,156,0.5); transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(26,188,156,0.35); color: #fff;
+        }
+        .home-footer .notion-btn:active { transform: translateY(0); }
 
         #changelog-overlay {
             position: fixed; inset: 0; z-index: 9000; display: none;
@@ -223,6 +236,17 @@
         #submit-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6); }
         #submit-btn:disabled { background: #999; cursor: not-allowed; box-shadow: none; }
 
+        /* 移动端地图呼出按钮（桌面端隐藏） */
+        #mobile-map-btn {
+            display: none; position: fixed; bottom: 20px; left: 20px; z-index: 1002;
+            padding: 12px 20px; background: linear-gradient(135deg, #3498db, #2980b9);
+            color: #fff; border: none; border-radius: 25px;
+            font-size: 15px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(52,152,219,0.4); transition: all 0.25s ease;
+        }
+        #mobile-map-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(52,152,219,0.6); }
+        #mobile-map-btn:active { transform: translateY(0); }
+
         /* ============ 结果弹窗 ============ */
         #result-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -294,9 +318,16 @@
         /* ============ 响应式（移动端） ============ */
         @media (max-width: 768px) {
             #home-screen h1 { font-size: 30px; }
-            #minimap-container { width: 52vw; height: 30vh; bottom: 12px; right: 12px; border-width: 2px; }
+            /* 移动端：默认隐藏小地图，由 🗺️ 按钮呼出 */
+            #minimap-container, #minimap-container.show { display: none !important; }
+            #minimap-container.mobile-open, #minimap-container.mobile-open.show {
+                display: block !important; width: 92vw; height: 50vh;
+                bottom: 80px; right: 4vw; left: auto; z-index: 1500; border-width: 3px;
+            }
             #minimap-container.enlarged { width: 94vw; height: 55vh; bottom: 12px; right: 3vw; }
-            #submit-btn { bottom: calc(30vh + 24px); right: 12px; padding: 12px 22px; font-size: 14px; }
+            #map-toggle-btn { display: none; }           /* 旧放大按钮移动端隐藏 */
+            #mobile-map-btn { display: block; }          /* 呼出/收起按钮 */
+            #submit-btn { bottom: 20px; right: 20px; padding: 12px 22px; font-size: 14px; }
             #info-bar { top: 10px; left: 10px; padding: 8px 12px; font-size: 12px; min-width: 140px; }
             #info-bar .score { font-size: 15px; }
             #timer-box { top: auto; bottom: 12px; left: 12px; transform: none; font-size: 18px; padding: 8px 18px; }
@@ -347,8 +378,9 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.7.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.8.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
+            <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
         </div>
     </div>
 
@@ -376,7 +408,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.7.0</div>
+        <div id="version-line">版本 v1.8.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -403,6 +435,7 @@
     </div>
 
     <button id="submit-btn" onclick="submitGuess()" disabled>🎯 提交选择</button>
+    <button id="mobile-map-btn" onclick="toggleMobileMap()">🗺️ 地图</button>
 
     <!-- ============ 结果弹窗 ============ -->
     <div id="result-overlay">
@@ -445,8 +478,17 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.7.0";
+        const VERSION = "v1.8.0";
         const CHANGELOG = [
+            {
+                version: "v1.8.0", date: "2026-07-29 18:12:12",
+                changes: [
+                    "题库去重：移除 6 个重复点位（北京·天安门、上海·外滩、西安·钟楼、杭州·西湖、丽江·古城、香港·尖沙咀），每个地点名称仅保留一个，题库 173 → 167。",
+                    "新增「游戏文档」入口：主菜单可一键打开 Notion 文档（玩法教学 + 街景分布），新标签页打开，样式与全站一致。",
+                    "移动端体验优化：窄屏/触屏设备默认隐藏小地图，新增「🗺️ 地图」悬浮按钮可随时展开/收起，避免遮挡街景。",
+                    "版本号递增至 v1.8.0。"
+                ]
+            },
             {
                 version: "v1.7.0", date: "2026-07-28 13:32:32",
                 changes: [
@@ -691,10 +733,6 @@
             { name: "玻利维亚乌尤尼", lat: -20.1338, lng: -67.4891, region: "southamerica", difficulty: 5 },
             { name: "格陵兰伊卢利萨特", lat: 69.2167, lng: -51.1000, region: "northamerica", difficulty: 5 }
         ,
-            { name: "中国北京·天安门广场", lat: 39.9055, lng: 116.3976, region: "asia", difficulty: 1 },
-            { name: "中国上海·外滩", lat: 31.2397, lng: 121.4905, region: "asia", difficulty: 1 },
-            { name: "中国西安·钟楼", lat: 34.2608, lng: 108.9455, region: "asia", difficulty: 1 },
-            { name: "中国杭州·西湖", lat: 30.2592, lng: 120.149, region: "asia", difficulty: 1 },
             { name: "中国广州·广州塔", lat: 23.1066, lng: 113.3245, region: "asia", difficulty: 1 },
             { name: "中国香港·维多利亚港", lat: 22.294, lng: 114.172, region: "asia", difficulty: 1 },
             { name: "中国台北·台北101", lat: 25.0339, lng: 121.5720, region: "asia", difficulty: 1 },
@@ -713,7 +751,6 @@
             { name: "中国昆明·滇池", lat: 24.95, lng: 102.7, region: "asia", difficulty: 3 },
             { name: "中国哈尔滨·中央大街", lat: 45.775, lng: 126.618, region: "asia", difficulty: 3 },
             { name: "中国桂林·漓江", lat: 25.273, lng: 110.29, region: "asia", difficulty: 3 },
-            { name: "中国丽江·古城", lat: 26.872, lng: 100.229, region: "asia", difficulty: 3 },
             { name: "中国三亚·亚龙湾", lat: 18.219, lng: 109.658, region: "asia", difficulty: 3 },
             { name: "中国拉萨·布达拉宫", lat: 29.6558, lng: 91.117, region: "asia", difficulty: 4 },
             { name: "中国乌鲁木齐·国际大巴扎", lat: 43.826, lng: 87.616, region: "asia", difficulty: 4 },
@@ -722,7 +759,6 @@
             { name: "中国漠河·北极村", lat: 53.47, lng: 122.37, region: "asia", difficulty: 5 },
             { name: "中国香港·中环", lat: 22.2819, lng: 114.1583, region: "asia", difficulty: 2 },
             { name: "中国香港·旺角", lat: 22.3193, lng: 114.1694, region: "asia", difficulty: 2 },
-            { name: "中国香港·尖沙咀", lat: 22.2988, lng: 114.1722, region: "asia", difficulty: 2 },
             { name: "中国香港·铜锣湾", lat: 22.28, lng: 114.183, region: "asia", difficulty: 2 },
             { name: "中国香港·太平山顶", lat: 22.2711, lng: 114.1503, region: "asia", difficulty: 3 },
             { name: "中国香港·金紫荆广场", lat: 22.2841, lng: 114.1734, region: "asia", difficulty: 2 },
@@ -1367,6 +1403,15 @@
             container.classList.toggle('enlarged', isMapEnlarged);
             btn.textContent = isMapEnlarged ? '✕' : '⛶';
             setTimeout(() => map.invalidateSize(), 350);
+        }
+
+        /* 移动端：展开/收起小地图 */
+        function toggleMobileMap() {
+            const mc = $('minimap-container');
+            const btn = $('mobile-map-btn');
+            const isOpen = mc.classList.toggle('mobile-open');
+            btn.textContent = isOpen ? '✕ 收起地图' : '🗺️ 地图';
+            if (isOpen) setTimeout(() => map.invalidateSize(), 300);
         }
 
         function showHint() {
