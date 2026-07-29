@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.9.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.9.1 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -385,7 +385,7 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.9.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.9.1</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
         </div>
@@ -415,7 +415,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.9.0</div>
+        <div id="version-line">版本 v1.9.1</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -485,8 +485,16 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.9.0";
+        const VERSION = "v1.9.1";
         const CHANGELOG = [
+            {
+                version: "v1.9.1", date: "2026-07-29 19:41:00",
+                changes: [
+                    "🧹 移除管理员面板（行政数据已迁移至 Notion 文档，不再需要独立 admin.html）。",
+                    "📄 Notion 文档更新至最新：玩法页加入中国模式/挑战模式说明，分布页更新为 284 条最新统计。",
+                    "版本号递增至 v1.9.1。"
+                ]
+            },
             {
                 version: "v1.9.0", date: "2026-07-29 19:21:00",
                 changes: [
