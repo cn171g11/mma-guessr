@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.8.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.9.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,40 +15,47 @@
         /* ============ 基础 ============ */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            width: 100vw; height: 100vh; overflow: hidden; background: #1a1a2e; color: #fff;
+            font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+            width: 100vw; height: 100vh; overflow: hidden;
+            background: #0d1117; color: #e6edf3;
+            -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
         }
         button { font-family: inherit; }
 
         /* ============ 主菜单 ============ */
         #home-screen {
             position: fixed; inset: 0; z-index: 5000;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background: radial-gradient(ellipse 80% 60% at 50% 20%, #1a2332 0%, #0d1117 70%);
             display: flex; flex-direction: column; align-items: center;
-            overflow-y: auto; padding: 40px 20px;
+            overflow-y: auto; padding: 48px 24px;
         }
         #home-screen h1 {
-            font-size: 42px; margin-bottom: 6px; letter-spacing: 2px;
-            background: linear-gradient(90deg, #4CAF50, #FFD700, #3498db);
+            font-size: 44px; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px;
+            background: linear-gradient(135deg, #58a6ff, #a5d6ff, #58a6ff);
             -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
         }
-        #home-screen .subtitle { color: #8899bb; margin-bottom: 30px; font-size: 15px; }
+        #home-screen .subtitle { color: #7d8590; margin-bottom: 36px; font-size: 14px; font-weight: 400; }
         .mode-grid {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px; width: 100%; max-width: 900px;
+            gap: 14px; width: 100%; max-width: 920px;
         }
         .mode-card {
-            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 16px; padding: 22px 20px; cursor: pointer;
-            transition: all 0.25s ease; position: relative; overflow: hidden;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px; padding: 24px 20px 20px; cursor: pointer;
+            transition: all 0.25s ease; position: relative;
+            backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
         }
-        .mode-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.12); border-color: #4CAF50; box-shadow: 0 8px 30px rgba(76,175,80,0.25); }
-        .mode-card .icon { font-size: 34px; margin-bottom: 10px; }
-        .mode-card h3 { font-size: 18px; margin-bottom: 6px; color: #fff; }
-        .mode-card p { font-size: 13px; color: #99a8c7; line-height: 1.5; }
+        .mode-card:hover {
+            transform: translateY(-2px);
+            background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.25);
+            box-shadow: 0 6px 24px rgba(88,166,255,0.12);
+        }
+        .mode-card .icon { font-size: 32px; margin-bottom: 12px; opacity: 0.9; }
+        .mode-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; color: #e6edf3; }
+        .mode-card p { font-size: 12.5px; color: #8b949e; line-height: 1.55; }
         .mode-card .best {
-            margin-top: 12px; font-size: 12px; color: #FFD700;
-            border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 8px;
+            margin-top: 14px; font-size: 11.5px; color: #8b949e;
+            border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;
         }
 
         /* ============ 版本号 & 更新记录 ============ */
@@ -351,23 +358,23 @@
                 <p>单轮游戏，距离越近得分越高，满分 5000。</p>
                 <div class="best" id="best-classic">历史最佳：--</div>
             </div>
-            <div class="mode-card" onclick="chooseMode('timed')">
-                <div class="icon">⏱️</div>
-                <h3>限时模式</h3>
-                <p>每轮 60 秒倒计时，共 3 轮，在时间压力下快速判断！</p>
-                <div class="best" id="best-timed">历史最佳：--</div>
-            </div>
-            <div class="mode-card" onclick="chooseMode('championship')">
-                <div class="icon">🏆</div>
-                <h3>多轮竞赛</h3>
-                <p>连续 5 轮累积总分，结束后获得称号排名与成绩总结。</p>
-                <div class="best" id="best-championship">历史最佳：--</div>
+            <div class="mode-card" onclick="chooseMode('challenge')">
+                <div class="icon">⚡</div>
+                <h3>挑战模式</h3>
+                <p>连续 5 轮限时 2 分钟，时间压力下累积高分，结束后获称号排名！</p>
+                <div class="best" id="best-challenge">历史最佳：--</div>
             </div>
             <div class="mode-card" onclick="chooseMode('region')">
                 <div class="icon">🗺️</div>
                 <h3>区域限定</h3>
                 <p>限定某个大洲范围内出题，范围更小、判分更严格。</p>
                 <div class="best" id="best-region">历史最佳：--</div>
+            </div>
+            <div class="mode-card" onclick="chooseMode('china')">
+                <div class="icon">🇨🇳</div>
+                <h3>中国模式</h3>
+                <p>限中国境内街景（含港澳台），167 个精选点位覆盖全中国，与你脚下的土地斗智斗勇。</p>
+                <div class="best" id="best-china">历史最佳：--</div>
             </div>
             <div class="mode-card" onclick="chooseMode('endless')">
                 <div class="icon">♾️</div>
@@ -378,7 +385,7 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.8.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.9.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
         </div>
@@ -408,7 +415,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.8.0</div>
+        <div id="version-line">版本 v1.9.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -478,8 +485,17 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.8.0";
+        const VERSION = "v1.9.0";
         const CHANGELOG = [
+            {
+                version: "v1.9.0", date: "2026-07-29 19:21:00",
+                changes: [
+                    "🇨🇳 新增「中国模式」：单列在中国入境街景（含港澳台），新增 117 个中国点位，题库 167 → 284，中国专属共 167 个点位。",
+                    "⚡ 合并限时模式与多轮竞赛为「挑战模式」：5 轮限时 2 分钟，兼顾时间压力与累积策略。",
+                    "🎨 主界面视觉升级：深色背景 + 玻璃质感卡片 + 蓝色调，风格更干净现代。",
+                    "版本号递增至 v1.9.0。"
+                ]
+            },
             {
                 version: "v1.8.0", date: "2026-07-29 18:12:12",
                 changes: [
@@ -773,17 +789,134 @@
             { name: "中国台中·逢甲夜市", lat: 24.1786, lng: 120.6449, region: "asia", difficulty: 2 },
             { name: "中国垦丁·垦丁大街", lat: 21.9482, lng: 120.78, region: "asia", difficulty: 4 },
             { name: "中国日月潭", lat: 23.8571, lng: 120.9159, region: "asia", difficulty: 4 },
-            { name: "中国九份·老街", lat: 25.1097, lng: 121.845, region: "asia", difficulty: 4 }];
+            { name: "中国九份·老街", lat: 25.1097, lng: 121.845, region: "asia", difficulty: 4 },
+            { name: "中国上海·南京路", lat: 31.235, lng: 121.475, region: "asia", difficulty: 1 },
+            { name: "中国上海·陆家嘴", lat: 31.24, lng: 121.501, region: "asia", difficulty: 1 },
+            { name: "中国上海·田子坊", lat: 31.21, lng: 121.469, region: "asia", difficulty: 2 },
+            { name: "中国上海·豫园", lat: 31.2295, lng: 121.4875, region: "asia", difficulty: 2 },
+            { name: "中国苏州·拙政园", lat: 31.326, lng: 120.626, region: "asia", difficulty: 1 },
+            { name: "中国苏州·金鸡湖", lat: 31.318, lng: 120.715, region: "asia", difficulty: 2 },
+            { name: "中国苏州·周庄", lat: 31.118, lng: 120.85, region: "asia", difficulty: 3 },
+            { name: "中国杭州·灵隐寺", lat: 30.243, lng: 120.1, region: "asia", difficulty: 2 },
+            { name: "中国杭州·河坊街", lat: 30.241, lng: 120.17, region: "asia", difficulty: 2 },
+            { name: "中国杭州·雷峰塔", lat: 30.235, lng: 120.148, region: "asia", difficulty: 1 },
+            { name: "中国宁波·天一阁", lat: 29.873, lng: 121.54, region: "asia", difficulty: 3 },
+            { name: "中国温州·五马街", lat: 28.012, lng: 120.66, region: "asia", difficulty: 3 },
+            { name: "中国南京·中山陵", lat: 32.06, lng: 118.853, region: "asia", difficulty: 1 },
+            { name: "中国南京·玄武湖", lat: 32.068, lng: 118.796, region: "asia", difficulty: 2 },
+            { name: "中国无锡·太湖鼋头渚", lat: 31.524, lng: 120.217, region: "asia", difficulty: 3 },
+            { name: "中国常州·中华恐龙园", lat: 31.822, lng: 120.002, region: "asia", difficulty: 4 },
+            { name: "中国合肥·包公园", lat: 31.86, lng: 117.286, region: "asia", difficulty: 3 },
+            { name: "中国南昌·滕王阁", lat: 28.685, lng: 115.877, region: "asia", difficulty: 2 },
+            { name: "中国北京·故宫", lat: 39.917, lng: 116.397, region: "asia", difficulty: 1 },
+            { name: "中国北京·长城八达岭", lat: 40.354, lng: 116.012, region: "asia", difficulty: 1 },
+            { name: "中国北京·颐和园", lat: 39.999, lng: 116.275, region: "asia", difficulty: 1 },
+            { name: "中国北京·王府井", lat: 39.914, lng: 116.415, region: "asia", difficulty: 2 },
+            { name: "中国北京·三里屯", lat: 39.933, lng: 116.456, region: "asia", difficulty: 2 },
+            { name: "中国北京·798艺术区", lat: 39.98, lng: 116.496, region: "asia", difficulty: 3 },
+            { name: "中国北京·南锣鼓巷", lat: 39.937, lng: 116.404, region: "asia", difficulty: 2 },
+            { name: "中国天津·天津之眼", lat: 39.16, lng: 117.18, region: "asia", difficulty: 2 },
+            { name: "中国天津·古文化街", lat: 39.142, lng: 117.19, region: "asia", difficulty: 3 },
+            { name: "中国石家庄·赵州桥", lat: 37.7, lng: 114.7, region: "asia", difficulty: 4 },
+            { name: "中国太原·晋祠", lat: 37.71, lng: 112.444, region: "asia", difficulty: 3 },
+            { name: "中国大同·云冈石窟", lat: 40.11, lng: 113.136, region: "asia", difficulty: 2 },
+            { name: "中国平遥·古城墙", lat: 37.203, lng: 112.18, region: "asia", difficulty: 3 },
+            { name: "中国呼和浩特·大召寺", lat: 40.805, lng: 111.678, region: "asia", difficulty: 4 },
+            { name: "中国济南·趵突泉", lat: 36.661, lng: 117.017, region: "asia", difficulty: 2 },
+            { name: "中国青岛·五四广场", lat: 36.058, lng: 120.382, region: "asia", difficulty: 2 },
+            { name: "中国烟台·蓬莱阁", lat: 37.77, lng: 120.84, region: "asia", difficulty: 3 },
+            { name: "中国威海·刘公岛", lat: 37.502, lng: 122.187, region: "asia", difficulty: 3 },
+            { name: "中国郑州·少林寺", lat: 34.51, lng: 112.94, region: "asia", difficulty: 2 },
+            { name: "中国郑州·二七纪念塔", lat: 34.756, lng: 113.663, region: "asia", difficulty: 4 },
+            { name: "中国洛阳·龙门石窟", lat: 34.556, lng: 112.471, region: "asia", difficulty: 2 },
+            { name: "中国开封·清明上河园", lat: 34.79, lng: 114.35, region: "asia", difficulty: 3 },
+            { name: "中国武汉·东湖", lat: 30.55, lng: 114.37, region: "asia", difficulty: 2 },
+            { name: "中国武汉·汉口江滩", lat: 30.59, lng: 114.3, region: "asia", difficulty: 2 },
+            { name: "中国长沙·岳麓山", lat: 28.187, lng: 112.936, region: "asia", difficulty: 2 },
+            { name: "中国张家界·天门山", lat: 29.117, lng: 110.482, region: "asia", difficulty: 2 },
+            { name: "中国张家界·森林公园", lat: 29.35, lng: 110.42, region: "asia", difficulty: 3 },
+            { name: "中国凤凰·古城", lat: 27.956, lng: 109.602, region: "asia", difficulty: 3 },
+            { name: "中国衡阳·衡山", lat: 27.238, lng: 112.741, region: "asia", difficulty: 4 },
+            { name: "中国广州·沙面", lat: 23.11, lng: 113.244, region: "asia", difficulty: 2 },
+            { name: "中国广州·白云山", lat: 23.18, lng: 113.3, region: "asia", difficulty: 3 },
+            { name: "中国深圳·世界之窗", lat: 22.537, lng: 113.975, region: "asia", difficulty: 2 },
+            { name: "中国深圳·蛇口海上世界", lat: 22.492, lng: 113.928, region: "asia", difficulty: 3 },
+            { name: "中国深圳·大梅沙", lat: 22.593, lng: 114.313, region: "asia", difficulty: 3 },
+            { name: "中国珠海·情侣路", lat: 22.265, lng: 113.58, region: "asia", difficulty: 3 },
+            { name: "中国佛山·祖庙", lat: 23.029, lng: 113.12, region: "asia", difficulty: 3 },
+            { name: "中国东莞·虎门大桥", lat: 22.81, lng: 113.63, region: "asia", difficulty: 4 },
+            { name: "中国南宁·青秀山", lat: 22.79, lng: 108.37, region: "asia", difficulty: 3 },
+            { name: "中国北海·银滩", lat: 21.46, lng: 109.135, region: "asia", difficulty: 4 },
+            { name: "中国海口·骑楼老街", lat: 20.045, lng: 110.34, region: "asia", difficulty: 3 },
+            { name: "中国三亚·天涯海角", lat: 18.245, lng: 109.345, region: "asia", difficulty: 2 },
+            { name: "中国广州·上下九", lat: 23.115, lng: 113.256, region: "asia", difficulty: 2 },
+            { name: "中国福州·三坊七巷", lat: 26.085, lng: 119.296, region: "asia", difficulty: 2 },
+            { name: "中国泉州·开元寺", lat: 24.915, lng: 118.588, region: "asia", difficulty: 3 },
+            { name: "中国成都·宽窄巷子", lat: 30.6697, lng: 104.0563, region: "asia", difficulty: 1 },
+            { name: "中国成都·大熊猫基地", lat: 30.738, lng: 104.144, region: "asia", difficulty: 1 },
+            { name: "中国成都·锦里", lat: 30.648, lng: 104.053, region: "asia", difficulty: 2 },
+            { name: "中国重庆·洪崖洞", lat: 29.565, lng: 106.587, region: "asia", difficulty: 1 },
+            { name: "中国重庆·磁器口", lat: 29.581, lng: 106.451, region: "asia", difficulty: 2 },
+            { name: "中国重庆·武隆天生三桥", lat: 29.44, lng: 107.78, region: "asia", difficulty: 4 },
+            { name: "中国贵阳·甲秀楼", lat: 26.576, lng: 106.72, region: "asia", difficulty: 3 },
+            { name: "中国安顺·黄果树瀑布", lat: 25.995, lng: 105.675, region: "asia", difficulty: 3 },
+            { name: "中国西双版纳·告庄", lat: 22, lng: 100.8, region: "asia", difficulty: 4 },
+            { name: "中国大理·洱海", lat: 25.71, lng: 100.18, region: "asia", difficulty: 2 },
+            { name: "中国丽江·四方街", lat: 26.872, lng: 100.233, region: "asia", difficulty: 2 },
+            { name: "中国香格里拉·独克宗", lat: 27.822, lng: 99.706, region: "asia", difficulty: 4 },
+            { name: "中国乐山·大佛", lat: 29.545, lng: 103.774, region: "asia", difficulty: 2 },
+            { name: "中国都江堰·水利工程", lat: 30.99, lng: 103.62, region: "asia", difficulty: 3 },
+            { name: "中国稻城·亚丁", lat: 29.037, lng: 100.283, region: "asia", difficulty: 5 },
+            { name: "中国西安·大雁塔", lat: 34.219, lng: 108.962, region: "asia", difficulty: 1 },
+            { name: "中国西安·华清池", lat: 34.365, lng: 109.21, region: "asia", difficulty: 2 },
+            { name: "中国西安·城墙", lat: 34.266, lng: 108.945, region: "asia", difficulty: 2 },
+            { name: "中国华山·长空栈道", lat: 34.482, lng: 110.085, region: "asia", difficulty: 4 },
+            { name: "中国兰州·黄河铁桥", lat: 36.064, lng: 103.82, region: "asia", difficulty: 3 },
+            { name: "中国兰州·白塔山", lat: 36.064, lng: 103.812, region: "asia", difficulty: 4 },
+            { name: "中国西宁·塔尔寺", lat: 36.49, lng: 101.57, region: "asia", difficulty: 4 },
+            { name: "中国西宁·青海湖", lat: 36.88, lng: 100.23, region: "asia", difficulty: 4 },
+            { name: "中国银川·西夏王陵", lat: 38.45, lng: 105.99, region: "asia", difficulty: 4 },
+            { name: "中国乌鲁木齐·天山天池", lat: 43.88, lng: 88.13, region: "asia", difficulty: 4 },
+            { name: "中国敦煌·鸣沙山", lat: 40.09, lng: 94.67, region: "asia", difficulty: 3 },
+            { name: "中国嘉峪关·城楼", lat: 39.8, lng: 98.3, region: "asia", difficulty: 3 },
+            { name: "中国吐鲁番·火焰山", lat: 42.92, lng: 89.57, region: "asia", difficulty: 5 },
+            { name: "中国沈阳·故宫", lat: 41.796, lng: 123.451, region: "asia", difficulty: 2 },
+            { name: "中国沈阳·张氏帅府", lat: 41.795, lng: 123.46, region: "asia", difficulty: 3 },
+            { name: "中国大连·老虎滩", lat: 38.87, lng: 121.66, region: "asia", difficulty: 2 },
+            { name: "中国大连·俄罗斯风情街", lat: 38.924, lng: 121.636, region: "asia", difficulty: 3 },
+            { name: "中国长春·伪满皇宫", lat: 43.896, lng: 125.352, region: "asia", difficulty: 3 },
+            { name: "中国长春·净月潭", lat: 43.78, lng: 125.45, region: "asia", difficulty: 4 },
+            { name: "中国哈尔滨·圣索菲亚教堂", lat: 45.77, lng: 126.625, region: "asia", difficulty: 2 },
+            { name: "中国哈尔滨·太阳岛", lat: 45.79, lng: 126.595, region: "asia", difficulty: 3 },
+            { name: "中国吉林·雾凇岛", lat: 43.97, lng: 126.75, region: "asia", difficulty: 4 },
+            { name: "中国漠河·九曲十八弯", lat: 53.45, lng: 122.3, region: "asia", difficulty: 5 },
+            { name: "中国满洲里·套娃广场", lat: 49.595, lng: 117.44, region: "asia", difficulty: 5 },
+            { name: "中国武夷山·天游峰", lat: 27.72, lng: 117.69, region: "asia", difficulty: 4 },
+            { name: "中国莆田·湄洲岛妈祖庙", lat: 25.1, lng: 119.13, region: "asia", difficulty: 4 },
+            { name: "中国汕头·南澳岛", lat: 23.42, lng: 117.05, region: "asia", difficulty: 4 },
+            { name: "中国湛江·观海长廊", lat: 21.195, lng: 110.41, region: "asia", difficulty: 5 },
+            { name: "中国宜昌·三峡大坝", lat: 30.82, lng: 111.005, region: "asia", difficulty: 3 },
+            { name: "中国香港·太平山凌霄阁", lat: 22.271, lng: 114.15, region: "asia", difficulty: 1 },
+            { name: "中国香港·兰桂坊", lat: 22.281, lng: 114.155, region: "asia", difficulty: 2 },
+            { name: "中国香港·天星小轮码头", lat: 22.294, lng: 114.168, region: "asia", difficulty: 2 },
+            { name: "中国澳门·威尼斯人", lat: 22.15, lng: 113.562, region: "asia", difficulty: 2 },
+            { name: "中国澳门·旅游塔", lat: 22.182, lng: 113.545, region: "asia", difficulty: 2 },
+            { name: "中国澳门·新马路", lat: 22.195, lng: 113.54, region: "asia", difficulty: 2 },
+            { name: "中国台北·中正纪念堂", lat: 25.036, lng: 121.519, region: "asia", difficulty: 2 },
+            { name: "中国台北·饶河夜市", lat: 25.048, lng: 121.576, region: "asia", difficulty: 2 },
+            { name: "中国台北·淡水老街", lat: 25.169, lng: 121.444, region: "asia", difficulty: 3 },
+            { name: "中国花莲·太鲁阁", lat: 24.152, lng: 121.626, region: "asia", difficulty: 4 },
+            { name: "中国阿里山·小火车", lat: 23.517, lng: 120.812, region: "asia", difficulty: 3 }];
 
         // ==========================================================
         // 【模式配置】
         // ==========================================================
         const MODES = {
-            classic:      { label: "🎯 经典模式",  rounds: 1, timer: 0,  scale: 2000, diffPool: [1,2,3] },
-            timed:        { label: "⏱️ 限时模式",  rounds: 3, timer: 60, scale: 2000, diffPool: [1,2,3] },
-            championship: { label: "🏆 多轮竞赛",  rounds: 5, timer: 0,  scale: 2000, diffPool: [1,2,3,4] },
-            region:       { label: "🗺️ 区域限定",  rounds: 5, timer: 0,  scale: 1200, diffPool: [1,2,3,4] },
-            endless:      { label: "♾️ 无限模式",  rounds: Infinity, timer: 0, scale: 2000, diffPool: null }
+            classic:   { label: "🎯 经典模式",  rounds: 1, timer: 0,   scale: 2000, diffPool: [1,2,3] },
+            challenge: { label: "⚡ 挑战模式",  rounds: 5, timer: 120, scale: 2000, diffPool: [1,2,3,4] },
+            region:    { label: "🗺️ 区域限定",  rounds: 5, timer: 0,   scale: 1200, diffPool: [1,2,3,4] },
+            china:     { label: "🇨🇳 中国模式",  rounds: 5, timer: 0,   scale: 2000, diffPool: [1,2,3,4,5] },
+            endless:   { label: "♾️ 无限模式",  rounds: Infinity, timer: 0, scale: 2000, diffPool: null }
         };
         const REGION_NAMES = { asia: "亚洲", europe: "欧洲", northamerica: "北美洲", southamerica: "南美洲", africa: "非洲", oceania: "大洋洲" };
         const REGION_VIEWS = {
@@ -842,10 +975,10 @@
         function renderBests() {
             const c = getBest('classic');
             $('best-classic').textContent = c ? `历史最佳：${c.score} 分` : '历史最佳：--';
-            const t = getBest('timed');
-            $('best-timed').textContent = t ? `历史最佳：${t.score} 分` : '历史最佳：--';
-            const ch = getBest('championship');
-            $('best-championship').textContent = ch ? `历史最佳：${ch.score} 分` : '历史最佳：--';
+            const t = getBest('challenge');
+            $('best-challenge').textContent = t ? `历史最佳：${t.score} 分` : '历史最佳：--';
+            const cn = getBest('china');
+            $('best-china').textContent = cn ? `历史最佳：${cn.score} 分` : '历史最佳：--';
             const r = getBest('region');
             $('best-region').textContent = r ? `历史最佳：${r.score} 分（${REGION_NAMES[r.region] || ''}）` : '历史最佳：--';
             const e = getBest('endless');
@@ -949,6 +1082,7 @@
         function poolKeyFor() {
             if (state.mode === 'endless') return 'endless:' + currentDifficulty();
             if (state.mode === 'region') return 'region:' + state.region;
+            if (state.mode === 'china') return 'china';
             return 'mode:' + state.mode;
         }
 
@@ -962,6 +1096,9 @@
             } else if (state.mode === 'region') {
                 pool = LOCATIONS.filter(l => l.region === state.region && MODES.region.diffPool.includes(l.difficulty));
                 if (!pool.length) pool = LOCATIONS.filter(l => l.region === state.region);
+            } else if (state.mode === 'china') {
+                pool = LOCATIONS.filter(l => l.name.startsWith('中国') && MODES.china.diffPool.includes(l.difficulty));
+                if (!pool.length) pool = LOCATIONS.filter(l => l.name.startsWith('中国'));
             } else {
                 pool = LOCATIONS.filter(l => MODES[state.mode].diffPool.includes(l.difficulty));
             }
@@ -1132,7 +1269,7 @@
         }
 
         // ==========================================================
-        // 【倒计时（限时模式）】
+        // 【倒计时（挑战模式）】
         // ==========================================================
         function startTimer() {
             stopTimer();
