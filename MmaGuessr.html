@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.9.1 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.10.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -385,7 +385,7 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.9.1</span>
+            <span class="ver-badge" id="home-version">版本 v1.10.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
         </div>
@@ -415,7 +415,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.9.1</div>
+        <div id="version-line">版本 v1.10.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -485,8 +485,18 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.9.1";
+        const VERSION = "v1.10.0";
         const CHANGELOG = [
+            {
+                version: "v1.10.0", date: "2026-07-30 18:38:00",
+                changes: [
+                    "📐 计分系统全面重构：去除假远方位点（俄罗斯莫斯科·红场），杜绝污染题库数据。",
+                    "⚖️ 引入平衡系数 α（1.8–2.5）：每个模式/区域独立乘以基准最大跨度 D，实现与原缓冲效果等价的判分曲线，但无需塞假数据。",
+                    "🎯 新增最小距离阈值 dMin（15–40 m）：距离小于 dMin 时按 dMin 计分，屏蔽像素级刷分，提升微调心理体验。",
+                    "🌍 分区计分机制：中国模式与六大洲区域限定各自拥有独立的 D / α / dMin 参数，适配不同地理尺度与研判难度。",
+                    "版本号递增至 v1.10.0。"
+                ]
+            },
             {
                 version: "v1.9.1", date: "2026-07-29 19:41:00",
                 changes: [
@@ -626,7 +636,6 @@
             { name: "澳大利亚悉尼·歌剧院", lat: -33.8568, lng: 151.2153, region: "oceania", difficulty: 1 },
             { name: "意大利罗马·斗兽场", lat: 41.8902, lng: 12.4922, region: "europe", difficulty: 1 },
             { name: "美国旧金山·金门大桥", lat: 37.8078, lng: -122.4750, region: "northamerica", difficulty: 1 },
-            { name: "俄罗斯莫斯科·红场", lat: 55.7539, lng: 37.6208, region: "europe", difficulty: 1 },
             { name: "巴西里约·科帕卡巴纳海滩", lat: -22.9711, lng: -43.1822, region: "southamerica", difficulty: 1 },
             { name: "阿联酋迪拜·哈利法塔", lat: 25.1972, lng: 55.2744, region: "asia", difficulty: 1 },
             { name: "西班牙巴塞罗那·圣家堂", lat: 41.4036, lng: 2.1744, region: "europe", difficulty: 1 },
@@ -933,6 +942,25 @@
             africa: [[ -35, -20 ], [ 38, 52 ]], oceania: [[ -48, 110 ], [ 0, 180 ]]
         };
         const MAX_SCORE = 5000;
+
+        // ==========================================================
+        // 【分区计分系统】
+        // · 去除假远方位点（红场），采用平衡系数 α ∈ [1.8, 2.5] 缓冲判分
+        // · 各模式/区域独立参数：D (基准最大跨度 km)、α (平衡系数)、dMin (最小距离 m)
+        // · 公式：score = MAX_SCORE × e^(-10 × max(d, dMin/1000) / (D × α))
+        // ==========================================================
+        const SCORE_CONFIG = {
+            global:      { D: 2000, α: 2.3, dMin: 30 },     // 经典 / 挑战 / 无限
+            china:       { D: 2000, α: 1.8, dMin: 15 },     // 中国模式：紧凑地理 + 严判分
+            region: {
+                asia:         { D: 1200, α: 2.0, dMin: 25 },
+                europe:       { D: 1200, α: 2.0, dMin: 20 },
+                northamerica: { D: 1200, α: 2.2, dMin: 30 },
+                southamerica: { D: 1200, α: 2.3, dMin: 35 },
+                africa:       { D: 1200, α: 2.4, dMin: 40 },
+                oceania:      { D: 1200, α: 2.5, dMin: 25 }
+            }
+        };
 
         // ==========================================================
         // 【全局状态】
@@ -1326,10 +1354,26 @@
         // 【提交猜测 & 计分】
         // ==========================================================
         function calcScore(distanceKm) {
-            // 指数衰减计分：0km=5000分；scale 越小判分越严格
-            const scale = MODES[state.mode].scale;
-            let s = Math.round(MAX_SCORE * Math.exp(-distanceKm / (scale / 4)));
-            if (distanceKm < 0.05) s = MAX_SCORE;
+            // 指数衰减计分，采用分区参数系统：
+            //   dMin 最小距离阈值——微调平滑，屏蔽像素级刷分
+            //   α 平衡系数——替代旧"红场假点"缓冲方案
+            //   各大洲/中国模式独立 D/α/dMin 参数
+            const mode = state.mode;
+            const region = state.region;
+
+            let cfg;
+            if (mode === 'china') {
+                cfg = SCORE_CONFIG.china;
+            } else if (mode === 'region' && region && SCORE_CONFIG.region[region]) {
+                cfg = SCORE_CONFIG.region[region];
+            } else {
+                cfg = SCORE_CONFIG.global;
+            }
+
+            const dMinKm = cfg.dMin / 1000;
+            const dEff = Math.max(distanceKm, dMinKm);
+            const D_eff = cfg.D * cfg.α;
+            let s = Math.round(MAX_SCORE * Math.exp(-10 * dEff / D_eff));
             return Math.max(0, Math.min(MAX_SCORE, s));
         }
 
