@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.10.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.11.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -120,6 +120,68 @@
         }
         .clog-entry ul { margin: 4px 0 0 18px; }
         .clog-entry li { font-size: 13px; color: #c8d4ee; line-height: 1.7; }
+
+        /* ============ 历史记录 ============ */
+        #history-overlay {
+            position: fixed; inset: 0; z-index: 9000; display: none;
+            background: rgba(10,15,35,0.92); backdrop-filter: blur(6px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #history-overlay.show { display: flex; }
+        #history-box {
+            background: #16213e; border: 1px solid rgba(255,255,255,0.15); border-radius: 18px;
+            width: 100%; max-width: 720px; max-height: 84vh; overflow-y: auto; padding: 26px 30px;
+        }
+        #history-box h2 {
+            font-size: 23px; margin-bottom: 6px; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px;
+        }
+        #history-box .h-sub { font-size: 13px; color: #8899bb; margin-bottom: 18px; }
+        .hist-close {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: #fff; border-radius: 10px; padding: 6px 14px; cursor: pointer; font-size: 14px; white-space: nowrap;
+        }
+        .hist-close:hover { background: rgba(255,255,255,0.22); }
+        .hist-empty { text-align: center; color: #8899bb; padding: 30px 0; font-size: 15px; }
+        .hist-game {
+            border-left: 3px solid #58a6ff; padding: 10px 0 10px 16px; margin-bottom: 20px;
+            background: rgba(255,255,255,0.02); border-radius: 0 10px 10px 0;
+        }
+        .hist-game .hg-head {
+            display: flex; align-items: baseline; justify-content: space-between;
+            gap: 12px; margin-bottom: 8px; flex-wrap: wrap;
+        }
+        .hist-game .hg-mode { font-size: 16px; font-weight: bold; color: #58a6ff; }
+        .hist-game .hg-date { font-size: 12px; color: #8899bb; }
+        .hist-game .hg-score {
+            font-size: 18px; font-weight: bold; color: #4CAF50;
+            background: rgba(76,175,80,0.12); padding: 2px 12px; border-radius: 10px;
+        }
+        .hist-rounds { margin-top: 6px; }
+        .hist-rounds .hr {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 10px; border-radius: 8px; margin-bottom: 4px;
+            background: rgba(255,255,255,0.03); font-size: 13px; color: #c8d4ee;
+            gap: 8px; flex-wrap: wrap;
+        }
+        .hist-rounds .hr:hover { background: rgba(88,166,255,0.08); }
+        .hr-round { color: #FFD700; font-weight: bold; font-size: 12px; background: rgba(255,215,0,0.12); padding: 1px 8px; border-radius: 8px; white-space: nowrap; }
+        .hr-name { flex: 1; min-width: 100px; }
+        .hr-dist { color: #8899bb; font-size: 12px; white-space: nowrap; }
+        .hr-score { color: #4CAF50; font-weight: bold; font-size: 13px; white-space: nowrap; }
+        .hr-mly {
+            color: #58a6ff; font-size: 12px; text-decoration: none; white-space: nowrap;
+            background: rgba(88,166,255,0.1); padding: 2px 10px; border-radius: 8px; transition: background .2s;
+        }
+        .hr-mly:hover { background: rgba(88,166,255,0.25); }
+        .hist-delete {
+            background: rgba(255,77,77,0.15); border: 1px solid rgba(255,77,77,0.3);
+            color: #ff4d4d; border-radius: 8px; padding: 3px 10px; cursor: pointer;
+            font-size: 12px; white-space: nowrap; transition: background .2s;
+        }
+        .hist-delete:hover { background: rgba(255,77,77,0.3); }
+        #history-box::-webkit-scrollbar { width: 6px; }
+        #history-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
         /* ============ 区域选择 ============ */
         #region-screen {
@@ -385,9 +447,10 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.10.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.11.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
+            <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
         </div>
     </div>
 
@@ -415,7 +478,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.10.0</div>
+        <div id="version-line">版本 v1.11.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -475,6 +538,15 @@
         </div>
     </div>
 
+    <!-- ============ 历史记录弹窗 ============ -->
+    <div id="history-overlay" onclick="if(event.target===this)closeHistory()">
+        <div id="history-box">
+            <h2>📜 历史记录 <button class="hist-close" onclick="closeHistory()">✕ 关闭</button></h2>
+            <div class="h-sub">最近 20 局 · 点击 🗺️ 可在 Mapillary 官网查看原街景 · 可删除单条记录</div>
+            <div id="history-list"></div>
+        </div>
+    </div>
+
     <script>
         // ==========================================================
         // 【⚠️ 核心配置：Mapillary Token】
@@ -485,8 +557,18 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.10.0";
+        const VERSION = "v1.11.0";
         const CHANGELOG = [
+            {
+                version: "v1.11.0", date: "2026-07-30 19:30:00",
+                changes: [
+                    "📜 新增「历史记录」面板：主菜单入口，本地存储最近 20 局游戏详情（模式/得分/回合明细）。",
+                    "🗺️ Mapillary 街景回看：每回合附带原街景图片链接，点击在新标签页打开 Mapillary 官网查看。",
+                    "🔢 多回合按 r1 / r2 / r3… 排列：清晰展示每一局的每轮地点、距离、得分。",
+                    "🗑 支持单条删除：可手动清理不需要的历史记录。",
+                    "版本号递增至 v1.11.0。"
+                ]
+            },
             {
                 version: "v1.10.0", date: "2026-07-30 18:38:00",
                 changes: [
@@ -1022,6 +1104,96 @@
         }
 
         // ==========================================================
+        // 【本地历史记录】
+        // 存储最近 20 局，每局含模式/得分/回合明细/Mapillary 图片 ID
+        // ==========================================================
+        const HIST_KEY = 'mma_guessr_history';
+        const HIST_MAX = 20;
+
+        function loadHistory() {
+            try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch (e) { return []; }
+        }
+        function saveHistory(arr) {
+            localStorage.setItem(HIST_KEY, JSON.stringify(arr.slice(0, HIST_MAX)));
+        }
+
+        function saveGameHistory() {
+            if (state.mode === 'endless' && state.history.length === 0) return; // 没打成的不记
+            const maxPossible = MODES[state.mode].rounds === Infinity ? null : MODES[state.mode].rounds * MAX_SCORE;
+            const game = {
+                id: Date.now(),
+                date: new Date().toLocaleString('zh-CN', { hour12: false }),
+                mode: state.mode,
+                modeLabel: MODES[state.mode].label,
+                region: state.region || null,
+                regionName: state.region ? REGION_NAMES[state.region] : null,
+                totalScore: state.totalScore,
+                maxScore: maxPossible,
+                rounds: state.history.map(h => ({
+                    name: h.name,
+                    distanceKm: h.distanceKm,
+                    score: h.score,
+                    imageId: h.imageId || null
+                }))
+            };
+            const all = loadHistory();
+            all.unshift(game);
+            saveHistory(all);
+        }
+
+        function openHistory() {
+            const list = $('history-list');
+            const all = loadHistory();
+            if (all.length === 0) {
+                list.innerHTML = '<div class="hist-empty">📭 暂无游戏记录<br><span style="font-size:12px">开始一局游戏后会自动记录</span></div>';
+            } else {
+                list.innerHTML = all.map((g, gi) => {
+                    const scoreStr = g.maxScore ? `${g.totalScore} / ${g.maxScore} 分` : `Lv. 总分 ${g.totalScore}`;
+                    const regionStr = g.regionName ? ' · ' + g.regionName : '';
+                    const roundsHTML = g.rounds.map((r, ri) => {
+                        const distStr = r.distanceKm == null ? '超时'
+                            : r.distanceKm < 1 ? Math.round(r.distanceKm * 1000) + 'm'
+                            : r.distanceKm.toFixed(0) + 'km';
+                        const mlyLink = r.imageId
+                            ? `<a class="hr-mly" href="https://www.mapillary.com/app/?pKey=${r.imageId}" target="_blank" rel="noopener noreferrer">🗺️ 查看街景</a>`
+                            : '';
+                        return `<div class="hr">
+                            <span class="hr-round">r${ri + 1}</span>
+                            <span class="hr-name">${r.name}</span>
+                            <span class="hr-dist">${distStr}</span>
+                            <span class="hr-score">${r.score}分</span>
+                            ${mlyLink}
+                        </div>`;
+                    }).join('');
+                    return `<div class="hist-game">
+                        <div class="hg-head">
+                            <span class="hg-mode">${g.modeLabel}${regionStr}</span>
+                            <span class="hg-date">${g.date}</span>
+                        </div>
+                        <span class="hg-score">${scoreStr}</span>
+                        <div class="hist-rounds">${roundsHTML}</div>
+                        <div style="text-align:right;margin-top:6px">
+                            <button class="hist-delete" onclick="deleteHistory(${gi});event.stopPropagation()">🗑 删除</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            $('history-overlay').classList.add('show');
+        }
+
+        function closeHistory() {
+            $('history-overlay').classList.remove('show');
+        }
+
+        function deleteHistory(index) {
+            if (!confirm('确定删除这条游戏记录吗？')) return;
+            const all = loadHistory();
+            all.splice(index, 1);
+            saveHistory(all);
+            openHistory(); // 刷新面板
+        }
+
+        // ==========================================================
         // 【初始化】
         // ==========================================================
         window.onload = function () {
@@ -1255,7 +1427,7 @@
             if (bi >= 0) state.drawBag.splice(bi, 1);
 
             // 用街景图片的真实坐标作为答案坐标（更精确）
-            state.current = { name: loc.name, lat: found.lat, lng: found.lng, difficulty: loc.difficulty };
+            state.current = { name: loc.name, lat: found.lat, lng: found.lng, difficulty: loc.difficulty, imageId: found.imageId };
             isSubmitting = false;   // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
             showPanorama(found.imageId);
             showHint();
@@ -1397,7 +1569,7 @@
             const distanceKm = guessPoint.distanceTo(targetLatLng) / 1000;
             const score = calcScore(distanceKm);
             state.totalScore += score;
-            state.history.push({ name: round.name, distanceKm, score });
+            state.history.push({ name: round.name, distanceKm, score, imageId: round.imageId });
 
             // ---- 距离可视化：答案蓝点 + 虚线 + 飞行取景 ----
             answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
@@ -1513,6 +1685,7 @@
             $('share-btn').style.display = 'inline-block';
             $('home-btn2').style.display = 'inline-block';
             $('result-overlay').classList.add('show');
+            saveGameHistory();
         }
 
         function buildShareText() {
