@@ -1,0 +1,598 @@
+{
+  "invalid": [
+    {
+      "name": "中国拉萨",
+      "lat": 29.652,
+      "lng": 91.1721,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国台北·台北101",
+      "lat": 25.0339,
+      "lng": 121.572,
+      "region": "asia",
+      "difficulty": 1
+    },
+    {
+      "name": "中国武汉·黄鹤楼",
+      "lat": 30.5466,
+      "lng": 114.305,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国长沙·橘子洲",
+      "lat": 28.233,
+      "lng": 112.955,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国澳门·大三巴",
+      "lat": 22.197,
+      "lng": 113.543,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国三亚·亚龙湾",
+      "lat": 18.219,
+      "lng": 109.658,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国乌鲁木齐·国际大巴扎",
+      "lat": 43.826,
+      "lng": 87.616,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国漠河·北极村",
+      "lat": 53.47,
+      "lng": 122.37,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国台北·西门町",
+      "lat": 25.042,
+      "lng": 121.5075,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国台北·士林夜市",
+      "lat": 25.0879,
+      "lng": 121.5243,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国杭州·灵隐寺",
+      "lat": 30.243,
+      "lng": 120.1,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国无锡·太湖鼋头渚",
+      "lat": 31.524,
+      "lng": 120.217,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国常州·中华恐龙园",
+      "lat": 31.822,
+      "lng": 120.002,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国南昌·滕王阁",
+      "lat": 28.685,
+      "lng": 115.877,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国石家庄·赵州桥",
+      "lat": 37.7,
+      "lng": 114.7,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国太原·晋祠",
+      "lat": 37.71,
+      "lng": 112.444,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国大同·云冈石窟",
+      "lat": 40.11,
+      "lng": 113.136,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国平遥·古城墙",
+      "lat": 37.203,
+      "lng": 112.18,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国呼和浩特·大召寺",
+      "lat": 40.805,
+      "lng": 111.678,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国烟台·蓬莱阁",
+      "lat": 37.77,
+      "lng": 120.84,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国威海·刘公岛",
+      "lat": 37.502,
+      "lng": 122.187,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国郑州·少林寺",
+      "lat": 34.51,
+      "lng": 112.94,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国开封·清明上河园",
+      "lat": 34.79,
+      "lng": 114.35,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国武汉·东湖",
+      "lat": 30.55,
+      "lng": 114.37,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国张家界·森林公园",
+      "lat": 29.35,
+      "lng": 110.42,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国衡阳·衡山",
+      "lat": 27.238,
+      "lng": 112.741,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国南宁·青秀山",
+      "lat": 22.79,
+      "lng": 108.37,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国北海·银滩",
+      "lat": 21.46,
+      "lng": 109.135,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国三亚·天涯海角",
+      "lat": 18.245,
+      "lng": 109.345,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国泉州·开元寺",
+      "lat": 24.915,
+      "lng": 118.588,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国重庆·磁器口",
+      "lat": 29.581,
+      "lng": 106.451,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国重庆·武隆天生三桥",
+      "lat": 29.44,
+      "lng": 107.78,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国安顺·黄果树瀑布",
+      "lat": 25.995,
+      "lng": 105.675,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国都江堰·水利工程",
+      "lat": 30.99,
+      "lng": 103.62,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国稻城·亚丁",
+      "lat": 29.037,
+      "lng": 100.283,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国华山·长空栈道",
+      "lat": 34.482,
+      "lng": 110.085,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国西宁·塔尔寺",
+      "lat": 36.49,
+      "lng": 101.57,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国西宁·青海湖",
+      "lat": 36.88,
+      "lng": 100.23,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国银川·西夏王陵",
+      "lat": 38.45,
+      "lng": 105.99,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国乌鲁木齐·天山天池",
+      "lat": 43.88,
+      "lng": 88.13,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国敦煌·鸣沙山",
+      "lat": 40.09,
+      "lng": 94.67,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国嘉峪关·城楼",
+      "lat": 39.8,
+      "lng": 98.3,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国吐鲁番·火焰山",
+      "lat": 42.92,
+      "lng": 89.57,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国沈阳·故宫",
+      "lat": 41.796,
+      "lng": 123.451,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国沈阳·张氏帅府",
+      "lat": 41.795,
+      "lng": 123.46,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国大连·老虎滩",
+      "lat": 38.87,
+      "lng": 121.66,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国大连·俄罗斯风情街",
+      "lat": 38.924,
+      "lng": 121.636,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国长春·伪满皇宫",
+      "lat": 43.896,
+      "lng": 125.352,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国长春·净月潭",
+      "lat": 43.78,
+      "lng": 125.45,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国哈尔滨·圣索菲亚教堂",
+      "lat": 45.77,
+      "lng": 126.625,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国哈尔滨·太阳岛",
+      "lat": 45.79,
+      "lng": 126.595,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国吉林·雾凇岛",
+      "lat": 43.97,
+      "lng": 126.75,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国漠河·九曲十八弯",
+      "lat": 53.45,
+      "lng": 122.3,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国满洲里·套娃广场",
+      "lat": 49.595,
+      "lng": 117.44,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国武夷山·天游峰",
+      "lat": 27.72,
+      "lng": 117.69,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国莆田·湄洲岛妈祖庙",
+      "lat": 25.1,
+      "lng": 119.13,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国汕头·南澳岛",
+      "lat": 23.42,
+      "lng": 117.05,
+      "region": "asia",
+      "difficulty": 4
+    },
+    {
+      "name": "中国湛江·观海长廊",
+      "lat": 21.195,
+      "lng": 110.41,
+      "region": "asia",
+      "difficulty": 5
+    },
+    {
+      "name": "中国宜昌·三峡大坝",
+      "lat": 30.82,
+      "lng": 111.005,
+      "region": "asia",
+      "difficulty": 3
+    },
+    {
+      "name": "中国台北·中正纪念堂",
+      "lat": 25.036,
+      "lng": 121.519,
+      "region": "asia",
+      "difficulty": 2
+    },
+    {
+      "name": "中国台北·饶河夜市",
+      "lat": 25.048,
+      "lng": 121.576,
+      "region": "asia",
+      "difficulty": 2
+    }
+  ],
+  "newPoints": [
+    {
+      "name": "中国上海·人民广场",
+      "lat": 31.232,
+      "lng": 121.473,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "1750413262546846"
+    },
+    {
+      "name": "中国上海·新天地",
+      "lat": 31.219,
+      "lng": 121.475,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "1126684814496399"
+    },
+    {
+      "name": "中国上海·静安寺",
+      "lat": 31.225,
+      "lng": 121.445,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "1162784087496497"
+    },
+    {
+      "name": "中国上海·武康路",
+      "lat": 31.208,
+      "lng": 121.436,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "162630039101267"
+    },
+    {
+      "name": "中国成都·太古里",
+      "lat": 30.653,
+      "lng": 104.084,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "602756077836455"
+    },
+    {
+      "name": "中国成都·武侯祠",
+      "lat": 30.644,
+      "lng": 104.047,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "178214464079873"
+    },
+    {
+      "name": "中国成都·杜甫草堂",
+      "lat": 30.661,
+      "lng": 104.028,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "1401012636930694"
+    },
+    {
+      "name": "中国成都·金沙遗址",
+      "lat": 30.682,
+      "lng": 104.012,
+      "region": "asia",
+      "difficulty": 2,
+      "imageId": "391375156383383"
+    },
+    {
+      "name": "中国阆中·古城",
+      "lat": 31.575,
+      "lng": 105.967,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1002230682733654"
+    },
+    {
+      "name": "中国阆中·张飞庙",
+      "lat": 31.576,
+      "lng": 105.966,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1513262246491081"
+    },
+    {
+      "name": "中国阆中·华光楼",
+      "lat": 31.574,
+      "lng": 105.964,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "806720261860460"
+    },
+    {
+      "name": "中国南充·北湖公园",
+      "lat": 30.796,
+      "lng": 106.076,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "950846814013512"
+    },
+    {
+      "name": "中国南充·西山风景区",
+      "lat": 30.78,
+      "lng": 106.065,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1647537343135482"
+    },
+    {
+      "name": "中国南部·桂花博览园",
+      "lat": 31.348,
+      "lng": 106.038,
+      "region": "asia",
+      "difficulty": 4,
+      "imageId": "3634973919986385"
+    },
+    {
+      "name": "中国南部·凌云公园",
+      "lat": 31.356,
+      "lng": 106.045,
+      "region": "asia",
+      "difficulty": 4,
+      "imageId": "1197603689198327"
+    },
+    {
+      "name": "中国溧水·无想山",
+      "lat": 31.63,
+      "lng": 119.035,
+      "region": "asia",
+      "difficulty": 4,
+      "imageId": "1831822451547842"
+    },
+    {
+      "name": "中国溧水·天生桥",
+      "lat": 31.638,
+      "lng": 119.012,
+      "region": "asia",
+      "difficulty": 4,
+      "imageId": "1019484740325485"
+    },
+    {
+      "name": "中国株洲·炎帝广场",
+      "lat": 27.838,
+      "lng": 113.132,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1112562607527005"
+    },
+    {
+      "name": "中国株洲·神农城",
+      "lat": 27.835,
+      "lng": 113.128,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1910070846228911"
+    },
+    {
+      "name": "中国株洲·湘江风光带",
+      "lat": 27.836,
+      "lng": 113.148,
+      "region": "asia",
+      "difficulty": 3,
+      "imageId": "1348334590179759"
+    }
+  ],
+  "dupes": [
+    "中国成都·宽窄巷子"
+  ],
+  "total": 167,
+  "validCount": 106
+}
