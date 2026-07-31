@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.12.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.13.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -233,6 +233,38 @@
             margin-top: 16px; padding: 10px 26px; border: none; border-radius: 20px;
             background: rgba(255,255,255,0.9); color: #333; font-weight: bold; cursor: pointer;
         }
+        #panorama-fallback .err-export-btn {
+            margin-top: 8px; background: rgba(255,255,255,0.25); color: #fff;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        #panorama-fallback .err-export-btn:hover { background: rgba(255,255,255,0.4); }
+        /* 错误报告弹窗 */
+        #err-overlay {
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(5px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #err-overlay.show { display: flex; }
+        #err-box {
+            background: #fff; border-radius: 16px; padding: 24px 28px;
+            width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto; color: #333;
+        }
+        #err-box h3 { margin: 0 0 12px; font-size: 20px; }
+        #err-box textarea {
+            width: 100%; height: 300px; font-size: 12px; font-family: Consolas, Monaco, monospace;
+            border: 1px solid #ddd; border-radius: 10px; padding: 10px; box-sizing: border-box;
+            background: #f8f9fb; color: #222; resize: vertical;
+        }
+        #err-box .err-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+        #err-box .err-actions button {
+            flex: 1; min-width: 120px; padding: 10px 0; border: none; border-radius: 10px;
+            font-weight: bold; cursor: pointer;
+        }
+        #err-box .btn-download { background: #3498db; color: #fff; }
+        #err-box .btn-copy { background: #2ecc71; color: #fff; }
+        #err-box .btn-close { background: #eee; color: #333; }
+        #err-toast2 { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10001;
+            background: rgba(0,0,0,0.8); color: #fff; padding: 10px 24px; border-radius: 20px; display: none; }
 
         /* ============ 信息栏 ============ */
         #info-bar {
@@ -405,6 +437,20 @@
             #result-box { padding: 24px 20px; }
             #result-box .distance { font-size: 26px; }
         }
+        /* 手机横屏：视口高度受限即视为移动端（无法仅凭宽度识别横屏手机），
+           地图同样按钮化，避免完整地图占满屏幕遮挡其他内容 */
+        @media (orientation: landscape) and (max-height: 500px) {
+            #minimap-container, #minimap-container.show { display: none !important; }
+            #minimap-container.mobile-open, #minimap-container.mobile-open.show {
+                display: block !important; width: 55vw; height: 78vh;
+                bottom: 12px; right: 12px; left: auto; z-index: 1500; border-width: 3px;
+            }
+            #minimap-container.enlarged { width: 60vw; height: 82vh; bottom: 12px; right: 12px; }
+            #map-toggle-btn { display: none; }
+            #mobile-map-btn { display: block; bottom: 18px; left: 18px; padding: 10px 18px; font-size: 14px; }
+            #submit-btn { bottom: 18px; right: 18px; padding: 10px 20px; font-size: 13px; }
+            #timer-box { bottom: 14px; left: 14px; font-size: 16px; padding: 6px 16px; }
+        }
     </style>
 </head>
 <body>
@@ -447,7 +493,7 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.12.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.13.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
             <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
@@ -478,7 +524,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.12.0</div>
+        <div id="version-line">版本 v1.13.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -495,6 +541,7 @@
                 <h2>⚠️ 街景加载失败</h2>
                 <p>该地点街景暂时无法加载，可能是网络或覆盖问题。</p>
                 <button onclick="skipLocation()">🔄 换一个地点</button>
+                <button class="err-export-btn" onclick="exportStreetViewError()">📄 导出错误报告</button>
             </div>
         </div>
     </div>
@@ -547,6 +594,20 @@
         </div>
     </div>
 
+    <!-- ============ 街景错误报告弹窗 ============ -->
+    <div id="err-overlay" onclick="if(event.target===this)closeErrReport()">
+        <div id="err-box">
+            <h3>📄 街景加载错误报告</h3>
+            <textarea id="err-report-content" readonly></textarea>
+            <div class="err-actions">
+                <button class="btn-download" onclick="downloadErrReport()">⬇️ 下载 .txt</button>
+                <button class="btn-copy" onclick="copyErrReport()">📋 复制内容</button>
+                <button class="btn-close" onclick="closeErrReport()">✕ 关闭</button>
+            </div>
+        </div>
+    </div>
+    <div id="err-toast2"></div>
+
     <script>
         // ==========================================================
         // 【⚠️ 核心配置：Mapillary Token】
@@ -557,8 +618,18 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.12.0";
+        const VERSION = "v1.13.0";
         const CHANGELOG = [
+            {
+                version: "v1.13.0", date: "2026-07-31 16:40:00",
+                changes: [
+                    "🗺️ 中国模式地图锁定：地图范围锁定在中国国境（含港澳台与南海），限制拖动、减少无效操作，专注作答。",
+                    "📱 手机横屏适配：横屏时地图自动缩小为「🗺️ 地图」按钮，避免完整地图占满屏幕遮挡其他内容。",
+                    "📄 街景加载错误报告导出：加载失败时一键导出包含街景 ID、请求参数、错误状态、浏览器环境的诊断报告（可下载/复制）。",
+                    "🌍 世界街景大扩充：新增 176 个经 Mapillary 逐一验证的世界各地街景点位（覆盖六大洲），全球题库 241 → 417。",
+                    "版本号递增至 v1.13.0。"
+                ]
+            },
             {
                 version: "v1.12.0", date: "2026-07-30 20:30:00",
                 changes: [
@@ -959,7 +1030,183 @@
             { name: "中国溧水·天生桥", lat: 31.638, lng: 119.012, region: "asia", difficulty: 4 },
             { name: "中国株洲·炎帝广场", lat: 27.838, lng: 113.132, region: "asia", difficulty: 3 },
             { name: "中国株洲·神农城", lat: 27.835, lng: 113.128, region: "asia", difficulty: 3 },
-            { name: "中国株洲·湘江风光带", lat: 27.836, lng: 113.148, region: "asia", difficulty: 3 }];
+            { name: "中国株洲·湘江风光带", lat: 27.836, lng: 113.148, region: "asia", difficulty: 3 },
+            { name: "英国曼彻斯特·中心", lat: 53.4808, lng: -2.2426, region: "europe", difficulty: 3 },
+            { name: "英国利物浦·码头区", lat: 53.4041, lng: -2.9938, region: "europe", difficulty: 3 },
+            { name: "英国剑桥·国王学院", lat: 52.2043, lng: 0.1171, region: "europe", difficulty: 2 },
+            { name: "法国巴黎·凯旋门", lat: 48.8738, lng: 2.295, region: "europe", difficulty: 1 },
+            { name: "法国尼斯·天使湾", lat: 43.6953, lng: 7.2583, region: "europe", difficulty: 2 },
+            { name: "法国波尔多·交易所广场", lat: 44.8412, lng: -0.5698, region: "europe", difficulty: 3 },
+            { name: "意大利那不勒斯·市中心", lat: 40.8518, lng: 14.2681, region: "europe", difficulty: 3 },
+            { name: "意大利博洛尼亚·双塔", lat: 44.4941, lng: 11.3465, region: "europe", difficulty: 4 },
+            { name: "意大利维罗纳·竞技场", lat: 45.4388, lng: 10.9938, region: "europe", difficulty: 3 },
+            { name: "西班牙瓦伦西亚·艺术科学城", lat: 39.4549, lng: -0.3525, region: "europe", difficulty: 3 },
+            { name: "西班牙毕尔巴鄂·古根海姆", lat: 43.2687, lng: -2.9342, region: "europe", difficulty: 3 },
+            { name: "西班牙格拉纳达·阿尔罕布拉宫", lat: 37.1765, lng: -3.5888, region: "europe", difficulty: 2 },
+            { name: "葡萄牙辛特拉·佩纳宫", lat: 38.7877, lng: -9.3907, region: "europe", difficulty: 3 },
+            { name: "荷兰鹿特丹·立体方块屋", lat: 51.9201, lng: 4.4903, region: "europe", difficulty: 3 },
+            { name: "荷兰海牙·和平宫", lat: 52.0868, lng: 4.2951, region: "europe", difficulty: 3 },
+            { name: "瑞士日内瓦·大喷泉", lat: 46.2074, lng: 6.1555, region: "europe", difficulty: 2 },
+            { name: "瑞士卢塞恩·卡佩尔桥", lat: 47.0517, lng: 8.3079, region: "europe", difficulty: 2 },
+            { name: "波兰格但斯克·长街", lat: 54.3486, lng: 18.6533, region: "europe", difficulty: 3 },
+            { name: "波兰弗罗茨瓦夫·集市广场", lat: 51.1079, lng: 17.0304, region: "europe", difficulty: 3 },
+            { name: "匈牙利埃格尔·城堡", lat: 47.9025, lng: 20.3779, region: "europe", difficulty: 4 },
+            { name: "希腊圣托里尼·伊亚", lat: 36.4618, lng: 25.3753, region: "europe", difficulty: 3 },
+            { name: "克罗地亚杜布罗夫尼克·老城", lat: 42.6507, lng: 18.0944, region: "europe", difficulty: 3 },
+            { name: "克罗地亚斯普利特·戴克里先宫", lat: 43.5081, lng: 16.4402, region: "europe", difficulty: 4 },
+            { name: "立陶宛考纳斯·老城", lat: 54.8974, lng: 23.8864, region: "europe", difficulty: 4 },
+            { name: "土耳其伊兹密尔·钟楼广场", lat: 38.4189, lng: 27.1287, region: "europe", difficulty: 3 },
+            { name: "土耳其安卡拉·共和国塔", lat: 39.9428, lng: 32.8554, region: "europe", difficulty: 4 },
+            { name: "日本名古屋·名古屋城", lat: 35.1853, lng: 136.8997, region: "asia", difficulty: 2 },
+            { name: "日本广岛·和平公园", lat: 34.3926, lng: 132.4527, region: "asia", difficulty: 2 },
+            { name: "韩国首尔·景福宫", lat: 37.5796, lng: 126.977, region: "asia", difficulty: 1 },
+            { name: "韩国首尔·弘大商圈", lat: 37.5566, lng: 126.9238, region: "asia", difficulty: 3 },
+            { name: "韩国釜山·海云台", lat: 35.1587, lng: 129.1604, region: "asia", difficulty: 2 },
+            { name: "韩国济州岛·龙头岩", lat: 33.5168, lng: 126.5166, region: "asia", difficulty: 3 },
+            { name: "泰国芭提雅·海滩路", lat: 12.9335, lng: 100.8595, region: "asia", difficulty: 3 },
+            { name: "印尼日惹·婆罗浮屠", lat: -7.6079, lng: 110.2038, region: "asia", difficulty: 3 },
+            { name: "柬埔寨暹粒·吴哥窟", lat: 13.4125, lng: 103.867, region: "asia", difficulty: 2 },
+            { name: "缅甸仰光·大金塔", lat: 16.7983, lng: 96.149, region: "asia", difficulty: 3 },
+            { name: "印度斋浦尔·风之宫", lat: 26.9239, lng: 75.8267, region: "asia", difficulty: 2 },
+            { name: "印度孟买·印度门", lat: 18.922, lng: 72.8347, region: "asia", difficulty: 2 },
+            { name: "印度班加罗尔·库本公园", lat: 12.9762, lng: 77.5931, region: "asia", difficulty: 4 },
+            { name: "斯里兰卡科伦坡·加勒菲斯绿地", lat: 6.9271, lng: 79.848, region: "asia", difficulty: 3 },
+            { name: "斯里兰卡康提·佛牙寺", lat: 7.2937, lng: 80.6413, region: "asia", difficulty: 4 },
+            { name: "阿联酋阿布扎比·大清真寺", lat: 24.4128, lng: 54.4748, region: "asia", difficulty: 2 },
+            { name: "卡塔尔多哈·伊斯兰艺术博物馆", lat: 25.295, lng: 51.539, region: "asia", difficulty: 3 },
+            { name: "沙特利雅得·王国中心", lat: 24.7136, lng: 46.6753, region: "asia", difficulty: 4 },
+            { name: "以色列耶路撒冷·西墙", lat: 31.7767, lng: 35.2345, region: "asia", difficulty: 3 },
+            { name: "黎巴嫩贝鲁特·鸽子岩", lat: 33.9025, lng: 35.4705, region: "asia", difficulty: 4 },
+            { name: "阿塞拜疆巴库·火焰塔", lat: 40.36, lng: 49.824, region: "asia", difficulty: 4 },
+            { name: "哈萨克斯坦阿拉木图·独立广场", lat: 43.2473, lng: 76.9458, region: "asia", difficulty: 4 },
+            { name: "乌兹别克斯坦撒马尔罕·列基斯坦", lat: 39.6546, lng: 66.9757, region: "asia", difficulty: 4 },
+            { name: "美国迈阿密·南海滩", lat: 25.779, lng: -80.1306, region: "northamerica", difficulty: 2 },
+            { name: "美国拉斯维加斯·长街", lat: 36.1126, lng: -115.1747, region: "northamerica", difficulty: 2 },
+            { name: "美国明尼阿波利斯·市中心", lat: 44.9778, lng: -93.265, region: "northamerica", difficulty: 3 },
+            { name: "加拿大卡尔加里·市中心", lat: 51.0447, lng: -114.0719, region: "northamerica", difficulty: 3 },
+            { name: "加拿大埃德蒙顿·市政厅广场", lat: 53.5444, lng: -113.4909, region: "northamerica", difficulty: 3 },
+            { name: "加拿大温尼伯·福克斯市场", lat: 49.8967, lng: -97.1314, region: "northamerica", difficulty: 4 },
+            { name: "加拿大维多利亚·内港", lat: 48.4284, lng: -123.3697, region: "northamerica", difficulty: 2 },
+            { name: "墨西哥瓦哈卡·圣多明各广场", lat: 17.0654, lng: -96.7237, region: "northamerica", difficulty: 4 },
+            { name: "古巴哈瓦那·革命广场", lat: 23.1206, lng: -82.3872, region: "northamerica", difficulty: 3 },
+            { name: "多米尼加圣多明各·殖民区", lat: 18.4736, lng: -69.8844, region: "northamerica", difficulty: 4 },
+            { name: "波多黎各圣胡安·老城", lat: 18.4655, lng: -66.1057, region: "northamerica", difficulty: 3 },
+            { name: "巴西累西腓·老城", lat: -8.0629, lng: -34.8718, region: "southamerica", difficulty: 4 },
+            { name: "巴西伊瓜苏·伊瓜苏瀑布", lat: -25.6953, lng: -54.4367, region: "southamerica", difficulty: 3 },
+            { name: "阿根廷科尔多瓦·圣马丁广场", lat: -31.4186, lng: -64.1837, region: "southamerica", difficulty: 4 },
+            { name: "阿根廷巴里洛切·市中心", lat: -41.1335, lng: -71.3103, region: "southamerica", difficulty: 4 },
+            { name: "阿根廷乌斯怀亚·世界尽头", lat: -54.8069, lng: -68.3071, region: "southamerica", difficulty: 5 },
+            { name: "智利阿塔卡马·圣佩德罗", lat: -22.9089, lng: -68.1995, region: "southamerica", difficulty: 5 },
+            { name: "委内瑞拉加拉加斯·解放者大道", lat: 10.4995, lng: -66.8846, region: "southamerica", difficulty: 5 },
+            { name: "摩洛哥马拉喀什·杰马广场", lat: 31.6258, lng: -7.9891, region: "africa", difficulty: 2 },
+            { name: "摩洛哥非斯·皮革染坊", lat: 34.0644, lng: -4.9744, region: "africa", difficulty: 4 },
+            { name: "埃及开罗·埃及博物馆", lat: 30.0478, lng: 31.2336, region: "africa", difficulty: 2 },
+            { name: "埃及卢克索·卡纳克神庙", lat: 25.7188, lng: 32.6573, region: "africa", difficulty: 3 },
+            { name: "埃及亚历山大·滨海大道", lat: 31.2058, lng: 29.8823, region: "africa", difficulty: 3 },
+            { name: "突尼斯突尼斯市·布尔吉巴大街", lat: 36.8006, lng: 10.1815, region: "africa", difficulty: 4 },
+            { name: "阿尔及利亚阿尔及尔·卡斯巴", lat: 36.7844, lng: 3.06, region: "africa", difficulty: 5 },
+            { name: "尼日利亚阿布贾·千年塔", lat: 9.062, lng: 7.4891, region: "africa", difficulty: 5 },
+            { name: "加纳阿克拉·独立广场", lat: 5.5474, lng: -0.1915, region: "africa", difficulty: 4 },
+            { name: "塞内加尔达喀尔·独立广场", lat: 14.6641, lng: -17.4363, region: "africa", difficulty: 4 },
+            { name: "科特迪瓦阿比让·圣保罗大教堂", lat: 5.3373, lng: -4.0183, region: "africa", difficulty: 5 },
+            { name: "埃塞俄比亚亚的斯亚贝巴·梅斯克尔广场", lat: 9.0117, lng: 38.7599, region: "africa", difficulty: 4 },
+            { name: "肯尼亚蒙巴萨·旧港", lat: -4.0647, lng: 39.6697, region: "africa", difficulty: 4 },
+            { name: "乌干达坎帕拉·议会广场", lat: 0.3145, lng: 32.5854, region: "africa", difficulty: 5 },
+            { name: "卢旺达基加利·市中心", lat: -1.9441, lng: 30.0619, region: "africa", difficulty: 5 },
+            { name: "马达加斯加塔那那利佛·女王宫", lat: -18.9243, lng: 47.5321, region: "africa", difficulty: 5 },
+            { name: "博茨瓦纳哈博罗内·市中心", lat: -24.6541, lng: 25.9087, region: "africa", difficulty: 5 },
+            { name: "赞比亚利文斯通·维多利亚瀑布", lat: -17.9243, lng: 25.8572, region: "africa", difficulty: 4 },
+            { name: "津巴布韦哈拉雷·非洲团结广场", lat: -17.8292, lng: 31.0522, region: "africa", difficulty: 5 },
+            { name: "莫桑比克马普托·独立广场", lat: -25.9664, lng: 32.5718, region: "africa", difficulty: 5 },
+            { name: "安哥拉罗安达·滨海大道", lat: -8.8137, lng: 13.2354, region: "africa", difficulty: 5 },
+            { name: "南非比勒陀利亚·联合大厦", lat: -25.7406, lng: 28.211, region: "africa", difficulty: 3 },
+            { name: "南非开普敦·桌山缆车站", lat: -33.9534, lng: 18.4023, region: "africa", difficulty: 3 },
+            { name: "澳大利亚悉尼·邦迪海滩", lat: -33.8908, lng: 151.2743, region: "oceania", difficulty: 2 },
+            { name: "澳大利亚珀斯·国王公园", lat: -31.959, lng: 115.8368, region: "oceania", difficulty: 3 },
+            { name: "澳大利亚堪培拉·国会大厦", lat: -35.3086, lng: 149.1249, region: "oceania", difficulty: 3 },
+            { name: "澳大利亚黄金海岸·冲浪者天堂", lat: -28.0017, lng: 153.431, region: "oceania", difficulty: 3 },
+            { name: "澳大利亚阿德莱德·维多利亚广场", lat: -34.9287, lng: 138.6008, region: "oceania", difficulty: 3 },
+            { name: "新西兰基督城·大教堂广场", lat: -43.5316, lng: 172.6366, region: "oceania", difficulty: 3 },
+            { name: "新西兰罗托鲁瓦·政府花园", lat: -38.138, lng: 176.2508, region: "oceania", difficulty: 4 },
+            { name: "新西兰尼尔森·市中心", lat: -41.2706, lng: 173.284, region: "oceania", difficulty: 5 },
+            { name: "斐济苏瓦·阿尔伯特公园", lat: -18.1494, lng: 178.4245, region: "oceania", difficulty: 4 },
+            { name: "斐济楠迪·镇中心", lat: -17.7554, lng: 177.4455, region: "oceania", difficulty: 4 },
+            { name: "新喀里多尼亚努美阿·海滨大道", lat: -22.2758, lng: 166.458, region: "oceania", difficulty: 5 },
+            { name: "塔希提帕皮提·海滨", lat: -17.535, lng: -149.5695, region: "oceania", difficulty: 5 },
+            { name: "萨摩亚阿皮亚·海滨大道", lat: -13.8314, lng: -171.7666, region: "oceania", difficulty: 5 },
+            { name: "南非开普敦·维多利亚港", lat: -33.9059, lng: 18.4204, region: "africa", difficulty: 2 },
+            { name: "埃及赫尔格达·海滨大道", lat: 27.2579, lng: 33.8116, region: "africa", difficulty: 3 },
+            { name: "埃及沙姆沙伊赫·纳马湾", lat: 27.9093, lng: 34.3304, region: "africa", difficulty: 3 },
+            { name: "突尼斯苏塞·老城", lat: 35.8267, lng: 10.6394, region: "africa", difficulty: 4 },
+            { name: "肯尼亚内罗毕·城市市场", lat: -1.2837, lng: 36.8238, region: "africa", difficulty: 3 },
+            { name: "尼日利亚拉各斯·莱基区", lat: 6.4478, lng: 3.4723, region: "africa", difficulty: 4 },
+            { name: "加纳库马西·市中心", lat: 6.6935, lng: -1.621, region: "africa", difficulty: 4 },
+            { name: "塞内加尔圣路易斯·老城", lat: 16.0277, lng: -16.4984, region: "africa", difficulty: 4 },
+            { name: "埃塞俄比亚亚的斯亚贝巴·圣三一大教堂", lat: 9.0308, lng: 38.7677, region: "africa", difficulty: 3 },
+            { name: "坦桑尼亚阿鲁沙·市中心", lat: -3.3696, lng: 36.6934, region: "africa", difficulty: 4 },
+            { name: "乌干达金贾·尼罗河源头", lat: 0.4479, lng: 33.2039, region: "africa", difficulty: 4 },
+            { name: "卢旺达基加利·基加利会议中心", lat: -1.9507, lng: 30.0927, region: "africa", difficulty: 4 },
+            { name: "博茨瓦纳马翁·市中心", lat: -19.9984, lng: 23.4181, region: "africa", difficulty: 5 },
+            { name: "赞比亚卢萨卡·独立大道", lat: -15.3875, lng: 28.3228, region: "africa", difficulty: 4 },
+            { name: "马拉维利隆圭·市中心", lat: -13.9626, lng: 33.7741, region: "africa", difficulty: 5 },
+            { name: "纳米比亚温得和克·独立大道", lat: -22.5609, lng: 17.0836, region: "africa", difficulty: 4 },
+            { name: "刚果金金沙萨·解放大道", lat: -4.3256, lng: 15.289, region: "africa", difficulty: 5 },
+            { name: "苏丹喀土穆·尼罗河街", lat: 15.593, lng: 32.5322, region: "africa", difficulty: 5 },
+            { name: "吉布提吉布提市·独立广场", lat: 11.5886, lng: 43.145, region: "africa", difficulty: 5 },
+            { name: "塞舌尔维多利亚·钟楼", lat: -4.6202, lng: 55.4517, region: "africa", difficulty: 4 },
+            { name: "阿尔及利亚奥兰·市中心", lat: 35.6969, lng: -0.633, region: "africa", difficulty: 5 },
+            { name: "澳大利亚达尔文·史密斯街", lat: -12.465, lng: 130.84, region: "oceania", difficulty: 4 },
+            { name: "澳大利亚纽卡斯尔·海滨", lat: -32.927, lng: 151.778, region: "oceania", difficulty: 3 },
+            { name: "澳大利亚汤斯维尔·海滨", lat: -19.2569, lng: 146.8178, region: "oceania", difficulty: 4 },
+            { name: "新西兰汉密尔顿·市中心", lat: -37.787, lng: 175.279, region: "oceania", difficulty: 4 },
+            { name: "新西兰陶朗加·海滨", lat: -37.6825, lng: 176.1668, region: "oceania", difficulty: 4 },
+            { name: "新西兰内皮尔·装饰艺术街", lat: -39.4903, lng: 176.918, region: "oceania", difficulty: 4 },
+            { name: "斐济劳托卡·码头", lat: -17.608, lng: 177.451, region: "oceania", difficulty: 4 },
+            { name: "瓦努阿图维拉港·海滨", lat: -17.7333, lng: 168.3219, region: "oceania", difficulty: 5 },
+            { name: "帕劳科罗尔·市中心", lat: 7.3415, lng: 134.4781, region: "oceania", difficulty: 5 },
+            { name: "西班牙科尔多瓦·清真寺大教堂", lat: 37.8792, lng: -4.7794, region: "europe", difficulty: 2 },
+            { name: "西班牙托莱多·古城", lat: 39.8581, lng: -4.0246, region: "europe", difficulty: 3 },
+            { name: "意大利巴勒莫·四角广场", lat: 38.1157, lng: 13.3615, region: "europe", difficulty: 3 },
+            { name: "意大利卡塔尼亚·大象喷泉", lat: 37.5022, lng: 15.0872, region: "europe", difficulty: 3 },
+            { name: "意大利比萨·奇迹广场", lat: 43.723, lng: 10.3966, region: "europe", difficulty: 2 },
+            { name: "希腊伊拉克利翁·威尼斯港", lat: 35.3407, lng: 25.136, region: "europe", difficulty: 4 },
+            { name: "克罗地亚扎达尔·海风琴", lat: 44.115, lng: 15.225, region: "europe", difficulty: 3 },
+            { name: "斯洛文尼亚皮兰·塔蒂尼广场", lat: 45.5292, lng: 13.5674, region: "europe", difficulty: 4 },
+            { name: "英国牛津·拉德克利夫图书馆", lat: 51.7548, lng: -1.2544, region: "europe", difficulty: 2 },
+            { name: "爱尔兰科克·英国市场", lat: 51.8985, lng: -8.476, region: "europe", difficulty: 3 },
+            { name: "韩国大邱·东城路", lat: 35.8706, lng: 128.597, region: "asia", difficulty: 3 },
+            { name: "韩国全州·韩屋村", lat: 35.8143, lng: 127.153, region: "asia", difficulty: 3 },
+            { name: "韩国仁川·中国城", lat: 37.4744, lng: 126.619, region: "asia", difficulty: 3 },
+            { name: "韩国水原·华城行宫", lat: 37.287, lng: 127.011, region: "asia", difficulty: 3 },
+            { name: "印度德里·红堡", lat: 28.6562, lng: 77.241, region: "asia", difficulty: 2 },
+            { name: "印度金奈·玛丽娜海滩", lat: 13.0524, lng: 80.283, region: "asia", difficulty: 3 },
+            { name: "印度加尔各答·维多利亚纪念馆", lat: 22.5448, lng: 88.3426, region: "asia", difficulty: 3 },
+            { name: "印度普纳·市中心", lat: 18.5204, lng: 73.8567, region: "asia", difficulty: 4 },
+            { name: "印度海得拉巴·查尔米纳尔", lat: 17.3616, lng: 78.4747, region: "asia", difficulty: 3 },
+            { name: "斯里兰卡加勒·荷兰堡", lat: 6.0269, lng: 80.217, region: "asia", difficulty: 3 },
+            { name: "尼泊尔博卡拉·费瓦湖", lat: 28.2096, lng: 83.949, region: "asia", difficulty: 3 },
+            { name: "不丹廷布·扎西却宗", lat: 27.4894, lng: 89.635, region: "asia", difficulty: 5 },
+            { name: "巴林麦纳麦·巴林堡", lat: 26.2336, lng: 50.52, region: "asia", difficulty: 4 },
+            { name: "伊拉克埃尔比勒·城堡", lat: 36.1916, lng: 44.0092, region: "asia", difficulty: 5 },
+            { name: "巴基斯坦拉合尔·巴德夏希清真寺", lat: 31.5882, lng: 74.3094, region: "asia", difficulty: 4 },
+            { name: "塔吉克斯坦杜尚别·鲁达基公园", lat: 38.5737, lng: 68.7739, region: "asia", difficulty: 5 },
+            { name: "吉尔吉斯斯坦比什凯克·阿拉套广场", lat: 42.8777, lng: 74.605, region: "asia", difficulty: 5 },
+            { name: "土库曼斯坦阿什哈巴德·独立广场", lat: 37.9258, lng: 58.375, region: "asia", difficulty: 5 },
+            { name: "马尔代夫马累·人工沙滩", lat: 4.1755, lng: 73.5093, region: "asia", difficulty: 3 },
+            { name: "加拿大哈利法克斯·城堡山", lat: 44.647, lng: -63.578, region: "northamerica", difficulty: 3 },
+            { name: "加拿大里贾纳·议会大厦", lat: 50.4343, lng: -104.615, region: "northamerica", difficulty: 4 },
+            { name: "加拿大魁北克·小尚普兰街", lat: 46.8125, lng: -71.203, region: "northamerica", difficulty: 3 },
+            { name: "美国檀香山·威基基海滩", lat: 21.28, lng: -157.833, region: "northamerica", difficulty: 2 },
+            { name: "美国安克雷奇·市中心", lat: 61.2181, lng: -149.9, region: "northamerica", difficulty: 4 },
+            { name: "美国博伊西·市中心", lat: 43.615, lng: -116.202, region: "northamerica", difficulty: 4 },
+            { name: "巴西纳塔尔·海滨灯塔", lat: -5.7619, lng: -35.197, region: "southamerica", difficulty: 4 },
+            { name: "阿根廷萨尔塔·圣马丁广场", lat: -24.7884, lng: -65.41, region: "southamerica", difficulty: 4 },
+            { name: "智利安托法加斯塔·市中心", lat: -23.6509, lng: -70.397, region: "southamerica", difficulty: 4 },
+            { name: "智利蒙特港·武器广场", lat: -41.4716, lng: -72.936, region: "southamerica", difficulty: 4 },
+            { name: "厄瓜多尔基多·赤道纪念碑", lat: -0.0082, lng: -78.456, region: "southamerica", difficulty: 3 },
+            { name: "哥伦比亚波哥大·蒙塞拉特山", lat: 4.6059, lng: -74.056, region: "southamerica", difficulty: 3 },
+            { name: "苏里南帕拉马里博·独立广场", lat: 5.826, lng: -55.204, region: "southamerica", difficulty: 5 },
+            { name: "圭亚那乔治敦·圣乔治大教堂", lat: 6.8183, lng: -58.153, region: "southamerica", difficulty: 5 }];
 
         // ==========================================================
         // 【模式配置】
@@ -978,6 +1225,9 @@
             africa: [[ -35, -20 ], [ 38, 52 ]], oceania: [[ -48, 110 ], [ 0, 180 ]]
         };
         const MAX_SCORE = 5000;
+        // 中国模式地图锁定范围：中国国境（含港澳台及南海诸岛），限制拖动减少无效操作
+        const CHINA_BOUNDS = [[14, 72], [56, 138]];
+        const CHINA_CENTER = [35, 104];
 
         // ==========================================================
         // 【分区计分系统】
@@ -1015,6 +1265,7 @@
         };
         let map = null, guessMarker = null, guessPoint = null, answerMarker = null, routeLine = null;
         let mapillaryViewer = null, isMapEnlarged = false, isSubmitting = false;
+        let streetViewError = null;   // 最近一次街景加载失败的错误报告数据
 
         const redIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -1208,6 +1459,19 @@
             // 【修复】地图容器刚从 display:none 变为可见，必须先让 Leaflet 重算尺寸，
             // 否则 flyTo 会在零尺寸地图上计算出 NaN 并抛异常，中断 loadRound
             setTimeout(() => { map.invalidateSize(); loadRound(); }, 150);
+
+            // 中国模式：锁定地图范围到国境内，减少无效拖动；其他模式解除锁定
+            if (mode === 'china') {
+                map.setMaxBounds(CHINA_BOUNDS);
+                map.setMinZoom(3);
+                safeFly(
+                    () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
+                    () => map.setView(CHINA_CENTER, 4, { animate: false })
+                );
+            } else {
+                map.setMaxBounds(null);
+                map.setMinZoom(2);
+            }
         }
 
         function quitGame() {
@@ -1303,12 +1567,16 @@
             // Mapillary 对过大 bbox 直接报错(“reduce data”)，0.02/0.08 级无效；
             // 改为逐级 0.004/0.008/0.012（约 440m ~ 1.3km），提升港澳台等点位命中率
             const offsets = [0.004, 0.008, 0.012];
+            const errLog = [];
             for (const offset of offsets) {
                 const bbox = `${lng - offset},${lat - offset},${lng + offset},${lat + offset}`;
                 const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
                 try {
                     const res = await fetch(url);
-                    if (!res.ok) continue;
+                    if (!res.ok) {
+                        errLog.push(`bbox=${bbox} → HTTP ${res.status}`);
+                        continue;
+                    }
                     const data = await res.json();
                     if (data.data && data.data.length) {
                         // 优先全景图，体验更好
@@ -1318,8 +1586,18 @@
                         const [ilng, ilat] = img.geometry.coordinates;
                         return { imageId: img.id, lat: ilat, lng: ilng };
                     }
-                } catch (e) { /* 网络错误，继续尝试 */ }
+                    errLog.push(`bbox=${bbox} → 0 images`);
+                } catch (e) {
+                    errLog.push(`bbox=${bbox} → 网络错误: ${e.message}`);
+                }
             }
+            // 记录失败细节，供错误报告导出
+            streetViewError = {
+                stage: 'search',
+                searchLog: errLog,
+                targetLat: lat, targetLng: lng,
+                offsets: offsets
+            };
             return null;
         }
 
@@ -1403,9 +1681,15 @@
                         component: { cover: false, bearing: true, zoom: true }
                     });
                     mapillaryViewer.on('image', () => $('panorama-loading').style.display = 'none');
-                    mapillaryViewer.on('error', () => {
+                    mapillaryViewer.on('error', (err) => {
                         $('panorama-loading').style.display = 'none';
                         $('panorama-fallback').style.display = 'flex';
+                        streetViewError = {
+                            stage: 'viewer',
+                            imageId: imageId,
+                            viewerError: err && err.message ? err.message : String(err),
+                            tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…'
+                        };
                     });
                     // 【修复】容器刚由隐藏变为可见，强制让查看器重算画布尺寸，避免黑屏
                     setTimeout(() => { try { mapillaryViewer.resize(); } catch (e) {} }, 300);
@@ -1413,14 +1697,26 @@
                 } else {
                     mapillaryViewer.moveTo(imageId)
                         .then(() => $('panorama-loading').style.display = 'none')
-                        .catch(() => {
+                        .catch((err) => {
                             $('panorama-loading').style.display = 'none';
                             $('panorama-fallback').style.display = 'flex';
+                            streetViewError = {
+                                stage: 'viewer',
+                                imageId: imageId,
+                                viewerError: err && err.message ? err.message : String(err),
+                                tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…'
+                            };
                         });
                 }
             } catch (e) {
                 $('panorama-loading').style.display = 'none';
                 $('panorama-fallback').style.display = 'flex';
+                streetViewError = {
+                    stage: 'exception',
+                    imageId: imageId,
+                    viewerError: e && e.message ? e.message : String(e),
+                    tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…'
+                };
             }
         }
 
@@ -1428,6 +1724,83 @@
             if (guessMarker) { map.removeLayer(guessMarker); guessMarker = null; }
             if (answerMarker) { map.removeLayer(answerMarker); answerMarker = null; }
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        }
+
+        // ==========================================================
+        // 【街景加载错误报告导出】
+        // ==========================================================
+        function buildErrReportText() {
+            const err = streetViewError || {};
+            const round = state.current || {};
+            const now = new Date();
+            const lines = [];
+            lines.push('═══ MmaGuessr 街景加载错误报告 ═══');
+            lines.push(`版本      : ${VERSION}`);
+            lines.push(`时间      : ${now.toLocaleString('zh-CN', { hour12: false })}`);
+            lines.push(`模式      : ${MODES[state.mode] ? MODES[state.mode].label : state.mode}${state.region ? ' · ' + REGION_NAMES[state.region] : ''}`);
+            lines.push(`轮次      : 第 ${state.round} 轮`);
+            lines.push('');
+            lines.push('【地点信息】');
+            lines.push(`地点名称  : ${round.name || '未知'}`);
+            lines.push(`答案坐标  : ${round.lat != null ? round.lat + ', ' + round.lng : '未知'}`);
+            lines.push(`难度      : ${round.difficulty ? '★'.repeat(round.difficulty) : '未知'}`);
+            lines.push('');
+            lines.push('【街景 ID】');
+            lines.push(`imageId   : ${round.imageId || err.imageId || '未获取'}`);
+            lines.push('');
+            lines.push('【错误状态】');
+            lines.push(`错误阶段  : ${err.stage === 'search' ? '街景搜索失败（无覆盖或接口错误）' : err.stage === 'viewer' ? '街景查看器加载失败' : err.stage === 'exception' ? '异常抛出' : '未知'}`);
+            if (err.searchLog && err.searchLog.length) {
+                lines.push('搜索过程  :');
+                err.searchLog.forEach(s => lines.push(`    - ${s}`));
+            }
+            if (err.viewerError) lines.push(`查看器错误: ${err.viewerError}`);
+            lines.push('');
+            lines.push('【请求参数】');
+            lines.push(`搜索偏移  : ${err.offsets ? err.offsets.join(', ') : '[0.004, 0.008, 0.012]'}`);
+            lines.push(`API       : graph.mapillary.com/images`);
+            lines.push(`Token前缀 : ${err.tokenPrefix || (MAPILLARY_TOKEN ? MAPILLARY_TOKEN.slice(0, 12) + '…' : '缺失')}`);
+            lines.push('');
+            lines.push('【浏览器环境】');
+            lines.push(`UA        : ${navigator.userAgent}`);
+            lines.push(`语言      : ${navigator.language}`);
+            lines.push(`屏幕      : ${window.innerWidth}×${window.innerHeight} (${window.screen.width}×${window.screen.height})`);
+            return lines.join('\n');
+        }
+        function showErrToast(msg) {
+            const t = $('err-toast2');
+            t.textContent = msg;
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 2000);
+        }
+        function exportStreetViewError() {
+            const text = buildErrReportText();
+            $('err-report-content').value = text;
+            $('err-overlay').classList.add('show');
+        }
+        function closeErrReport() { $('err-overlay').classList.remove('show'); }
+        function downloadErrReport() {
+            const text = $('err-report-content').value;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.href = URL.createObjectURL(blob);
+            a.download = `mma-guessr-error-${ts}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+            showErrToast('✅ 报告已下载');
+        }
+        function copyErrReport() {
+            const text = $('err-report-content').value;
+            navigator.clipboard && navigator.clipboard.writeText(text)
+                .then(() => showErrToast('✅ 已复制到剪贴板'))
+                .catch(() => {
+                    const ta = $('err-report-content');
+                    ta.select(); ta.setSelectionRange(0, ta.value.length);
+                    try { document.execCommand('copy'); showErrToast('✅ 已复制到剪贴板'); }
+                    catch (e) { showErrToast('❌ 复制失败，请手动选择复制'); }
+                });
         }
 
         // ==========================================================
