@@ -2,7 +2,7 @@
 
 一个以 [Mapillary](https://www.mapillary.com/) 为数据源的 **GeoGuessr 风格** 地理猜谜游戏。观察世界各地随机街景，在地图上标记你猜测的位置，系统按实际距离计分。
 
-> 当前版本：**v1.14.0** · 题库共 **1570 题**（中国模式专属 332 题 · 世界 1238 题）
+> 当前版本：**v1.15.0** · 题库共 **1570 题**（中国模式专属 332 题 · 世界 1238 题）
 
 ---
 
@@ -47,6 +47,7 @@
 - 🔒 **中国模式地图锁定** — 地图范围锁定国境，减少无效拖动（v1.13.0）
 - 📱 **手机横屏适配** — 横屏地图按钮化，不遮挡内容（v1.13.0）
 - 📄 **错误报告导出** — 街景加载失败一键导出诊断报告（v1.13.0）
+- 📊 **数据统计** — 访问 PV/UV、游玩轮次、趋势图表、最近访问列表，本地+可选后端双模式（v1.15.0）
 
 ---
 
@@ -60,6 +61,7 @@
 | `index-prototype.html` | 早期原型（原 `index.html` 备份） |
 | `tools/add-china.js` | 开发工具：向 `LOCATIONS` 批量插入中国街景点位 |
 | `tools/add-hmt.js` | 开发工具：向 `LOCATIONS` 批量插入港澳台街景点位 |
+| `tools/stats-server.js` | 可选统计后端：SQLite 数据表 + REST 接口（需 `npm install express better-sqlite3`） |
 | `.nojekyll` | 禁用 GitHub Pages 的 Jekyll 构建 |
 | `.gitignore` | Git 忽略规则（忽略 `.workbuddy/`） |
 | `README.md` | 项目说明文档 |
@@ -108,6 +110,7 @@ npx serve .
 
 | 版本 | 日期 | 亮点 |
 |------|------|------|
+| **v1.15.0** | 2026-08-02 | 📊 数据统计：访问 PV/UV + 游玩轮次 + 趋势图表 + 可选 Node 后端 |
 | **v1.14.0** | 2026-08-01 | 🔒 题库隔离 + ⚖️ 中国题≤20%均衡分配 + 🌍 世界+502 🇨🇳 中国+215 + 🌐 区域平衡+445（题库 1570） |
 | **v1.13.0** | 2026-07-31 | 🔒 中国模式地图锁定 + 📱 横屏适配 + 📄 错误报告导出 + 🌍 世界点位 +176（题库 417） |
 | **v1.12.0** | 2026-07-30 | 🇨🇳 中国点位全面排查：167→125，新增7城20点，全球题库283→241 |
@@ -137,6 +140,24 @@ npx serve .
 node tools/add-china.js
 node tools/add-hmt.js
 ```
+
+### 📊 数据统计（可选后端模式）
+
+默认使用浏览器 `localStorage` 本地统计（部署即用，仅统计本机）。如需**全局多用户聚合统计**：
+
+```bash
+cd tools && npm install express better-sqlite3
+cd .. && node tools/stats-server.js        # 默认 0.0.0.0:8787
+```
+
+然后让玩家通过 `?api=http://你的IP:8787` 访问游戏（或浏览器 `localStorage` 设置 `mma_stats_api`），前端会自动探测并切换为后端聚合模式，访问/轮次数据写入 SQLite（`data/mma-stats.db`），统计接口：
+
+| 接口 | 说明 |
+|------|------|
+| `GET /api/health` | 健康检查 |
+| `POST /api/visit` | 记录访问（ts/page/ref/vid/ip/ua） |
+| `POST /api/play` | 记录游玩轮次（ts/mode/region） |
+| `GET /api/stats?range=` | 统计聚合（today/week/month/all/d7/d30） |
 
 ---
 
