@@ -146,8 +146,9 @@ git revert <bad-commit>                    # 生成反向提交，历史保留
 | 版本 zip ×11 | `backups/snapshots/vX.Y.Z.zip` | 本地备份，独立快照 |
 | `MANIFEST.md` | `backups/snapshots/` | 版本清单（提交/日期/文件数/SHA256） |
 | `SHA256SUMS` | `backups/snapshots/` | 全部快照校验文件 |
-| `tools/_gen-backup-manifest.js` | 开发工具 | 重新生成清单（新版本时用） |
-| `tools/_verify-backup.js` | 开发工具 | 完整性深度校验 |
+| `tools/gen-backup-manifest.js` | 开发工具 | 重新生成清单（新版本时用） |
+| `tools/verify-backup.js` | 开发工具 | 完整性深度校验 |
+| `backups/v1.15.0-with-stats/` | 本地参考副本 | v1.15.0 含数据统计面板的完整代码参考（已于 2026-08-03 回滚移除） |
 
 ---
 

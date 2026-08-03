@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🌍 MmaGuessr v1.14.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+    <title>🌍 MmaGuessr v1.15.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -182,6 +182,71 @@
         .hist-delete:hover { background: rgba(255,77,77,0.3); }
         #history-box::-webkit-scrollbar { width: 6px; }
         #history-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+        /* ============ 数据统计 ============ */
+        #stats-overlay {
+            position: fixed; inset: 0; z-index: 9100; display: none;
+            background: rgba(10,15,35,0.92); backdrop-filter: blur(6px);
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        #stats-overlay.show { display: flex; }
+        #stats-box {
+            background: #16213e; border: 1px solid rgba(255,255,255,0.15); border-radius: 18px;
+            width: 100%; max-width: 860px; max-height: 88vh; overflow-y: auto; padding: 26px 30px;
+        }
+        #stats-box h2 {
+            font-size: 23px; margin-bottom: 8px; display: flex; align-items: center;
+            justify-content: space-between; gap: 12px;
+        }
+        .stats-mode-badge {
+            display: inline-block; font-size: 12px; color: #58a6ff;
+            background: rgba(88,166,255,0.12); padding: 2px 12px; border-radius: 20px; margin-bottom: 14px;
+        }
+        .stats-mode-badge.offline { color: #8899bb; background: rgba(255,255,255,0.08); }
+        .stats-filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+        .stats-label { font-size: 13px; color: #8899bb; }
+        .stats-filter-btn {
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+            color: #c8d4ee; border-radius: 16px; padding: 5px 14px; cursor: pointer; font-size: 13px;
+            transition: all .2s;
+        }
+        .stats-filter-btn:hover { background: rgba(88,166,255,0.2); }
+        .stats-filter-btn.active { background: #3498db; border-color: #3498db; color: #fff; }
+        .stats-loading { text-align: center; color: #58a6ff; padding: 40px 0; font-size: 15px; }
+        .stats-cards {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px; margin-bottom: 22px;
+        }
+        .stats-card {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 16px 14px; text-align: center;
+        }
+        .stats-card .sc-label { font-size: 12px; color: #8899bb; margin-bottom: 6px; }
+        .stats-card .sc-value { font-size: 26px; font-weight: bold; color: #58a6ff; line-height: 1.2; }
+        .stats-card .sc-sub { font-size: 11px; color: #667; margin-top: 4px; }
+        .stats-card.hl .sc-value { color: #4CAF50; }
+        .stats-card.warm .sc-value { color: #FFD700; }
+        .stats-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+        @media (max-width: 720px) { .stats-charts { grid-template-columns: 1fr; } }
+        .stats-chart-card {
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 14px; padding: 14px 16px; position: relative;
+        }
+        .stats-chart-card h4 { font-size: 14px; color: #c8d4ee; margin-bottom: 10px; }
+        .stats-chart-card canvas { width: 100%; height: 200px; display: block; }
+        .stats-chart-empty {
+            display: none; position: absolute; inset: 40px 0 0; text-align: center;
+            color: #667; font-size: 13px; padding-top: 60px;
+        }
+        .stats-table { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 14px 16px; }
+        .stats-table h4 { font-size: 14px; color: #c8d4ee; margin-bottom: 10px; }
+        .stats-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .stats-table th { color: #8899bb; text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.1); font-weight: normal; }
+        .stats-table td { padding: 7px 6px; color: #c8d4ee; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .stats-table tr:hover td { background: rgba(88,166,255,0.06); }
+        .stats-empty { text-align: center; color: #8899bb; padding: 24px 0; font-size: 13px; }
+        #stats-box::-webkit-scrollbar { width: 6px; }
+        #stats-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
         /* ============ 区域选择 ============ */
         #region-screen {
@@ -493,10 +558,11 @@
         </div>
         <div class="home-footer">
             <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-            <span class="ver-badge" id="home-version">版本 v1.14.0</span>
+            <span class="ver-badge" id="home-version">版本 v1.15.0</span>
             <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
             <a class="notion-btn" href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f" target="_blank" rel="noopener noreferrer">📔 游戏文档</a>
             <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
+            <button class="changelog-btn" onclick="openStats()">📊 数据统计</button>
         </div>
     </div>
 
@@ -524,7 +590,7 @@
             <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
             <div id="diff-stars">难度 ★☆☆☆☆</div>
         </div>
-        <div id="version-line">版本 v1.14.0</div>
+        <div id="version-line">版本 v1.15.0</div>
     </div>
 
     <div id="timer-box">⏱ <span id="timer-num">60</span>s</div>
@@ -594,6 +660,47 @@
         </div>
     </div>
 
+    <!-- ============ 数据统计弹窗 ============ -->
+    <div id="stats-overlay" onclick="if(event.target===this)closeStats()">
+        <div id="stats-box">
+            <h2>📊 数据统计 <button class="hist-close" onclick="closeStats()">✕ 关闭</button></h2>
+            <div class="stats-mode-badge" id="stats-mode-badge">本地模式</div>
+            <div class="stats-filter-row">
+                <span class="stats-label">时间范围：</span>
+                <button class="stats-filter-btn active" data-range="today" onclick="setStatsRange('today')">今日</button>
+                <button class="stats-filter-btn" data-range="week" onclick="setStatsRange('week')">本周</button>
+                <button class="stats-filter-btn" data-range="month" onclick="setStatsRange('month')">本月</button>
+                <button class="stats-filter-btn" data-range="all" onclick="setStatsRange('all')">全部</button>
+                <button class="stats-filter-btn" data-range="d7" onclick="setStatsRange('d7')">近7天</button>
+                <button class="stats-filter-btn" data-range="d30" onclick="setStatsRange('d30')">近30天</button>
+            </div>
+            <div class="stats-loading" id="stats-loading">⏳ 统计加载中...</div>
+            <div id="stats-content" style="display:none">
+                <div class="stats-cards" id="stats-cards"></div>
+                <div class="stats-charts">
+                    <div class="stats-chart-card">
+                        <h4>📈 访问趋势（PV，按日）</h4>
+                        <canvas id="stats-chart-pv" width="600" height="200"></canvas>
+                        <div class="stats-chart-empty" id="stats-empty-pv">暂无访问数据</div>
+                    </div>
+                    <div class="stats-chart-card">
+                        <h4>🎮 游玩轮次变化（按日）</h4>
+                        <canvas id="stats-chart-play" width="600" height="200"></canvas>
+                        <div class="stats-chart-empty" id="stats-empty-play">暂无游玩数据</div>
+                    </div>
+                </div>
+                <div class="stats-table">
+                    <h4>🕘 最近访问记录</h4>
+                    <table id="stats-visit-table">
+                        <thead><tr><th>时间</th><th>访客来源</th><th>IP</th><th>访问页面</th></tr></thead>
+                        <tbody id="stats-visit-body"></tbody>
+                    </table>
+                    <div class="stats-empty" id="stats-empty-visits" style="display:none">暂无访问记录</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ============ 街景错误报告弹窗 ============ -->
     <div id="err-overlay" onclick="if(event.target===this)closeErrReport()">
         <div id="err-box">
@@ -618,8 +725,20 @@
         // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
         // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
         // ==========================================================
-        const VERSION = "v1.14.0";
+        const VERSION = "v1.15.0";
         const CHANGELOG = [
+            {
+                version: "v1.15.0", date: "2026-08-02 18:10:00",
+                changes: [
+                    "📊 新增数据统计：主菜单「📊 数据统计」面板，跟踪分析访问与游玩数据。",
+                    "👥 访问统计：每日/每周/每月访问量、独立访客（UV）与总访问量（PV）、最近访问列表（时间/来源/IP/页面）。",
+                    "🎮 游玩轮次统计：累计游玩轮次总数，支持今日/本周/本月/历史累计/近7天/近30天切换筛选。",
+                    "📈 数据可视化：Canvas 手绘折线图（访问趋势）+ 柱状图（游玩轮次变化），自适应高分屏。",
+                    "💾 双模式存储：默认 localStorage 本地持久化（部署即用）；可选 Node 后端（tools/stats-server.js，SQLite 数据表 + REST 接口）实现全局多用户聚合，URL 加 ?api= 自动切换。",
+                    "🛡️ 容错处理：加载状态、空数据提示、后端不可用自动降级本地、防抖采集。",
+                    "版本号递增至 v1.15.0。"
+                ]
+            },
             {
                 version: "v1.14.0", date: "2026-08-01 13:10:00",
                 changes: [
@@ -2564,11 +2683,403 @@
         }
 
         // ==========================================================
+        // 【📊 数据统计模块】本地 localStorage + 可选后端 API 双模式
+        // - 本地模式（默认）：数据存于浏览器 localStorage，仅统计本机
+        // - 后端模式：URL 带 ?api=http://host:port 或 localStorage 配置 mma_stats_api
+        //   时，自动探测并切换，访问/轮次上报后端，统计从后端聚合（全局）
+        // ==========================================================
+        const STATS_VISIT_KEY = 'mma_stats_visits';
+        const STATS_ROUND_KEY = 'mma_stats_rounds';
+        const STATS_VID_KEY = 'mma_stats_visitor_id';
+        const STATS_MAX_VISITS = 2000;
+        const STATS_MAX_ROUNDS = 10000;
+
+        let statsRange = 'all';
+        let statsApiUrl = null;
+        let statsOnline = false;
+        let statsIp = '';
+        let statsChartPv = null;
+        let statsChartPlay = null;
+
+        function statsVisitorId() {
+            try {
+                let id = localStorage.getItem(STATS_VID_KEY);
+                if (!id) {
+                    id = 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+                    localStorage.setItem(STATS_VID_KEY, id);
+                }
+                return id;
+            } catch (e) { return 'v-unknown'; }
+        }
+
+        function statsLoadVisits() {
+            try { return JSON.parse(localStorage.getItem(STATS_VISIT_KEY)) || []; } catch (e) { return []; }
+        }
+        function statsSaveVisits(arr) {
+            try { localStorage.setItem(STATS_VISIT_KEY, JSON.stringify(arr.slice(0, STATS_MAX_VISITS))); } catch (e) {}
+        }
+        function statsLoadRounds() {
+            try { return JSON.parse(localStorage.getItem(STATS_ROUND_KEY)) || []; } catch (e) { return []; }
+        }
+        function statsSaveRounds(arr) {
+            try { localStorage.setItem(STATS_ROUND_KEY, JSON.stringify(arr.slice(0, STATS_MAX_ROUNDS))); } catch (e) {}
+        }
+
+        // 探测后端（URL ?api= 或 localStorage mma_stats_api）
+        async function statsDetectApi() {
+            let base = null;
+            try {
+                const q = new URLSearchParams(location.search).get('api');
+                base = q || localStorage.getItem('mma_stats_api');
+            } catch (e) {}
+            if (!base) return;
+            base = String(base).replace(/\/+$/, '');
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 2000);
+                const res = await fetch(base + '/api/health', { signal: ctrl.signal });
+                clearTimeout(timer);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.ok) {
+                        statsApiUrl = base;
+                        statsOnline = true;
+                    }
+                }
+            } catch (e) { statsOnline = false; }
+        }
+
+        // 尽力获取访客 IP（失败则为空，不阻塞）
+        async function statsFetchIp() {
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 3000);
+                const res = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
+                clearTimeout(timer);
+                const data = await res.json();
+                if (data && data.ip) statsIp = data.ip;
+            } catch (e) { statsIp = ''; }
+        }
+
+        // 记录一次页面访问（每次 onload 记一条 = PV+1，UV 按访客 ID 去重）
+        async function statsTrackVisit() {
+            const page = location.pathname.split('/').pop() || 'index.html';
+            const rec = {
+                ts: Date.now(),
+                page: page,
+                ref: document.referrer || '',
+                vid: statsVisitorId(),
+                ip: statsIp,
+                ua: (navigator.userAgent || '').slice(0, 150)
+            };
+            const arr = statsLoadVisits();
+            arr.unshift(rec);
+            statsSaveVisits(arr);
+            if (statsOnline && statsApiUrl) {
+                try {
+                    await fetch(statsApiUrl + '/api/visit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(rec)
+                    });
+                } catch (e) {}
+            }
+        }
+
+        // 记录一轮游玩（提交答案即计一轮）
+        function statsTrackRound(mode, region) {
+            const rec = { ts: Date.now(), mode: mode || 'classic', region: region || '' };
+            const arr = statsLoadRounds();
+            arr.unshift(rec);
+            statsSaveRounds(arr);
+            if (statsOnline && statsApiUrl) {
+                try {
+                    fetch(statsApiUrl + '/api/play', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(rec)
+                    }).catch(() => {});
+                } catch (e) {}
+            }
+        }
+
+        // ========== 时间范围计算 ==========
+        function statsRangeBounds(range) {
+            const now = new Date();
+            let from = 0;
+            if (range === 'today') {
+                from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            } else if (range === 'week') {
+                const day = (now.getDay() + 6) % 7; // 周一为 0
+                from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day).getTime();
+            } else if (range === 'month') {
+                from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+            } else if (range === 'd7') {
+                from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
+            } else if (range === 'd30') {
+                from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29).getTime();
+            } else { // all
+                from = 0;
+            }
+            return from;
+        }
+
+        function statsDayKey(ts) {
+            const d = new Date(ts);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // 生成趋势序列：按自然日连续填充（超过 62 天则按周聚合）
+        function statsBuildTrend(records, from) {
+            const map = {};
+            records.forEach(r => {
+                const k = statsDayKey(r.ts);
+                map[k] = (map[k] || 0) + 1;
+            });
+            const days = [];
+            const start = new Date(from || Date.now());
+            const end = new Date();
+            if (from === 0) {
+                // 全部数据：找最早记录，若跨度 > 62 天按周聚合
+                const first = records.length ? new Date(records[records.length - 1].ts) : new Date();
+                const span = Math.max(1, Math.ceil((end - first) / 86400000));
+                if (span > 62) return statsBuildWeekly(records);
+                start.setTime(first.getTime());
+            }
+            for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                 d <= end; d.setDate(d.getDate() + 1)) {
+                days.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, key: statsDayKey(d.getTime()), count: 0 });
+            }
+            days.forEach(dt => { dt.count = map[dt.key] || 0; });
+            return { labels: days.map(d => d.label), counts: days.map(d => d.count) };
+        }
+
+        function statsBuildWeekly(records) {
+            const map = {};
+            records.forEach(r => {
+                const d = new Date(r.ts);
+                const y = d.getFullYear();
+                const wk = Math.ceil(((d - new Date(y, 0, 1)) / 86400000 + 1) / 7);
+                const k = `${y}-W${String(wk).padStart(2, '0')}`;
+                map[k] = (map[k] || 0) + 1;
+            });
+            const keys = Object.keys(map).sort();
+            return { labels: keys.map(k => k.replace('W', '周')), counts: keys.map(k => map[k]) };
+        }
+
+        // 统计聚合（本地计算；后端模式下由后端返回）
+        async function statsFetchData(range) {
+            if (statsOnline && statsApiUrl) {
+                try {
+                    const res = await fetch(`${statsApiUrl}/api/stats?range=${range}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.ok) return data;
+                    }
+                } catch (e) { /* 降级本地 */ }
+            }
+            const from = statsRangeBounds(range);
+            const visits = statsLoadVisits().filter(v => v.ts >= from);
+            const rounds = statsLoadRounds().filter(r => r.ts >= from);
+            const uv = new Set(visits.map(v => v.vid || '?')).size;
+            return {
+                ok: true,
+                online: false,
+                pv: visits.length,
+                uv: uv,
+                rounds: rounds.length,
+                visitTrend: statsBuildTrend(visits, from),
+                roundTrend: statsBuildTrend(rounds, from),
+                recentVisits: visits.slice(0, 30).map(v => ({
+                    ts: v.ts, ref: v.ref || '', ip: v.ip || '', page: v.page || ''
+                }))
+            };
+        }
+
+        // ========== Canvas 图表 ==========
+        function statsInitCanvas() {
+            const c1 = $('stats-chart-pv'), c2 = $('stats-chart-play');
+            if (c1) c1.width = Math.floor(c1.clientWidth * (window.devicePixelRatio || 1));
+            if (c2) c2.width = Math.floor(c2.clientWidth * (window.devicePixelRatio || 1));
+        }
+
+        function statsDrawLine(canvas, labels, counts, color) {
+            if (!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width, h = canvas.height;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+            if (!labels.length || counts.every(c => c === 0)) {
+                $('stats-empty-pv').style.display = 'block';
+                return;
+            }
+            $('stats-empty-pv').style.display = 'none';
+            const padL = 34, padR = 12, padT = 14, padB = 26;
+            const maxV = Math.max(...counts, 1);
+            const stepX = (w - padL - padR) / Math.max(labels.length - 1, 1);
+            const pts = counts.map((c, i) => [padL + i * stepX, padT + (h - padT - padB) * (1 - c / maxV)]);
+            // 网格 + Y 轴
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.fillStyle = '#8899bb';
+            ctx.font = (10 * dpr) + 'px sans-serif';
+            ctx.lineWidth = dpr;
+            for (let g = 0; g <= 4; g++) {
+                const y = padT + (h - padT - padB) * g / 4;
+                ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+                ctx.fillText(String(Math.round(maxV * (1 - g / 4))), 4, y + 3);
+            }
+            // 折线
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2 * dpr;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            pts.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+            ctx.stroke();
+            // 数据点 + X 轴标签（稀疏显示）
+            ctx.fillStyle = color;
+            const labelStep = Math.max(1, Math.ceil(labels.length / 10));
+            pts.forEach((p, i) => {
+                ctx.beginPath(); ctx.arc(p[0], p[1], 2.5 * dpr, 0, Math.PI * 2); ctx.fill();
+                if (i % labelStep === 0) {
+                    ctx.fillStyle = '#8899bb';
+                    ctx.fillText(labels[i], p[0] - 12 * dpr, h - 6);
+                    ctx.fillStyle = color;
+                }
+            });
+        }
+
+        function statsDrawBar(canvas, labels, counts, color) {
+            if (!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width, h = canvas.height;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+            if (!labels.length || counts.every(c => c === 0)) {
+                $('stats-empty-play').style.display = 'block';
+                return;
+            }
+            $('stats-empty-play').style.display = 'none';
+            const padL = 34, padR = 12, padT = 14, padB = 26;
+            const maxV = Math.max(...counts, 1);
+            const bw = (w - padL - padR) / labels.length;
+            // 网格
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.fillStyle = '#8899bb';
+            ctx.font = (10 * dpr) + 'px sans-serif';
+            ctx.lineWidth = dpr;
+            for (let g = 0; g <= 4; g++) {
+                const y = padT + (h - padT - padB) * g / 4;
+                ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+                ctx.fillText(String(Math.round(maxV * (1 - g / 4))), 4, y + 3);
+            }
+            const labelStep = Math.max(1, Math.ceil(labels.length / 10));
+            labels.forEach((lb, i) => {
+                const c = counts[i];
+                const bh = (h - padT - padB) * c / maxV;
+                const x = padL + i * bw + bw * 0.15;
+                ctx.fillStyle = color;
+                ctx.fillRect(x, h - padB - bh, bw * 0.7, bh);
+                if (i % labelStep === 0) {
+                    ctx.fillStyle = '#8899bb';
+                    ctx.fillText(lb, x - 8 * dpr, h - 6);
+                }
+            });
+        }
+
+        // ========== 面板渲染 ==========
+        function openStats() {
+            $('stats-overlay').classList.add('show');
+            $('stats-loading').style.display = 'block';
+            $('stats-content').style.display = 'none';
+            setTimeout(() => statsInitCanvas(), 60);
+            setTimeout(() => statsRender(), 80);
+        }
+
+        function closeStats() {
+            $('stats-overlay').classList.remove('show');
+        }
+
+        function setStatsRange(range) {
+            statsRange = range;
+            document.querySelectorAll('.stats-filter-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.range === range);
+            });
+            $('stats-loading').style.display = 'block';
+            $('stats-content').style.display = 'none';
+            setTimeout(() => statsRender(), 60);
+        }
+
+        async function statsRender() {
+            const badge = $('stats-mode-badge');
+            badge.textContent = statsOnline ? '后端聚合模式' : '本地模式';
+            badge.classList.toggle('offline', !statsOnline);
+            const data = await statsFetchData(statsRange);
+            $('stats-loading').style.display = 'none';
+            $('stats-content').style.display = 'block';
+            if (!data || !data.ok) {
+                $('stats-cards').innerHTML = '<div class="stats-empty">❌ 统计获取失败，请稍后重试</div>';
+                return;
+            }
+            statsRenderCards(data);
+            statsDrawLine($('stats-chart-pv'), data.visitTrend.labels, data.visitTrend.counts, '#58a6ff');
+            statsDrawBar($('stats-chart-play'), data.roundTrend.labels, data.roundTrend.counts, '#4CAF50');
+            statsRenderVisits(data.recentVisits);
+        }
+
+        function statsRangeLabel(range) {
+            const m = { today: '今日', week: '本周', month: '本月', all: '历史累计', d7: '近7天', d30: '近30天' };
+            return m[range] || range;
+        }
+
+        function statsRenderCards(data) {
+            const rl = statsRangeLabel(statsRange);
+            $('stats-cards').innerHTML = `
+                <div class="stats-card"><div class="sc-label">访问量 PV（${rl}）</div><div class="sc-value">${data.pv}</div><div class="sc-sub">页面访问总次数</div></div>
+                <div class="stats-card warm"><div class="sc-label">独立访客 UV（${rl}）</div><div class="sc-value">${data.uv}</div><div class="sc-sub">按访客去重</div></div>
+                <div class="stats-card hl"><div class="sc-label">游玩轮次（${rl}）</div><div class="sc-value">${data.rounds}</div><div class="sc-sub">提交答案次数</div></div>
+                <div class="stats-card"><div class="sc-label">日均访问（${rl}）</div><div class="sc-value">${statsAvg(data)}</div><div class="sc-sub">PV ÷ 天数</div></div>
+            `;
+        }
+
+        function statsAvg(data) {
+            const n = data.visitTrend.counts.length || 1;
+            return (data.pv / n).toFixed(1);
+        }
+
+        function statsRenderVisits(list) {
+            const body = $('stats-visit-body');
+            const empty = $('stats-empty-visits');
+            if (!list || !list.length) {
+                body.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+            body.innerHTML = list.map(v => `
+                <tr>
+                    <td>${new Date(v.ts).toLocaleString('zh-CN', { hour12: false })}</td>
+                    <td>${v.ref ? statsShortRef(v.ref) : '直接访问/书签'}</td>
+                    <td>${v.ip || '—'}</td>
+                    <td>${v.page || '—'}</td>
+                </tr>`).join('');
+        }
+
+        function statsShortRef(url) {
+            try {
+                const u = new URL(url);
+                return u.hostname + (u.pathname.length > 1 ? u.pathname.slice(0, 30) : '');
+            } catch (e) { return url.slice(0, 40); }
+        }
+
+        // ==========================================================
         // 【初始化】
         // ==========================================================
         window.onload = function () {
             renderBests();
             initGuessMap();
+            // 统计：探测后端 → 记录访问 → 异步获取 IP
+            statsDetectApi().then(() => statsTrackVisit());
+            statsFetchIp();
         };
 
         function initGuessMap() {
@@ -3115,6 +3626,9 @@
             const score = calcScore(distanceKm);
             state.totalScore += score;
             state.history.push({ name: round.name, distanceKm, score, imageId: round.imageId });
+
+            // 【数据统计】提交答案即记录一轮游玩
+            statsTrackRound(state.mode, state.region);
 
             // ---- 距离可视化：答案蓝点 + 虚线 + 飞行取景 ----
             answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
