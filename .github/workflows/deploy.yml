@@ -66,25 +66,17 @@ jobs:
             - name: 配置 GitHub Pages
               uses: actions/configure-pages@v5
 
-            # 静态站点无需构建：把仓库根目录打包为发布产物（node_modules 除外）
+            # 静态站点无需构建：先拷贝发布产物到 _site 目录（upload-pages-artifact 只接受目录）
+            - name: 组装发布产物
+              run: |
+                  mkdir -p _site
+                  cp -r index.html MmaGuessr.html src .nojekyll _site/
+                  find src -type f | sort
+
             - name: 上传发布
               uses: actions/upload-pages-artifact@v3
               with:
-                  path: |
-                      **/*.html
-                      **/*.css
-                      **/*.js
-                      **/*.md
-                      **/*.json
-                      .nojekyll
-                      .gitignore
-                      .editorconfig
-                      .prettierrc.json
-                      .prettierignore
-                      LICENSE
-                      package.json
-                      package-lock.json
-                      !node_modules/**
+                  path: _site
 
             - name: 部署
               id: deployment
