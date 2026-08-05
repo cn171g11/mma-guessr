@@ -9,50 +9,85 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const GAME = path.join(ROOT, 'MmaGuessr.html');
-const TOKEN = 'MLY|27847157814868912|297a1717444edeb373bb94009d2df54a';
+const GAME = path.join(ROOT, 'src', 'js', 'data.js');
+const TOKEN = process.env.MAPILLARY_TOKEN || 'MLY|27847157814868912|297a1717444edeb373bb94009d2df54a';
 
 // 新目标城市：坐标 + 搜索偏移量
 const TARGET_CITIES = [
-    { city: '上海', lat: 31.23, lng: 121.47, extra: [
-        { name: '上海·人民广场', lat: 31.232, lng: 121.473 },
-        { name: '上海·新天地', lat: 31.219, lng: 121.475 },
-        { name: '上海·静安寺', lat: 31.225, lng: 121.445 },
-        { name: '上海·武康路', lat: 31.208, lng: 121.436 },
-        { name: '上海·迪士尼', lat: 31.143, lng: 121.657 }
-    ]},
-    { city: '成都', lat: 30.66, lng: 104.06, extra: [
-        { name: '成都·太古里', lat: 30.653, lng: 104.084 },
-        { name: '成都·武侯祠', lat: 30.644, lng: 104.047 },
-        { name: '成都·杜甫草堂', lat: 30.661, lng: 104.028 },
-        { name: '成都·金沙遗址', lat: 30.682, lng: 104.012 }
-    ]},
-    { city: '阆中', lat: 31.56, lng: 105.97, extra: [
-        { name: '阆中·古城', lat: 31.575, lng: 105.967 },
-        { name: '阆中·张飞庙', lat: 31.576, lng: 105.966 },
-        { name: '阆中·华光楼', lat: 31.574, lng: 105.964 }
-    ]},
-    { city: '南充', lat: 30.79, lng: 106.08, extra: [
-        { name: '南充·北湖公园', lat: 30.796, lng: 106.076 },
-        { name: '南充·西山风景区', lat: 30.78, lng: 106.065 }
-    ]},
-    { city: '南部', lat: 31.35, lng: 106.04, extra: [
-        { name: '南部·桂花博览园', lat: 31.348, lng: 106.038 },
-        { name: '南部·凌云公园', lat: 31.356, lng: 106.045 }
-    ]},
-    { city: '溧水', lat: 31.65, lng: 119.02, extra: [
-        { name: '溧水·无想山', lat: 31.63, lng: 119.035 },
-        { name: '溧水·天生桥', lat: 31.638, lng: 119.012 }
-    ]},
-    { city: '株洲', lat: 27.84, lng: 113.14, extra: [
-        { name: '株洲·炎帝广场', lat: 27.838, lng: 113.132 },
-        { name: '株洲·神农城', lat: 27.835, lng: 113.128 },
-        { name: '株洲·湘江风光带', lat: 27.836, lng: 113.148 }
-    ]}
+    {
+        city: '上海',
+        lat: 31.23,
+        lng: 121.47,
+        extra: [
+            { name: '上海·人民广场', lat: 31.232, lng: 121.473 },
+            { name: '上海·新天地', lat: 31.219, lng: 121.475 },
+            { name: '上海·静安寺', lat: 31.225, lng: 121.445 },
+            { name: '上海·武康路', lat: 31.208, lng: 121.436 },
+            { name: '上海·迪士尼', lat: 31.143, lng: 121.657 },
+        ],
+    },
+    {
+        city: '成都',
+        lat: 30.66,
+        lng: 104.06,
+        extra: [
+            { name: '成都·太古里', lat: 30.653, lng: 104.084 },
+            { name: '成都·武侯祠', lat: 30.644, lng: 104.047 },
+            { name: '成都·杜甫草堂', lat: 30.661, lng: 104.028 },
+            { name: '成都·金沙遗址', lat: 30.682, lng: 104.012 },
+        ],
+    },
+    {
+        city: '阆中',
+        lat: 31.56,
+        lng: 105.97,
+        extra: [
+            { name: '阆中·古城', lat: 31.575, lng: 105.967 },
+            { name: '阆中·张飞庙', lat: 31.576, lng: 105.966 },
+            { name: '阆中·华光楼', lat: 31.574, lng: 105.964 },
+        ],
+    },
+    {
+        city: '南充',
+        lat: 30.79,
+        lng: 106.08,
+        extra: [
+            { name: '南充·北湖公园', lat: 30.796, lng: 106.076 },
+            { name: '南充·西山风景区', lat: 30.78, lng: 106.065 },
+        ],
+    },
+    {
+        city: '南部',
+        lat: 31.35,
+        lng: 106.04,
+        extra: [
+            { name: '南部·桂花博览园', lat: 31.348, lng: 106.038 },
+            { name: '南部·凌云公园', lat: 31.356, lng: 106.045 },
+        ],
+    },
+    {
+        city: '溧水',
+        lat: 31.65,
+        lng: 119.02,
+        extra: [
+            { name: '溧水·无想山', lat: 31.63, lng: 119.035 },
+            { name: '溧水·天生桥', lat: 31.638, lng: 119.012 },
+        ],
+    },
+    {
+        city: '株洲',
+        lat: 27.84,
+        lng: 113.14,
+        extra: [
+            { name: '株洲·炎帝广场', lat: 27.838, lng: 113.132 },
+            { name: '株洲·神农城', lat: 27.835, lng: 113.128 },
+            { name: '株洲·湘江风光带', lat: 27.836, lng: 113.148 },
+        ],
+    },
 ];
 
 // ==========================================================
-// 1. 从 HTML 抓取 LOCATIONS 中所有中国点位
+// 1. 从 src/js/data.js 抓取 LOCATIONS 中所有中国点位
 // ==========================================================
 function parseChinaLocations() {
     const src = fs.readFileSync(GAME, 'utf8');
@@ -60,24 +95,45 @@ function parseChinaLocations() {
     const start = src.indexOf(marker);
     if (start < 0) throw new Error('LOCATIONS not found');
     const open = src.indexOf('[', start);
-    let depth = 0, inStr = false, quote = '', esc = false, end = -1;
+    let depth = 0,
+        inStr = false,
+        quote = '',
+        esc = false,
+        end = -1;
     for (let i = open; i < src.length; i++) {
         const c = src[i];
-        if (esc) { esc = false; continue; }
-        if (c === '\\') { esc = true; continue; }
+        if (esc) {
+            esc = false;
+            continue;
+        }
+        if (c === '\\') {
+            esc = true;
+            continue;
+        }
         if (c === '"' || c === "'" || c === '`') {
-            if (!inStr) { inStr = true; quote = c; }
-            else if (quote === c) { inStr = false; quote = ''; }
+            if (!inStr) {
+                inStr = true;
+                quote = c;
+            } else if (quote === c) {
+                inStr = false;
+                quote = '';
+            }
             continue;
         }
         if (inStr) continue;
         if (c === '[') depth++;
-        else if (c === ']') { depth--; if (depth === 0) { end = i; break; } }
+        else if (c === ']') {
+            depth--;
+            if (depth === 0) {
+                end = i;
+                break;
+            }
+        }
     }
     if (end < 0) throw new Error('LOCATIONS not closed');
     const arr = eval(src.slice(open, end + 1));
     // 过滤以"中国"开头的点位（含港澳台统一归类为中国）
-    return arr.filter(l => (l.name || '').startsWith('中国'));
+    return arr.filter((l) => (l.name || '').startsWith('中国'));
 }
 
 // ==========================================================
@@ -85,7 +141,11 @@ function parseChinaLocations() {
 // ==========================================================
 function mapillaryRequest(url) {
     try {
-        const out = execSync(`curl -s --max-time 12 "${url}"`, { encoding: 'utf8', timeout: 15000, stdio: ['pipe','pipe','ignore'] });
+        const out = execSync(`curl -s --max-time 12 "${url}"`, {
+            encoding: 'utf8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'ignore'],
+        });
         if (!out || out.trim().startsWith('{')) {
             const data = JSON.parse(out.trim());
             return Promise.resolve(data);
@@ -106,7 +166,12 @@ async function checkMapillaryCoverage(lat, lng) {
             const data = await mapillaryRequest(url);
             if (data.data && data.data.length > 0) {
                 const img = data.data[0];
-                return { valid: true, imageId: img.id, lat: img.geometry.coordinates[1], lng: img.geometry.coordinates[0] };
+                return {
+                    valid: true,
+                    imageId: img.id,
+                    lat: img.geometry.coordinates[1],
+                    lng: img.geometry.coordinates[0],
+                };
             }
         } catch (e) {
             // fall through to next offset
@@ -119,7 +184,7 @@ async function checkMapillaryCoverage(lat, lng) {
 // 3. 确认新点位是否存在已有同名
 // ==========================================================
 function nameExists(name, all) {
-    return all.some(l => l.name === name);
+    return all.some((l) => l.name === name);
 }
 
 // 限速并发执行
@@ -146,19 +211,20 @@ async function main() {
     // 去重检查
     const nameSet = new Set();
     const dupes = [];
-    chinaPoints.forEach(p => {
+    chinaPoints.forEach((p) => {
         if (nameSet.has(p.name)) dupes.push(p.name);
         else nameSet.add(p.name);
     });
     if (dupes.length > 0) {
         console.log('⚠️  发现重复点位:');
-        dupes.forEach(d => console.log(`    - ${d}`));
+        dupes.forEach((d) => console.log(`    - ${d}`));
         console.log();
     }
 
     // 逐点验证 Mapillary 覆盖（6 并发）
     console.log('🔬 逐点验证 Mapillary 覆盖（6 并发）...\n');
-    const valid = [], invalid = [];
+    const valid = [],
+        invalid = [];
     let done = 0;
     const total = chinaPoints.length;
 
@@ -185,14 +251,14 @@ async function main() {
 
     if (invalid.length > 0) {
         console.log('❌ 以下点位已失效，建议移除:');
-        invalid.forEach(p => console.log(`    - ${p.name} (${p.lat}, ${p.lng})`));
+        invalid.forEach((p) => console.log(`    - ${p.name} (${p.lat}, ${p.lng})`));
         console.log();
     }
 
     // 搜索新城市点位（6 并发）
     console.log('🌆 搜索新城市点位...\n');
     const newPoints = [];
-    const allNames = new Set(chinaPoints.map(p => p.name));
+    const allNames = new Set(chinaPoints.map((p) => p.name));
 
     // 收集所有待搜索点
     const allSpots = [];
@@ -225,14 +291,19 @@ async function main() {
 
     for (const r of spotResults) {
         if (r.valid) {
-            const diff = r.spot.city === '上海' || r.spot.city === '成都' ? 2
-                : (r.spot.city === '阆中' || r.spot.city === '南充' || r.spot.city === '株洲') ? 3
-                : 4;
+            const diff =
+                r.spot.city === '上海' || r.spot.city === '成都'
+                    ? 2
+                    : r.spot.city === '阆中' || r.spot.city === '南充' || r.spot.city === '株洲'
+                      ? 3
+                      : 4;
             newPoints.push({
                 name: r.spot.cnName,
-                lat: r.spot.lat, lng: r.spot.lng,
-                region: 'asia', difficulty: diff,
-                imageId: r.imageId
+                lat: r.spot.lat,
+                lng: r.spot.lng,
+                region: 'asia',
+                difficulty: diff,
+                imageId: r.imageId,
             });
         }
     }
@@ -260,4 +331,7 @@ async function main() {
     console.log('\n📄 详细报告已保存至 tools/.verify-report.json');
 }
 
-main().catch(e => { console.error('❌ 错误:', e.message); process.exit(1); });
+main().catch((e) => {
+    console.error('❌ 错误:', e.message);
+    process.exit(1);
+});
