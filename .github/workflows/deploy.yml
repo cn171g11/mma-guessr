@@ -76,15 +76,15 @@ jobs:
                       **/*.js
                       **/*.md
                       **/*.json
-            .nojekyll
-            .gitignore
-            .editorconfig
-            .prettierrc.json
-            .prettierignore
-            LICENSE
-            package.json
-            package-lock.json
-            !node_modules/**
+                      .nojekyll
+                      .gitignore
+                      .editorconfig
+                      .prettierrc.json
+                      .prettierignore
+                      LICENSE
+                      package.json
+                      package-lock.json
+                      !node_modules/**
 
             - name: 部署
               id: deployment
