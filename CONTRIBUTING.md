@@ -261,6 +261,14 @@ git status                  # 确认无密钥/临时文件入库
 - 附上验证截图（可选）；
 - 保持改动聚焦：一个 PR 对应一个主题。
 
+### 8.6 开源协议
+
+本项目以 [Apache License 2.0](LICENSE) 开源（版权所有 © 2026 Dinnerb0ne2）。
+
+- 按 Apache 2.0 第 5 条「Submission of Contributions」，你提交的 Issue / PR /
+  任何有意提交的贡献，默认视为以 Apache 2.0 条款授权本项目使用；
+- 如需以其他条款贡献，请在提交中明确声明「Not a Contribution」。
+
 ---
 
 ## 9. 常见问题

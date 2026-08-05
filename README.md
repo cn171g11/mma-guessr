@@ -163,4 +163,9 @@ node tools/add-hmt.js
 
 ## 许可
 
-本项目仅用于学习和娱乐目的。Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
+本项目以 [Apache License 2.0](LICENSE) 开源发布，版权所有 © 2026 Dinnerb0ne2。
+
+- 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](LICENSE)。
+- 本项目仅用于学习和娱乐目的，不对任何使用后果作担保。
+- Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
+- 提交的贡献（Issue / PR）默认以 Apache 2.0 条款贡献给本项目。
