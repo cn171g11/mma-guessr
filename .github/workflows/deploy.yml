@@ -1,0 +1,91 @@
+name: Deploy
+
+on:
+    push:
+        branches:
+            - main
+        paths-ignore:
+            - 'README.md'
+            - 'CONTRIBUTING.md'
+            - 'BACKUP.md'
+            - 'archive/**'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: pages
+    cancel-in-progress: true
+
+jobs:
+    validate:
+        name: 部署前校验
+        runs-on: ubuntu-latest
+        steps:
+            - name: 检出代码
+              uses: actions/checkout@v4
+
+            - name: 安装 Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: 安装依赖(仅 Prettier)
+              run: npm ci
+
+            - name: Prettier 代码风格
+              run: npm run format:check
+
+            - name: JS 语法检查
+              run: |
+                  node --check src/js/config.js
+                  node --check src/js/data.js
+                  node --check src/js/game.js
+                  for f in tools/*.js; do node --check "$f"; done
+
+            - name: 题库数据校验
+              run: node tools/validate-data.js
+              env:
+                  EXPECTED_LOCATIONS: 1570
+
+    deploy:
+        name: 部署 GitHub Pages
+        needs: validate
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: 检出代码
+              uses: actions/checkout@v4
+
+            - name: 配置 GitHub Pages
+              uses: actions/configure-pages@v5
+
+            # 静态站点无需构建：把仓库根目录打包为发布产物（node_modules 除外）
+            - name: 上传发布
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: |
+                      **/*.html
+                      **/*.css
+                      **/*.js
+                      **/*.md
+                      **/*.json
+            .nojekyll
+            .gitignore
+            .editorconfig
+            .prettierrc.json
+            .prettierignore
+            LICENSE
+            package.json
+            package-lock.json
+            !node_modules/**
+
+            - name: 部署
+              id: deployment
+              uses: actions/deploy-pages@v4

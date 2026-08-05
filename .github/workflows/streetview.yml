@@ -1,0 +1,57 @@
+name: 街景覆盖验证（手动）
+
+on:
+    workflow_dispatch:
+        inputs:
+            script:
+                description: 目标验证脚本（逐点调用 Mapillary API，耗时较长）
+                required: true
+                type: choice
+                default: verify-cn-streetview
+                options:
+                    - verify-cn-streetview
+                    - verify-world-expand
+                    - verify-world-expand2
+            expectTotal:
+                description: 预检期望题库总量（默认 1570）
+                required: false
+                type: string
+
+permissions:
+    contents: read
+
+jobs:
+    verify:
+        name: 运行 ${{ inputs.script }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 120
+        steps:
+            - name: 检出代码
+              uses: actions/checkout@v4
+
+            - name: 安装 Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: 题库数据预检
+              run: node tools/validate-data.js
+              env:
+                  # 未填写时回退到 1570
+                  EXPECTED_LOCATIONS: ${{ inputs.expectTotal != '' && inputs.expectTotal || '1570' }}
+
+            - name: 运行验证脚本
+              run: node tools/${{ inputs.script }}.js
+              env:
+                  # 优先使用仓库 Secret；未配置时脚本回退到内置 token
+                  MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN }}
+
+            - name: 上传验证报告
+              uses: actions/upload-artifact@v4
+              with:
+                  name: verify-report
+                  path: |
+                      tools/.verify-report.json
+                      tools/.world-expand-report.json
+                      tools/.world-expand-report2.json
+                  if-no-files-found: ignore

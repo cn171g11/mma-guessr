@@ -5,16 +5,16 @@
  *  1. 移除 61 个 Mapillary 验证失效的中国点位
  *  2. 移除 1 个重复点位（中国成都·宽窄巷子）
  *  3. 新增 20 个经 Mapillary 验证的新城市点位
- *  4. 写回 MmaGuessr.html
+ *  4. 写回 src/js/data.js
  */
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
-const GAME = path.join(ROOT, 'MmaGuessr.html');
+const GAME = path.join(ROOT, 'src', 'js', 'data.js');
 const REPORT = path.join(ROOT, 'tools', '.verify-report.json');
 
 const report = JSON.parse(fs.readFileSync(REPORT, 'utf8'));
-const invalidNames = new Set(report.invalid.map(p => p.name));
+const invalidNames = new Set(report.invalid.map((p) => p.name));
 const dupes = new Set(report.dupes);
 
 // 读取并解析 LOCATIONS
@@ -23,19 +23,40 @@ const marker = 'const LOCATIONS =';
 const start = src.indexOf(marker);
 if (start < 0) throw new Error('LOCATIONS not found');
 const open = src.indexOf('[', start);
-let depth = 0, inStr = false, quote = '', esc = false, end = -1;
+let depth = 0,
+    inStr = false,
+    quote = '',
+    esc = false,
+    end = -1;
 for (let i = open; i < src.length; i++) {
-  const c = src[i];
-  if (esc) { esc = false; continue; }
-  if (c === '\\') { esc = true; continue; }
-  if (c === '"' || c === "'" || c === '`') {
-    if (!inStr) { inStr = true; quote = c; }
-    else if (quote === c) { inStr = false; quote = ''; }
-    continue;
-  }
-  if (inStr) continue;
-  if (c === '[') depth++;
-  else if (c === ']') { depth--; if (depth === 0) { end = i; break; } }
+    const c = src[i];
+    if (esc) {
+        esc = false;
+        continue;
+    }
+    if (c === '\\') {
+        esc = true;
+        continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+        if (!inStr) {
+            inStr = true;
+            quote = c;
+        } else if (quote === c) {
+            inStr = false;
+            quote = '';
+        }
+        continue;
+    }
+    if (inStr) continue;
+    if (c === '[') depth++;
+    else if (c === ']') {
+        depth--;
+        if (depth === 0) {
+            end = i;
+            break;
+        }
+    }
 }
 if (end < 0) throw new Error('LOCATIONS not closed');
 
@@ -46,25 +67,37 @@ const original = src.slice(open + 1, end); // the inner array content
 const allLocations = eval(src.slice(open, end + 1));
 
 // 2. 过滤
-let removed = 0, duped = 0;
+let removed = 0,
+    duped = 0;
 const seenNames = new Set();
 const kept = [];
 for (const loc of allLocations) {
-  // 移除失效点位
-  if (invalidNames.has(loc.name)) { removed++; continue; }
-  // 去重：首遇保留，后续同名跳过
-  if (seenNames.has(loc.name)) { duped++; continue; }
-  seenNames.add(loc.name);
-  kept.push(loc);
+    // 移除失效点位
+    if (invalidNames.has(loc.name)) {
+        removed++;
+        continue;
+    }
+    // 去重：首遇保留，后续同名跳过
+    if (seenNames.has(loc.name)) {
+        duped++;
+        continue;
+    }
+    seenNames.add(loc.name);
+    kept.push(loc);
 }
 
 // 3. 添加新点
-const newEntries = report.newPoints.map(p => ({
-  name: p.name, lat: p.lat, lng: p.lng, region: p.region, difficulty: p.difficulty
+const newEntries = report.newPoints.map((p) => ({
+    name: p.name,
+    lat: p.lat,
+    lng: p.lng,
+    region: p.region,
+    difficulty: p.difficulty,
 }));
 
 // 4. 序列化
-const formatLoc = e => `            { name: ${JSON.stringify(e.name)}, lat: ${e.lat}, lng: ${e.lng}, region: ${JSON.stringify(e.region)}, difficulty: ${e.difficulty} }`;
+const formatLoc = (e) =>
+    `            { name: ${JSON.stringify(e.name)}, lat: ${e.lat}, lng: ${e.lng}, region: ${JSON.stringify(e.region)}, difficulty: ${e.difficulty} }`;
 const allLines = [...kept, ...newEntries].map(formatLoc);
 const newInner = allLines.join(',\n');
 
@@ -76,22 +109,43 @@ fs.writeFileSync(GAME, newSrc, 'utf8');
 const vSrc = fs.readFileSync(GAME, 'utf8');
 const vStart = vSrc.indexOf(marker);
 const vOpen = vSrc.indexOf('[', vStart);
-let vDepth = 0, vInStr = false, vQuote = '', vEsc = false, vEnd = -1;
+let vDepth = 0,
+    vInStr = false,
+    vQuote = '',
+    vEsc = false,
+    vEnd = -1;
 for (let i = vOpen; i < vSrc.length; i++) {
-  const c = vSrc[i];
-  if (vEsc) { vEsc = false; continue; }
-  if (c === '\\') { vEsc = true; continue; }
-  if (c === '"' || c === "'" || c === '`') {
-    if (!vInStr) { vInStr = true; vQuote = c; }
-    else if (vQuote === c) { vInStr = false; vQuote = ''; }
-    continue;
-  }
-  if (vInStr) continue;
-  if (c === '[') vDepth++;
-  else if (c === ']') { vDepth--; if (vDepth === 0) { vEnd = i; break; } }
+    const c = vSrc[i];
+    if (vEsc) {
+        vEsc = false;
+        continue;
+    }
+    if (c === '\\') {
+        vEsc = true;
+        continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+        if (!vInStr) {
+            vInStr = true;
+            vQuote = c;
+        } else if (vQuote === c) {
+            vInStr = false;
+            vQuote = '';
+        }
+        continue;
+    }
+    if (vInStr) continue;
+    if (c === '[') vDepth++;
+    else if (c === ']') {
+        vDepth--;
+        if (vDepth === 0) {
+            vEnd = i;
+            break;
+        }
+    }
 }
 const finalArr = eval(vSrc.slice(vOpen, vEnd + 1));
-const cnFinal = finalArr.filter(l => (l.name || '').startsWith('中国'));
+const cnFinal = finalArr.filter((l) => (l.name || '').startsWith('中国'));
 
 console.log('═══════════════════════════════');
 console.log('  LOCATIONS 批量更新完成');

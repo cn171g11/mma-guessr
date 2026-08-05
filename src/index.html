@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>🌍 MmaGuessr v1.14.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+        <link rel="stylesheet" href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" />
+        <script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+
+        <link rel="stylesheet" href="css/style.css" />
+    </head>
+    <body>
+        <!-- ============ 主菜单 ============ -->
+        <div id="home-screen">
+            <h1>🌍 MmaGuessr</h1>
+            <div class="subtitle">观察街景线索，在地图上标记你认为的位置 · 数据源 Mapillary</div>
+            <div class="mode-grid">
+                <div class="mode-card" onclick="chooseMode('classic')">
+                    <div class="icon">🎯</div>
+                    <h3>经典模式</h3>
+                    <p>单轮游戏，距离越近得分越高，满分 5000。</p>
+                    <div class="best" id="best-classic">历史最佳：--</div>
+                </div>
+                <div class="mode-card" onclick="chooseMode('challenge')">
+                    <div class="icon">⚡</div>
+                    <h3>挑战模式</h3>
+                    <p>连续 5 轮限时 2 分钟，时间压力下累积高分，结束后获称号排名！</p>
+                    <div class="best" id="best-challenge">历史最佳：--</div>
+                </div>
+                <div class="mode-card" onclick="chooseMode('region')">
+                    <div class="icon">🗺️</div>
+                    <h3>区域限定</h3>
+                    <p>限定某个大洲范围内出题，范围更小、判分更严格。</p>
+                    <div class="best" id="best-region">历史最佳：--</div>
+                </div>
+                <div class="mode-card" onclick="chooseMode('china')">
+                    <div class="icon">🇨🇳</div>
+                    <h3>中国模式</h3>
+                    <p>限中国境内街景（含港澳台），167 个精选点位覆盖全中国，与你脚下的土地斗智斗勇。</p>
+                    <div class="best" id="best-china">历史最佳：--</div>
+                </div>
+                <div class="mode-card" onclick="chooseMode('endless')">
+                    <div class="icon">♾️</div>
+                    <h3>无限模式</h3>
+                    <p>从最简单的地标起步，凭得分赚经验、升等级。等级越高题目越难，难题经验也越多！</p>
+                    <div class="best" id="best-endless">历史最佳：--</div>
+                </div>
+            </div>
+            <div class="home-footer">
+                <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
+                <span class="ver-badge" id="home-version">版本 v1.14.0</span>
+                <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
+                <a
+                    class="notion-btn"
+                    href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    📔 游戏文档
+                </a>
+                <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
+            </div>
+        </div>
+
+        <!-- ============ 区域选择 ============ -->
+        <div id="region-screen">
+            <h2>🗺️ 选择限定区域</h2>
+            <div class="region-grid">
+                <div class="region-card" onclick="startGame('region', 'asia')">
+                    <div class="icon">🏯</div>
+                    亚洲
+                    <div class="rcount" id="rc-asia"></div>
+                </div>
+                <div class="region-card" onclick="startGame('region', 'europe')">
+                    <div class="icon">🏰</div>
+                    欧洲
+                    <div class="rcount" id="rc-europe"></div>
+                </div>
+                <div class="region-card" onclick="startGame('region', 'northamerica')">
+                    <div class="icon">🗽</div>
+                    北美洲
+                    <div class="rcount" id="rc-northamerica"></div>
+                </div>
+                <div class="region-card" onclick="startGame('region', 'southamerica')">
+                    <div class="icon">🌴</div>
+                    南美洲
+                    <div class="rcount" id="rc-southamerica"></div>
+                </div>
+                <div class="region-card" onclick="startGame('region', 'africa')">
+                    <div class="icon">🦁</div>
+                    非洲
+                    <div class="rcount" id="rc-africa"></div>
+                </div>
+                <div class="region-card" onclick="startGame('region', 'oceania')">
+                    <div class="icon">🦘</div>
+                    大洋洲
+                    <div class="rcount" id="rc-oceania"></div>
+                </div>
+            </div>
+            <button class="back-btn" onclick="hideRegionScreen()">← 返回</button>
+        </div>
+
+        <!-- ============ 游戏界面 ============ -->
+        <div id="info-bar">
+            <span class="mode-tag" id="mode-tag">经典模式</span>
+            <div id="round-info">
+                第
+                <span class="round" id="round-num">1</span>
+                轮 / 共
+                <span id="total-rounds">5</span>
+                轮
+            </div>
+            <div>
+                总分：
+                <span class="score" id="total-score">0</span>
+                分
+            </div>
+            <div id="level-panel">
+                <div>
+                    等级
+                    <span class="lv" id="level-num">1</span>
+                    · 经验
+                    <span id="xp-num">0</span>
+                    /
+                    <span id="xp-need">200</span>
+                </div>
+                <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+                <div id="diff-stars">难度 ★☆☆☆☆</div>
+            </div>
+            <div id="version-line">版本 v1.14.0</div>
+        </div>
+
+        <div id="timer-box">
+            ⏱
+            <span id="timer-num">60</span>
+            s
+        </div>
+        <button id="quit-btn" onclick="quitGame()">✕ 退出</button>
+
+        <div id="game-container">
+            <div id="panorama-area">
+                <div id="panorama-view"></div>
+                <div id="panorama-loading" style="display: none">
+                    <div class="spinner"></div>
+                    <div>正在寻找并加载街景...</div>
+                </div>
+                <div id="panorama-fallback">
+                    <h2>⚠️ 街景加载失败</h2>
+                    <p>该地点街景暂时无法加载，可能是网络或覆盖问题。</p>
+                    <button onclick="skipLocation()">🔄 换一个地点</button>
+                    <button class="err-export-btn" onclick="exportStreetViewError()">📄 导出错误报告</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="minimap-container">
+            <button id="map-toggle-btn" onclick="toggleMapSize()">⛶</button>
+            <div id="guess-map"></div>
+        </div>
+
+        <button id="submit-btn" onclick="submitGuess()" disabled>🎯 提交选择</button>
+        <button id="mobile-map-btn" onclick="toggleMobileMap()">🗺️ 地图</button>
+
+        <!-- ============ 结果弹窗 ============ -->
+        <div id="result-overlay">
+            <div id="result-box">
+                <div class="new-record" id="new-record">🎉 新纪录！</div>
+                <h2 id="result-title">📊 本轮结果</h2>
+                <div class="location-name" id="result-location">位置：-</div>
+                <div class="distance" id="result-distance">0 公里</div>
+                <div class="score-gained" id="result-score">+0 分</div>
+                <div class="xp-gained" id="result-xp">✨ +0 经验</div>
+                <div id="score-bar-bg"><div id="score-bar-fill"></div></div>
+                <div id="round-summary"></div>
+                <div class="result-btns">
+                    <button id="next-btn" onclick="nextRound()">下一轮 ▶</button>
+                    <button id="share-btn" onclick="shareResult()">📤 分享成绩</button>
+                    <button id="home-btn2" onclick="backHome()">🏠 主菜单</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="levelup-toast">
+            ⬆️ 升级！Lv.
+            <span id="levelup-num">2</span>
+        </div>
+        <div id="hint-text">👆 请在右下角地图上点击标记位置</div>
+        <div id="toast"></div>
+
+        <!-- ============ 更新记录弹窗 ============ -->
+        <div id="changelog-overlay" onclick="if (event.target === this) closeChangelog();">
+            <div id="changelog-box">
+                <h2>
+                    📋 更新记录
+                    <button class="clog-close" onclick="closeChangelog()">✕ 关闭</button>
+                </h2>
+                <div id="changelog-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 历史记录弹窗 ============ -->
+        <div id="history-overlay" onclick="if (event.target === this) closeHistory();">
+            <div id="history-box">
+                <h2>
+                    📜 历史记录
+                    <button class="hist-close" onclick="closeHistory()">✕ 关闭</button>
+                </h2>
+                <div class="h-sub">最近 20 局 · 点击 🗺️ 可在 Mapillary 官网查看原街景 · 可删除单条记录</div>
+                <div id="history-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 街景错误报告弹窗 ============ -->
+        <div id="err-overlay" onclick="if (event.target === this) closeErrReport();">
+            <div id="err-box">
+                <h3>📄 街景加载错误报告</h3>
+                <textarea id="err-report-content" readonly></textarea>
+                <div class="err-actions">
+                    <button class="btn-download" onclick="downloadErrReport()">⬇️ 下载 .txt</button>
+                    <button class="btn-copy" onclick="copyErrReport()">📋 复制内容</button>
+                    <button class="btn-close" onclick="closeErrReport()">✕ 关闭</button>
+                </div>
+            </div>
+        </div>
+        <div id="err-toast2"></div>
+
+        <script src="js/config.js"></script>
+        <script src="js/data.js"></script>
+        <script src="js/game.js"></script>
+    </body>
+</html>
