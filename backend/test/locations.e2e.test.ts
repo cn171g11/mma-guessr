@@ -1,9 +1,16 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 
 import { pool } from '../src/db/pool.js';
 import { redis } from '../src/db/redis.js';
-import { closeInfra, getApp, prepareDatabase } from './helpers.js';
+import { closeInfra, getApp, prepareDatabase, resetAppRedis } from './helpers.js';
+
+const execFileAsync = promisify(execFile);
+const BACKEND_DIR = fileURLToPath(new URL('..', import.meta.url));
 
 const FIXTURES = [
     { name: '日本东京·东京塔', lat: 35.6586, lng: 139.7454, region: 'asia', difficulty: 1 },
@@ -29,11 +36,13 @@ beforeAll(async () => {
 
 beforeEach(async () => {
     await pool.query('DELETE FROM locations');
-    await redis.flushall();
+    await resetAppRedis();
     await seedFixtures();
 });
 
 afterAll(async () => {
+    // 本文件独占 locations 表：恢复线上题库数据（1570 条），避免影响后续测试/运行
+    await execFileAsync(process.execPath, ['scripts/seed-locations.mjs'], { cwd: BACKEND_DIR });
     await closeInfra();
 });
 

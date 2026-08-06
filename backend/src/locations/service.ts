@@ -35,7 +35,14 @@ export async function getRandomLocations(query: RandomLocationsQuery): Promise<L
 
     await ensurePool(key, query.region, query.difficulty);
 
-    const ids = await cache.randomFromPool(key, query.count);
+    let ids = await cache.randomFromPool(key, query.count);
+    // 池中数量不足请求量通常意味着池过期或题库重建（题目 ID 变化/数量减少）后残留的残缺池：
+    // 丢弃后按当前题库重建再抽一次，避免长期命中残缺数据
+    if (ids.length > 0 && ids.length < query.count) {
+        await cache.dropPool(key);
+        await ensurePool(key, query.region, query.difficulty);
+        ids = await cache.randomFromPool(key, query.count);
+    }
     if (ids.length === 0) {
         return [];
     }

@@ -20,12 +20,43 @@ export async function prepareDatabase(): Promise<void> {
     await runMigrations();
 }
 
+// 应用在 Redis 中的 key 命名空间。只清理这些前缀，避免用全局 flushall 误伤
+// 其他并发测试文件（如多人对战的队列/房间、题库池）的运行状态
+const APP_REDIS_PREFIXES = [
+    'auth:',
+    'login_lock:',
+    'verify_code:',
+    'verify_code_attempts:',
+    'verify_code_resend:',
+    'refresh:',
+    'guest:',
+    'guest_progress:',
+    'user_progress:',
+    'user_daily:',
+    'daily:',
+    'locations:',
+    'lb:',
+    'profile:stats:',
+    'mp:',
+    'mly:',
+    'rl:',
+    'test:rl:',
+] as const;
+
+export async function resetAppRedis(): Promise<void> {
+    const allKeys = await redis.keys('*');
+    const targets = allKeys.filter((key) => APP_REDIS_PREFIXES.some((prefix) => key.startsWith(prefix)));
+    if (targets.length > 0) {
+        await redis.del(...targets);
+    }
+}
+
 export async function resetAuthState(): Promise<void> {
     await pool.query('DELETE FROM daily_challenges');
     await pool.query('DELETE FROM scores');
     await pool.query('DELETE FROM game_results');
     await pool.query('DELETE FROM users');
-    await redis.flushall();
+    await resetAppRedis();
 }
 
 export async function closeInfra(): Promise<void> {

@@ -11,6 +11,10 @@ export async function poolExists(key: string): Promise<boolean> {
     return (await redis.exists(key)) === 1;
 }
 
+export async function dropPool(key: string): Promise<void> {
+    await redis.del(key);
+}
+
 // 空池也写入 TTL，避免无数据的分区在 TTL 内反复触发数据库查询
 export async function warmPool(key: string, ids: string[], ttlSeconds: number): Promise<void> {
     const pipeline = redis.multi();

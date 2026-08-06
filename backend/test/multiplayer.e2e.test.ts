@@ -30,6 +30,34 @@ function waitFor(client: ClientSocket, event: string, timeoutMs = 8000): Promise
     });
 }
 
+// 事件缓冲：注册即收，消费时再取。服务端可能在客户端挂上监听器之前就下发事件
+//（例如 mp:matched 之后紧跟的 mp:round），直接 waitFor 会因监听注册太晚而永久丢失
+function makeEventBuffer<T>(client: ClientSocket, event: string): { next(timeoutMs?: number): Promise<T> } {
+    const queue: T[] = [];
+    const waiters: Array<{ resolve: (value: T) => void; timer: NodeJS.Timeout }> = [];
+    client.on(event, (data: T) => {
+        const waiter = waiters.shift();
+        if (waiter !== undefined) {
+            clearTimeout(waiter.timer);
+            waiter.resolve(data);
+        } else {
+            queue.push(data);
+        }
+    });
+    return {
+        next(timeoutMs = 8000): Promise<T> {
+            const queued = queue.shift();
+            if (queued !== undefined) {
+                return Promise.resolve(queued);
+            }
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(`等待事件 ${event} 超时`)), timeoutMs);
+                waiters.push({ resolve, timer });
+            });
+        },
+    };
+}
+
 function waitForConnect(client: ClientSocket): Promise<void> {
     return new Promise((resolve, reject) => {
         client.on('connect', () => resolve());
@@ -56,16 +84,16 @@ async function createGuestToken(): Promise<string> {
 
 // 与对局协议联动的完整 5 回合流程：等待 round -> 提交答案 -> 等待 roundEnd
 async function playFullMatch(client: ClientSocket, distanceKm: number): Promise<{ rankings: unknown }> {
+    // 在等待 matched 之前就注册 round/roundEnd 缓冲，杜绝服务端先于监听器下发事件导致的丢事件
+    const rounds = makeEventBuffer<{ roundIndex: number; location: Record<string, unknown> }>(client, 'mp:round');
+    const roundEnds = makeEventBuffer<unknown>(client, 'mp:roundEnd');
     await waitFor(client, 'mp:matched');
     for (let roundIndex = 0; roundIndex < TOTAL_ROUNDS; roundIndex++) {
-        const roundData = (await waitFor(client, 'mp:round')) as {
-            roundIndex: number;
-            location: Record<string, unknown>;
-        };
+        const roundData = await rounds.next();
         expect(roundData.roundIndex).toBe(roundIndex);
         expect(roundData.location.name).toBeUndefined();
         client.emit('mp:answer', { distanceKm, roundIndex });
-        await waitFor(client, 'mp:roundEnd');
+        await roundEnds.next();
     }
     return (await waitFor(client, 'mp:finished')) as { rankings: unknown };
 }

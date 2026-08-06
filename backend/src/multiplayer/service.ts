@@ -70,18 +70,45 @@ export class MultiplayerService {
         this.roomTimers.clear();
     }
 
-    public authenticate(socket: Socket, next: (err?: Error) => void): void {
+    // 握手阶段完成令牌校验与身份解析（含 Redis/DB 查询）：
+    // 中间件先于客户端的 connect 事件执行，保证连接建立后客户端第一条事件（如 mp:join）
+    // 到达时监听器与 socket.data.identity 均已就绪，避免事件在监听注册前被丢弃
+    public async authenticate(socket: Socket, next: (err?: Error) => void): Promise<void> {
         const token = socket.handshake.auth?.token;
         if (typeof token !== 'string' || token.length === 0) {
             next(new Error('缺少身份令牌'));
             return;
         }
+        let auth: { role: PlayerRef['role']; subject: string };
         try {
-            socket.data.auth = verifyAccessToken(token);
-            next();
+            auth = verifyAccessToken(token);
         } catch (err) {
             next(err instanceof Error ? err : new Error('身份验证失败'));
+            return;
         }
+        try {
+            const identity = await this.resolveIdentity({ role: auth.role, id: auth.subject });
+            socket.data.auth = auth;
+            socket.data.identity = identity;
+            next();
+        } catch (err) {
+            next(err instanceof Error ? err : new Error('身份信息解析失败'));
+        }
+    }
+
+    public handleConnection(socket: Socket): void {
+        const identity = socket.data.identity as PlayerIdentity | undefined;
+        if (identity === undefined) {
+            socket.emit('mp:error', { message: '缺少身份信息' });
+            socket.disconnect(true);
+            return;
+        }
+        // 监听器必须在连接事件后同步注册（无 await），与握手中间件配合杜绝事件丢失
+        socket.on('mp:join', (payload: unknown) => void this.handleJoin(socket, identity, payload));
+        socket.on('mp:leave', () => void this.handleLeave(socket));
+        socket.on('mp:answer', (payload: unknown) => void this.handleAnswer(socket, payload));
+        socket.on('disconnect', () => void this.handleDisconnect(socket));
+        log.info(`对战连接建立 player=${identity.role}:${identity.id} (${identity.username})`);
     }
 
     private async resolveIdentity(player: PlayerRef): Promise<PlayerIdentity> {
@@ -104,24 +131,6 @@ export class MultiplayerService {
             roundDistanceKm: null,
             hasAnswered: false,
         };
-    }
-
-    public async handleConnection(socket: Socket): Promise<void> {
-        // verifyAccessToken 返回 { role, subject }，subject 即玩家唯一标识，映射为 PlayerRef.id
-        const auth = socket.data.auth as { role: PlayerRef['role']; subject: string } | undefined;
-        if (auth === undefined) {
-            socket.emit('mp:error', { message: '缺少身份信息' });
-            socket.disconnect(true);
-            return;
-        }
-        const player: PlayerRef = { role: auth.role, id: auth.subject };
-        const identity = await this.resolveIdentity(player);
-        socket.data.identity = identity;
-        log.info(`对战连接建立 player=${identity.role}:${identity.id} (${identity.username})`);
-        socket.on('mp:join', (payload: unknown) => void this.handleJoin(socket, identity, payload));
-        socket.on('mp:leave', () => void this.handleLeave(socket));
-        socket.on('mp:answer', (payload: unknown) => void this.handleAnswer(socket, payload));
-        socket.on('disconnect', () => void this.handleDisconnect(socket));
     }
 
     private async handleJoin(socket: Socket, identity: PlayerIdentity, payload: unknown): Promise<void> {

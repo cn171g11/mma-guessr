@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 
-import { redis } from '../src/db/redis.js';
 import {
     closeInfra,
     getApp,
     makeRandomEmail,
     obtainVerificationCode,
     prepareDatabase,
+    resetAppRedis,
     resetAuthState,
 } from './helpers.js';
 
@@ -122,7 +122,7 @@ describe('GET /api/leaderboard 排行榜', () => {
     it('ZSET 缓存丢失后从 DB 自动重建（校准）', async () => {
         const session = await createUserSession();
         await submitGame(session.accessToken, 4800);
-        await redis.flushall();
+        await resetAppRedis();
 
         const response = await fetchLeaderboard('?mode=classic');
         expect(response.status).toBe(200);

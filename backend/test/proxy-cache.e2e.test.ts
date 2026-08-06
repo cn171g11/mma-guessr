@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import request from 'supertest';
 
 import { redis } from '../src/db/redis.js';
-import { closeInfra, getApp, prepareDatabase } from './helpers.js';
+import { closeInfra, getApp, prepareDatabase, resetAppRedis } from './helpers.js';
 
 const SEARCH_PAYLOAD = JSON.stringify({
     data: [
@@ -60,7 +60,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-    await redis.flushall();
+    await resetAppRedis();
     await stubMapillaryNetwork();
 });
 

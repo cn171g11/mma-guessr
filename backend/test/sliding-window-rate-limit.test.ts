@@ -5,6 +5,7 @@ import request from 'supertest';
 import { redis } from '../src/db/redis.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { slidingWindowRateLimit } from '../src/utils/slidingWindowRateLimit.js';
+import { resetAppRedis } from './helpers.js';
 
 let defaultApp: express.Express;
 
@@ -31,7 +32,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-    await redis.flushall();
+    await resetAppRedis();
 });
 
 afterAll(async () => {

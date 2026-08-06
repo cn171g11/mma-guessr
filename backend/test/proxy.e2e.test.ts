@@ -1,15 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 
-import { redis } from '../src/db/redis.js';
-import { closeInfra, getApp, prepareDatabase } from './helpers.js';
+import { closeInfra, getApp, prepareDatabase, resetAppRedis } from './helpers.js';
 
 beforeAll(async () => {
     await prepareDatabase();
 });
 
 beforeEach(async () => {
-    await redis.flushall();
+    await resetAppRedis();
 });
 
 afterAll(async () => {
