@@ -75,17 +75,12 @@ npm run dev      # http://localhost:3000/api/health
 
 后端启动前需复制 `.env.example` 为 `.env`（可选，默认值与 `docker-compose.yml` 一致）。更多见 [backend/README.md](backend/README.md)。
 
-### 3.3 配置 Mapillary Token（前端）
+### 3.3 配置 Mapillary Token（仅服务端）
 
 1. 在 [Mapillary 开发者中心](https://www.mapillary.com/developer/api-documentation) 申请 access token（免费）。
-2. 打开 `frontend/src/js/config.js`，替换 `MAPILLARY_TOKEN`：
+2. 只写入后端环境变量：复制 `backend/.env.example` 为 `backend/.env`，填写 `MAPILLARY_TOKEN`。前端不持有任何密钥，街景搜索与全景图一律经 `/api/proxy` 走服务端。
 
-```js
-const MAPILLARY_TOKEN = 'MLY|你的新token';
-```
-
-> ⚠️ **安全提醒**：token 硬编码在仓库中且会随仓库公开。
-> 请使用限额内的低权限 token；一旦泄露，请到 Mapillary 后台吊销后更换。
+> ⚠️ **安全提醒**：密钥严禁硬编码进前端或 `frontend/tools/` 脚本（已全部改为仅读环境变量）。一旦泄露，请到 Mapillary 后台吊销并更换。
 
 > 直接用浏览器打开 `frontend/src/index.html`（`file://`）大部分功能可用，
 > 但部分浏览器对跨域请求有限制，**推荐用静态服务器方式**。
@@ -212,7 +207,7 @@ npm run build         # tsc 构建到 dist/
 > **后端 CI 集成验证**：临时在 CI 中启动 PostgreSQL 与 Redis 容器，启动编译产物后
 > 请求 `/api/health`，`status` 为 `ok` 才算通过。
 
-> **首次使用需在仓库配置 Secret**：Settings → Secrets and variables → Actions → 新建 `MAPILLARY_TOKEN`（用于 `streetview.yml`，未配置时脚本回退到内置 token）。
+> **首次使用需在仓库配置 Secret**：Settings → Secrets and variables → Actions → 新建 `MAPILLARY_TOKEN`（用于 `streetview.yml`；未配置时验证脚本会直接失败）。
 
 ---
 
@@ -237,7 +232,7 @@ node tools/verify-world-expand.js       # 候选世界点位验证（6 并发，
 node tools/validate-data.js             # 题库数据完整性校验（CI 中使用，无网络）
 ```
 
-> 三个 `verify-*.js` 脚本优先读取环境变量 `MAPILLARY_TOKEN`，未设置时回退到内置 token。
+> `verify-*.js` 脚本必须通过环境变量 `MAPILLARY_TOKEN` 提供密钥，未设置时直接退出（密钥不内置在脚本中）。
 
 > ⚠️ `tools/` 直接读写 `frontend/src/js/data.js`，运行后请重新执行 `npm run format`。
 

@@ -11,11 +11,16 @@ export interface PlayerRef {
 
 export interface GameRoundInput {
     name: string;
+    locationId?: number | null;
     distanceKm: number | null;
     score: number;
     imageId: string | null;
     xp: number;
     difficulty: number;
+    guessLat?: number | null;
+    guessLng?: number | null;
+    answerLat?: number | null;
+    answerLng?: number | null;
 }
 
 export interface SubmitGameInput {

@@ -9,6 +9,8 @@ import {
     prepareDatabase,
     resetAuthState,
 } from './helpers.js';
+import { makeValidRound } from './scoreFixtures.js';
+import type { GameMode } from '../src/games/types.js';
 
 const VALID_PASSWORD = 'secret123';
 
@@ -39,11 +41,11 @@ function fetchProfile(token: string): request.Test {
     return request(getApp()).get('/api/profile').set('Authorization', `Bearer ${token}`);
 }
 
-function submitGame(token: string, mode: string, totalScore: number): request.Test {
+function submitGame(token: string, mode: GameMode, totalScore: number): request.Test {
     return request(getApp())
         .post('/api/games')
         .set('Authorization', `Bearer ${token}`)
-        .send({ mode, totalScore, rounds: [{ name: '北京·天安门', distanceKm: 1, score: totalScore }] });
+        .send({ mode, totalScore, rounds: [makeValidRound(mode, null, totalScore)] });
 }
 
 beforeAll(async () => {

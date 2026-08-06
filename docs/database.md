@@ -60,7 +60,7 @@
 | `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless / daily / duel |
 | `region` | `VARCHAR(20)` | 仅区域模式非空 |
 | `total_score` | `INT` | 非空 |
-| `rounds` | `JSONB` | 回合明细（name / distanceKm / score / imageId / xp / difficulty） |
+| `rounds` | `JSONB` | 回合明细（name / locationId / distanceKm / score / imageId / xp / difficulty / guessLat / guessLng / answerLat / answerLng） |
 | `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
 
 索引：`game_results_player_created_idx`（玩家 + 时间倒序，历史记录）、
@@ -93,7 +93,7 @@
 
 ## Redis
 
-连接串来自环境变量 `REDIS_URL`（开发默认 `redis://localhost:6379`）。
+连接串来自环境变量 `REDIS_URL`（开发默认 `redis://:mma@localhost:6379`，与 compose 的 `requirepass` 对应；生产必须设置强随机密码）。
 
 ### 键设计
 

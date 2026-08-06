@@ -14,11 +14,16 @@ import { parseBody, parseQuery } from '../utils/validate.js';
 
 const roundSchema = z.object({
     name: z.string().min(1, '地点名称不能为空').max(120, '地点名称过长'),
+    locationId: z.number().int().positive().nullable().optional(),
     distanceKm: z.number().min(0).max(40075, '距离超出一周范围').nullable(),
     score: z.number().int().min(0).max(APP_CONSTANTS.MAX_ROUND_SCORE, '单轮得分超限'),
     imageId: z.string().min(1).max(64).nullable().optional(),
     xp: z.number().int().min(0).max(APP_CONSTANTS.MAX_ROUND_SCORE).optional(),
     difficulty: z.number().int().min(1).max(5).optional(),
+    guessLat: z.number().min(-90).max(90).nullable().optional(),
+    guessLng: z.number().min(-180).max(180).nullable().optional(),
+    answerLat: z.number().min(-90).max(90).nullable().optional(),
+    answerLng: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const submitSchema = z.object({
@@ -72,11 +77,16 @@ gamesRouter.post(
         const { mode, region, totalScore, rounds: submittedRounds } = parseBody(submitSchema, req.body);
         const rounds = submittedRounds.map((round) => ({
             name: round.name,
+            locationId: round.locationId ?? null,
             distanceKm: round.distanceKm,
             score: round.score,
             imageId: round.imageId ?? null,
             xp: round.xp ?? 0,
             difficulty: round.difficulty ?? 1,
+            guessLat: round.guessLat ?? null,
+            guessLng: round.guessLng ?? null,
+            answerLat: round.answerLat ?? null,
+            answerLng: round.answerLng ?? null,
         }));
         const game = await gamesService.submitGame(playerRefOf(req), {
             mode,

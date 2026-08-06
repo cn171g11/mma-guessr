@@ -12,7 +12,12 @@ const execP = promisify(exec);
 
 const ROOT = path.resolve(__dirname, '..');
 const GAME = path.join(ROOT, 'src', 'js', 'data.js');
-const TOKEN = 'MLY|27847157814868912|297a1717444edeb373bb94009d2df54a';
+// 密钥仅从环境变量读取，避免再次提交到仓库；未设置时直接失败
+const TOKEN = process.env.MAPILLARY_TOKEN;
+if (!TOKEN) {
+    console.error('❌ 未设置 MAPILLARY_TOKEN 环境变量（Mapillary 密钥不再内置到脚本中）。');
+    process.exit(1);
+}
 
 // 合并所有候选
 const europe = require('./candidates-europe.js');

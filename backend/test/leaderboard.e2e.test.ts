@@ -10,6 +10,7 @@ import {
     resetAppRedis,
     resetAuthState,
 } from './helpers.js';
+import { makeValidRound } from './scoreFixtures.js';
 
 const VALID_PASSWORD = 'secret123';
 
@@ -40,7 +41,7 @@ function submitGame(token: string, score: number) {
     return request(getApp())
         .post('/api/games')
         .set('Authorization', `Bearer ${token}`)
-        .send({ mode: 'classic', totalScore: score, rounds: [{ name: '北京·天安门', distanceKm: 1, score }] });
+        .send({ mode: 'classic', totalScore: score, rounds: [makeValidRound('classic', null, score)] });
 }
 
 function fetchLeaderboard(query = ''): request.Test {

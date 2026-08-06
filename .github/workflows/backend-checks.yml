@@ -22,6 +22,15 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
+            - name: Reject hardcoded Mapillary tokens
+              working-directory: ${{ github.workspace }}
+              run: |
+                  if grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git --exclude-dir=_site --exclude-dir=release 'MLY\|[0-9]{10,}\|[0-9A-Za-z]{20,}' .; then
+                      echo "::error::检测到硬编码的 Mapillary Token，禁止提交！请改用环境变量 MAPILLARY_TOKEN（仅服务端持有）。"
+                      exit 1
+                  fi
+                  echo "no hardcoded Mapillary token found"
+
             - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
@@ -54,7 +63,7 @@ jobs:
         env:
             NODE_ENV: development
             DATABASE_URL: postgres://mma:mma@localhost:5432/mma_guessr
-            REDIS_URL: redis://localhost:6379
+            REDIS_URL: redis://:mma@localhost:6379
         services:
             postgres:
                 image: postgres:16-alpine
@@ -74,7 +83,8 @@ jobs:
                 ports:
                     - 6379:6379
                 options: >-
-                    --health-cmd "redis-cli ping"
+                    --requirepass mma
+                    --health-cmd "redis-cli -a mma ping"
                     --health-interval 5s
                     --health-timeout 5s
                     --health-retries 10

@@ -343,6 +343,7 @@ export class MultiplayerService {
                 const result = history.results.find((entry) => entry.playerId === player.playerId);
                 return {
                     name: history.locationName,
+                    locationId: history.locationId,
                     distanceKm: result?.distanceKm ?? null,
                     score: result?.score ?? 0,
                     imageId: null,

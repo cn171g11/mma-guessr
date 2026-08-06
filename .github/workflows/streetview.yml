@@ -46,7 +46,7 @@ jobs:
             - name: Run verification script
               run: node tools/${{ inputs.script }}.js
               env:
-                  # Prefer the repo secret; fall back to the built-in token when unset
+                  # 脚本仅接受环境变量中的密钥；未配置 secrets.MAPILLARY_TOKEN 时直接失败
                   MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN }}
 
             - name: Upload verification report

@@ -25,8 +25,7 @@ let map = null,
     guessPoint = null,
     answerMarker = null,
     routeLine = null;
-let mapillaryViewer = null,
-    isMapEnlarged = false,
+let isMapEnlarged = false,
     isSubmitting = false;
 let streetViewError = null; // 最近一次街景加载失败的错误报告数据
 
@@ -193,11 +192,16 @@ function buildGamePayload() {
         totalScore: state.totalScore,
         rounds: state.history.map((h) => ({
             name: h.name,
+            locationId: h.locationId != null ? h.locationId : null,
             distanceKm: h.distanceKm,
             score: h.score,
             imageId: h.imageId || null,
             xp: h.xp || 0,
             difficulty: h.difficulty || 1,
+            guessLat: h.guessLat != null ? h.guessLat : null,
+            guessLng: h.guessLng != null ? h.guessLng : null,
+            answerLat: h.answerLat != null ? h.answerLat : null,
+            answerLng: h.answerLng != null ? h.answerLng : null,
         })),
     };
 }
@@ -595,31 +599,19 @@ async function findMapillaryImage(lat, lng) {
     return null;
 }
 
-// 街景搜索：在线时优先走服务端代理（不暴露密钥），失败或离线时回退直连
+// 街景搜索：仅走服务端代理（密钥仅存于服务端，前端永不持有）。
+// 代理不可达/失败时返回 null 并记录错误，由 panorama-fallback 兜底提示，不回退直连 Mapillary。
 async function searchStreetView(bbox, errLog, offset) {
-    if (MmaApi.isOnline()) {
-        try {
-            const response = await fetch(
-                `${API_BASE}/api/proxy/mapillary/search?bbox=${encodeURIComponent(bbox)}&limit=20`
-            );
-            if (response.ok) return await response.json();
-            errLog.push(`proxy bbox=${bbox} → HTTP ${response.status}`);
-        } catch (e) {
-            errLog.push(`proxy bbox=${bbox} → 网络错误: ${e.message}`);
-        }
-    }
-    const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
     try {
-        const res = await fetch(url);
-        if (!res.ok) {
-            errLog.push(`bbox=${bbox} → HTTP ${res.status}`);
-            return null;
-        }
-        return await res.json();
+        const response = await fetch(
+            `${API_BASE}/api/proxy/mapillary/search?bbox=${encodeURIComponent(bbox)}&limit=20`
+        );
+        if (response.ok) return await response.json();
+        errLog.push(`proxy bbox=${bbox} → HTTP ${response.status}`);
     } catch (e) {
-        errLog.push(`bbox=${bbox} → 网络错误: ${e.message}`);
-        return null;
+        errLog.push(`proxy bbox=${bbox} → 网络错误: ${e.message}`);
     }
+    return null;
 }
 
 // 【修复】安全的地图视角切换：容器尺寸异常时 flyTo/flyToBounds 会抛 NaN 异常，
@@ -695,6 +687,7 @@ async function loadRound() {
         lng: found.lng,
         difficulty: loc.difficulty,
         imageId: found.imageId,
+        locationId: loc.id != null ? loc.id : null,
     };
     isSubmitting = false; // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
     showPanorama(found.imageId);
@@ -708,64 +701,166 @@ function skipLocation() {
     loadRound();
 }
 
+// ==========================================================
+// 【360° 街景查看器（自研，走服务端代理）】
+// v1.17.0 起移除 MapillaryJS：该库需客户端密钥才能直连 Mapillary。
+// 改为经 /api/proxy/mapillary/image/:id 取 equirectangular 全景图，
+// 用 three.js 球面渲染实现拖拽环视与滚轮/双指缩放，密钥永不下发浏览器。
+// ==========================================================
+const PANO_IMAGE_WIDTH = 2048;
+const PANO_MIN_FOV = 30;
+const PANO_MAX_FOV = 100;
+const PANO_LOOK_SPEED = 0.005;
+const PANO_SPHERE_RADIUS = 500;
+const PANO_DEFAULT_FOV = 75;
+
+let panoViewer = null; // { renderer, camera, sphere, animateId }
+
+function showPanoramaFallback() {
+    $('panorama-loading').style.display = 'none';
+    $('panorama-fallback').style.display = 'flex';
+}
+
+function resizePanoViewer() {
+    if (!panoViewer) return;
+    const container = $('panorama-view');
+    const width = container.clientWidth || container.offsetWidth || 800;
+    const height = container.clientHeight || container.offsetHeight || 600;
+    if (width <= 0 || height <= 0) return;
+    panoViewer.camera.aspect = width / height;
+    panoViewer.camera.updateProjectionMatrix();
+    panoViewer.renderer.setSize(width, height);
+}
+
+function initPanoViewer() {
+    const container = $('panorama-view');
+    if (!container) return;
+    const width = container.clientWidth || container.offsetWidth || 800;
+    const height = container.clientHeight || container.offsetHeight || 600;
+
+    const camera = new THREE.PerspectiveCamera(PANO_DEFAULT_FOV, width / height, 0.1, 1100);
+    camera.rotation.order = 'YXZ';
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    renderer.domElement.style.display = 'block';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    container.appendChild(renderer.domElement);
+
+    const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(PANO_SPHERE_RADIUS, 64, 48),
+        new THREE.MeshBasicMaterial({ side: THREE.BackSide })
+    );
+    const scene = new THREE.Scene();
+    scene.add(sphere);
+
+    let isDragging = false;
+    let prevX = 0;
+    let prevY = 0;
+
+    container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        prevX = e.clientX;
+        prevY = e.clientY;
+        e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - prevX;
+        const dy = e.clientY - prevY;
+        prevX = e.clientX;
+        prevY = e.clientY;
+        camera.rotation.y -= dx * PANO_LOOK_SPEED;
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - dy * PANO_LOOK_SPEED));
+    });
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+    container.addEventListener(
+        'wheel',
+        (e) => {
+            e.preventDefault();
+            camera.fov = Math.max(PANO_MIN_FOV, Math.min(PANO_MAX_FOV, camera.fov + e.deltaY * 0.05));
+            camera.updateProjectionMatrix();
+        },
+        { passive: false }
+    );
+    container.addEventListener(
+        'touchstart',
+        (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                prevX = e.touches[0].clientX;
+                prevY = e.touches[0].clientY;
+            }
+        },
+        { passive: true }
+    );
+    window.addEventListener('touchmove', (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - prevX;
+        const dy = e.touches[0].clientY - prevY;
+        prevX = e.touches[0].clientX;
+        prevY = e.touches[0].clientY;
+        camera.rotation.y -= dx * PANO_LOOK_SPEED;
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - dy * PANO_LOOK_SPEED));
+    });
+    window.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+
+    let animateId = null;
+    function animate() {
+        animateId = requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', resizePanoViewer);
+    panoViewer = { renderer, camera, sphere, animateId };
+}
+
+function setPanoImage(imageId) {
+    if (!panoViewer) return;
+    const url = `${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`;
+    const texture = new THREE.TextureLoader().load(
+        url,
+        () => {
+            $('panorama-loading').style.display = 'none';
+        },
+        undefined,
+        () => {
+            streetViewError = { stage: 'viewer', imageId: imageId, viewerError: '全景图加载失败' };
+            showPanoramaFallback();
+        }
+    );
+    texture.encoding = THREE.sRGBEncoding;
+    panoViewer.sphere.material.map = texture;
+    panoViewer.sphere.material.needsUpdate = true;
+    panoViewer.camera.rotation.set(0, 0, 0);
+    panoViewer.camera.fov = PANO_DEFAULT_FOV;
+    panoViewer.camera.updateProjectionMatrix();
+    resizePanoViewer();
+}
+
 function showPanorama(imageId) {
     $('panorama-loading').style.display = 'flex';
     $('panorama-fallback').style.display = 'none';
     try {
-        if (!mapillaryViewer) {
-            // MapillaryJS 自带旋转(拖拽)、缩放(滚轮/双指)、序列导航等交互
-            mapillaryViewer = new mapillary.Viewer({
-                container: 'panorama-view',
-                accessToken: MAPILLARY_TOKEN,
-                imageId: imageId,
-                component: { cover: false, bearing: true, zoom: true },
-            });
-            mapillaryViewer.on('image', () => ($('panorama-loading').style.display = 'none'));
-            mapillaryViewer.on('error', (err) => {
-                $('panorama-loading').style.display = 'none';
-                $('panorama-fallback').style.display = 'flex';
-                streetViewError = {
-                    stage: 'viewer',
-                    imageId: imageId,
-                    viewerError: err && err.message ? err.message : String(err),
-                    tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…',
-                };
-            });
-            // 【修复】容器刚由隐藏变为可见，强制让查看器重算画布尺寸，避免黑屏
-            setTimeout(() => {
-                try {
-                    mapillaryViewer.resize();
-                } catch (e) {}
-            }, 300);
-            window.addEventListener('resize', () => {
-                try {
-                    mapillaryViewer.resize();
-                } catch (e) {}
-            });
+        if (!panoViewer) {
+            initPanoViewer();
+            // 容器刚由隐藏变为可见，尺寸就绪后再挂纹理，避免黑屏
+            setTimeout(() => setPanoImage(imageId), 300);
         } else {
-            mapillaryViewer
-                .moveTo(imageId)
-                .then(() => ($('panorama-loading').style.display = 'none'))
-                .catch((err) => {
-                    $('panorama-loading').style.display = 'none';
-                    $('panorama-fallback').style.display = 'flex';
-                    streetViewError = {
-                        stage: 'viewer',
-                        imageId: imageId,
-                        viewerError: err && err.message ? err.message : String(err),
-                        tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…',
-                    };
-                });
+            setPanoImage(imageId);
         }
     } catch (e) {
-        $('panorama-loading').style.display = 'none';
-        $('panorama-fallback').style.display = 'flex';
         streetViewError = {
             stage: 'exception',
             imageId: imageId,
             viewerError: e && e.message ? e.message : String(e),
-            tokenPrefix: MAPILLARY_TOKEN.slice(0, 12) + '…',
         };
+        showPanoramaFallback();
     }
 }
 
@@ -820,8 +915,7 @@ function buildErrReportText() {
     lines.push('');
     lines.push('【请求参数】');
     lines.push(`搜索偏移  : ${err.offsets ? err.offsets.join(', ') : '[0.004, 0.008, 0.012]'}`);
-    lines.push(`API       : graph.mapillary.com/images`);
-    lines.push(`Token前缀 : ${err.tokenPrefix || (MAPILLARY_TOKEN ? MAPILLARY_TOKEN.slice(0, 12) + '…' : '缺失')}`);
+    lines.push(`API       : ${API_BASE}/api/proxy/mapillary/*`);
     lines.push('');
     lines.push('【浏览器环境】');
     lines.push(`UA        : ${navigator.userAgent}`);
@@ -915,7 +1009,18 @@ function stopTimer() {
 function timeoutNoGuess() {
     isSubmitting = true;
     const round = state.current;
-    state.history.push({ name: round.name, distanceKm: null, score: 0, difficulty: round.difficulty, xp: 0 });
+    state.history.push({
+        name: round.name,
+        distanceKm: null,
+        score: 0,
+        difficulty: round.difficulty,
+        xp: 0,
+        locationId: round.locationId != null ? round.locationId : null,
+        guessLat: null,
+        guessLng: null,
+        answerLat: round.lat,
+        answerLng: round.lng,
+    });
     const targetLatLng = L.latLng(round.lat, round.lng);
     answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
     safeFly(
@@ -983,7 +1088,18 @@ function submitGuess() {
     const distanceKm = guessPoint.distanceTo(targetLatLng) / 1000;
     const score = calcScore(distanceKm);
     state.totalScore += score;
-    state.history.push({ name: round.name, distanceKm, score, imageId: round.imageId, difficulty: round.difficulty });
+    state.history.push({
+        name: round.name,
+        distanceKm,
+        score,
+        imageId: round.imageId,
+        difficulty: round.difficulty,
+        locationId: round.locationId != null ? round.locationId : null,
+        guessLat: guessPoint.lat,
+        guessLng: guessPoint.lng,
+        answerLat: round.lat,
+        answerLng: round.lng,
+    });
 
     // ---- 距离可视化：答案蓝点 + 虚线 + 飞行取景 ----
     answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);

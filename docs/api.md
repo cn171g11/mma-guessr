@@ -145,7 +145,19 @@
   "region": null,
   "totalScore": 12000,
   "rounds": [
-    { "name": "北京·天安门", "distanceKm": 2.5, "score": 4800, "imageId": "img-1", "xp": 0, "difficulty": 3 }
+    {
+      "name": "北京·天安门",
+      "locationId": 42,
+      "distanceKm": 2.5,
+      "score": 4800,
+      "imageId": "img-1",
+      "xp": 0,
+      "difficulty": 3,
+      "guessLat": 39.9,
+      "guessLng": 116.4,
+      "answerLat": 39.9055,
+      "answerLng": 116.3976
+    }
   ]
 }
 ```
@@ -153,7 +165,8 @@
 - `mode`：`classic` / `challenge` / `region` / `china` / `endless` / `daily` / `duel`
 - `region`：仅 `region` 模式必填；其他模式传了返回 `400`
 - `daily` 模式：仅注册用户可提交、每天限一次（重复提交返回 `409`）；`duel` 模式由对战服务在对局结束时自动落库
-- 乐观校验：`totalScore` 必须等于 `rounds` 各 `score` 之和，杜绝明显刷分
+- **服务端防伪校验**：每轮得分由服务端按 `distanceKm` 与模式/区域参数重算，提交的 `score` 与之不一致返回 `400`；携带 `guessLat/guessLng/answerLat/answerLng` 时还会核验距离与坐标自洽（不符返回 `400`）；`totalScore` 必须等于重算后的各轮得分之和
+- `daily` 模式必须携带 `locationId`（属于今日题单）与 `answerLat/answerLng`，题目不属于今日题单或答案坐标偏离题目坐标超过阈值返回 `400`，且非法提交不会消耗当天次数
 - 每轮 `score` 上限 5000；`distanceKm` 为 `null` 表示超时未提交
 - 成功后进度快照增量累计：场次 += 轮数、总分 += totalScore、最佳取最高、猜中计为得分 > 0 的轮数
 

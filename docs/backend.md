@@ -65,7 +65,8 @@ npm run db:up && npm run db:migrate && npm test
 - `PORT`：服务端口，默认 `3000`
 - `LOG_LEVEL`：日志级别（`debug` / `info` / `warn` / `error`），默认 `info`
 - `DATABASE_URL`：PostgreSQL 连接串
-- `REDIS_URL`：Redis 连接串
+- `REDIS_URL`：Redis 连接串（compose 已开启 `requirepass`，连接串需带密码）
+- `POSTGRES_PASSWORD` / `REDIS_PASSWORD`：供 `docker-compose.yml` 注入容器密码（开发默认见 `.env.example`；生产必须改为强随机值）
 - `MAPILLARY_TOKEN`：Mapillary API 密钥（仅服务端持有）
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`：JWT 签名密钥（生产必须改为强随机值）
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`：邮箱验证码 SMTP 配置
@@ -98,7 +99,7 @@ backend/
 │   ├── app.ts             # Express 应用组装
 │   └── index.ts           # 启动入口（HTTP + Socket.IO 挂载）
 ├── Dockerfile               # 生产镜像（多阶段构建，GHCR 推送）
-├── docker-compose.yml       # 开发环境：PostgreSQL + Redis
+├── docker-compose.yml       # 仅本地开发：PostgreSQL + Redis（回环绑定 + requirepass，禁止直接用于生产）
 └── eslint.config.mjs        # ESLint 扁平配置
 ```
 

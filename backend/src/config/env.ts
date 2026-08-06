@@ -86,7 +86,7 @@ export const env = {
 
     DATABASE_URL: required('DATABASE_URL', 'postgres://mma:mma@localhost:5432/mma_guessr'),
 
-    REDIS_URL: required('REDIS_URL', 'redis://localhost:6379'),
+    REDIS_URL: required('REDIS_URL', 'redis://:mma@localhost:6379'),
 
     MAPILLARY_TOKEN: process.env.MAPILLARY_TOKEN ?? '',
 

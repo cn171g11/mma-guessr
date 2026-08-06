@@ -51,6 +51,12 @@ export async function getToday(player: PlayerRef): Promise<DailyChallenge> {
     return { date, locations, played };
 }
 
+// 提交校验用：返回今天题单的完整题目记录，供 games 服务逐题核验
+export async function getTodayLocationRecords(): Promise<LocationRecord[]> {
+    const ids = await resolveTodayIds();
+    return locationsService.getLocationsByIds(ids);
+}
+
 // 每日挑战提交前置校验：仅注册用户可参与，且当天仅一次
 export async function guardDailySubmission(player: PlayerRef): Promise<void> {
     if (player.role !== 'user') {

@@ -43,6 +43,7 @@ git push origin main
 
 计划通过 `docker-compose` 部署 Node.js / PostgreSQL / Redis / Nginx：
 
+- ⚠️ **禁止复用仓库里的 `backend/docker-compose.yml` 直接上生产**：该文件仅用于本地开发，数据库/Redis 端口只绑定 `127.0.0.1`。生产环境请为 PostgreSQL / Redis 注入强随机密码、保持回环绑定或改走内网，并通过 Nginx 反向代理对外只暴露 80/443
 - 挂载持久化卷；PostgreSQL 定时 `pg_dump` 备份，Redis 开启 AOF + RDB 双重持久化
 - Nginx 反向代理并开启 HTTPS（Let's Encrypt）
 
@@ -59,5 +60,5 @@ git push origin main
 ## 密钥与 Secret
 
 - 后端环境变量见 [backend.md](backend.md)（复制 `backend/.env.example` 为 `backend/.env`，已 git 忽略）
-- CI Secret：仓库 **Settings → Secrets and variables → Actions** 新建 `MAPILLARY_TOKEN`（用于街景覆盖验证，见 [locations.md](locations.md)），未配置时脚本回退到内置 token
+- CI Secret：仓库 **Settings → Secrets and variables → Actions** 新建 `MAPILLARY_TOKEN`（用于街景覆盖验证，见 [locations.md](locations.md)；未配置时验证脚本直接失败）
 - 生产环境必须设置强随机 `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`，勿用仓库默认值
