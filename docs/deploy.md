@@ -28,7 +28,7 @@ git push origin main
 | 入口 | 方式 | 产物 |
 | --- | --- | --- |
 | `backend.yml` | Actions 页手动运行，`mode=image` | `ghcr.io/<owner>/<repo>-backend`（`latest` + 提交 SHA，linux/amd64 + linux/arm64 多架构） |
-| `release.yml` | Actions 页手动运行，填写 `version` | 集成测试 → 多架构镜像 `:版本号` + `latest` → Git 标签 `v版本号` → GitHub Release（含跨平台产物） |
+| `release.yml` | Actions 页手动运行，填写 `version` | **整体发布**：集成测试 → 前端部署到 GitHub Pages → 多架构后端镜像 `:版本号` + `latest` → Git 标签 `v版本号` → GitHub Release（含跨平台产物） |
 
 `release.yml` 的 Release 附带跨平台产物（已附 SHA256 校验和）：
 

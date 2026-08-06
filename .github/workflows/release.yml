@@ -4,7 +4,7 @@ on:
     workflow_dispatch:
         inputs:
             version:
-                description: Release version (e.g. 1.0.0; creates tag v1.0.0, pushes multi-arch image ghcr.io/...-backend:1.0.0 and attaches cross-platform artifacts)
+                description: Release version (e.g. 1.0.0). Whole-project release, deploys frontend to GitHub Pages, pushes multi-arch backend image ghcr.io/...-backend:1.0.0, creates tag v1.0.0 and attaches cross-platform artifacts
                 required: true
                 type: string
             includeIntegration:
@@ -59,14 +59,14 @@ jobs:
             - name: Package frontend (static site)
               working-directory: frontend
               run: |
-                  mkdir -p release
+                  mkdir -p release/frontend
                   cp -r index.html MmaGuessr.html src .nojekyll release/frontend/
                   (cd release/frontend && zip -rq ../mma-guessr-frontend-${{ inputs.version }}.zip .)
 
             - name: Package backend (Node runtime bundle)
               working-directory: backend
               run: |
-                  mkdir -p release
+                  mkdir -p release/backend
                   cp -r dist package.json package-lock.json .env.example release/backend/
                   (cd release/backend && zip -rq ../mma-guessr-backend-${{ inputs.version }}.zip .)
 
@@ -82,6 +82,40 @@ jobs:
               with:
                   name: release-assets
                   path: release/*
+
+    # 整体发布：release 同时把前端静态站部署到 GitHub Pages（与 deploy.yml 相同的官方发布流程）
+    deploy-frontend:
+        name: Deploy frontend to GitHub Pages
+        needs: quality
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            pages: write
+            id-token: write
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Configure GitHub Pages
+              uses: actions/configure-pages@v5
+
+            - name: Assemble site (frontend is static, no build)
+              run: |
+                  mkdir -p _site
+                  cp -r frontend/index.html frontend/MmaGuessr.html frontend/src frontend/.nojekyll _site/
+                  find _site -type f | sort
+
+            - name: Upload artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: _site
+
+            - name: Deploy
+              id: deployment
+              uses: actions/deploy-pages@v4
 
     publish:
         name: Multi-arch image / tag / GitHub Release
@@ -139,7 +173,11 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   cat > release-notes.md <<EOF
-                  ## 镜像（多架构 linux/amd64 + linux/arm64）
+                  ## 前端（GitHub Pages，已随本次 release 部署）
+
+                  - 静态站已发布到 Pages（见本页 Deployments / 仓库 Settings → Pages）
+
+                  ## 后端镜像（多架构 linux/amd64 + linux/arm64）
 
                   \`\`\`
                   ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}
