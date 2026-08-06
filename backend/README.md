@@ -37,6 +37,7 @@ npm run dev
 | `npm run db:migrate` | 执行数据库迁移（`src/db/migrations/*.sql`） |
 | `npm test`           | 端到端测试（需要 PG + Redis 可用）          |
 | `npm run test:watch` | 测试监听模式                                |
+| `npm run script:*`   | 运维脚本（见 `scripts/README.md`）          |
 
 ## 测试
 

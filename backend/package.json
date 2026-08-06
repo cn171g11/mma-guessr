@@ -21,7 +21,13 @@
         "db:down": "docker compose down",
         "db:migrate": "tsx src/db/migrate.ts",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "script:check": "node scripts/check.mjs",
+        "script:build": "node scripts/build.mjs",
+        "script:test": "node scripts/test.mjs",
+        "script:clean": "node scripts/clean.mjs",
+        "script:debug": "node scripts/debug.mjs",
+        "script:deploy": "node scripts/deploy.mjs"
     },
     "dependencies": {
         "bcryptjs": "^3.0.3",
