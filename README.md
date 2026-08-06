@@ -1,163 +1,81 @@
 # MmaGuessr · 街景猜位置游戏
 
-一个以 [Mapillary](https://www.mapillary.com/) 为数据源的 **GeoGuessr 风格** 地理猜谜游戏。观察世界各地随机街景，在地图上标记你猜测的位置，系统按实际距离计分。
+基于 [Mapillary](https://www.mapillary.com/) 街景数据的 **GeoGuessr 风格** 地理猜谜游戏，前端 + 后端一体仓库。
 
-> 当前版本：**v1.14.0** · 题库共 **1570 题**（中国模式专属 332 题 · 世界 1238 题）
-
----
-
-## 游戏模式
-
-支持 **五种模式**，覆盖从休闲到硬核的不同体验：
-
-| 模式            | 轮数 | 限时      | 说明                                                                 |
-| --------------- | ---- | --------- | -------------------------------------------------------------------- |
-| 🎯 **经典模式** | 1 轮 | 不限时    | 单轮挑战，距离越近得分越高，满分 5000                                |
-| ⏱ **挑战模式**  | 5 轮 | 每轮 120s | 连续限时 5 轮，累积高分可获得称号（v1.9.0 合并原限时模式与多轮竞赛） |
-| 🌍 **区域限定** | 5 轮 | 不限时    | 限定某大洲出题，范围更小判分更严格                                   |
-| 🇨🇳 **中国模式** | 5 轮 | 不限时    | 中国境内街景（含港澳台），167 个精选点位（v1.9.0 新增）              |
-| ♾️ **无限模式** | 无限 | 不限时    | 从简单地标起步，赚经验升等级，越难经验越多                           |
+| 目录         | 说明                                            | 入口文档                      |
+| ------------ | ----------------------------------------------- | ----------------------------- |
+| `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [frontend/README.md](frontend/README.md) |
+| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [backend/README.md](backend/README.md) |
+| `.github/`   | CI/CD 工作流（前端校验/发布、后端校验/镜像）       | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ---
 
-## 核心玩法
+## 快速开始
 
-1. 从 Mapillary 加载一张随机街景照片
-2. 观察周围环境线索（路牌、建筑风格、植被、地貌、车辆等）
-3. 在右侧小地图上点击标记你猜测的位置
-4. 点击「提交答案」，系统计算实际距离并给出得分
-5. 得分动画 + 猜测点到正确答案的红线可视化
-6. 支持分享成绩
-
-**抽题机制**：采用「洗牌牌堆」算法，保证各地区均衡出现，避免同一地区频繁重复。
-
----
-
-## 特性一览
-
-- 🗺️ **Mapillary 真实街景** — 全球数百万张街景照片数据源
-- 🎨 **深色玻璃质感 UI** — 主界面深色背景 + 玻璃卡片 + 蓝色调（v1.9.0 视觉升级）
-- 📱 **移动端适配** — 窄屏默认隐藏小地图，悬浮按钮可随时展开/收起（v1.8.0）
-- 📚 **游戏文档** — 主菜单一键打开 Notion 文档（玩法教学 + 街景分布）
-- 🏆 **历史最佳** — 成绩通过 `localStorage` 持久化存储
-- 📈 **得分可视化** — 进度条 + 动画 + 距离红线
-- 🔄 **更新记录** — 内置 CHANGELOG 面板，随时查看历史版本更新内容
-- 📐 **分区计分系统** — 中国模式/六大洲独立参数，平衡系数 α + 最小距离阈值 dMin（v1.10.0 重构）
-- 📜 **历史记录面板** — 本地存储 20 局详情，Mapillary 原街景回看，按 r1/r2 排列（v1.11.0）
-- 🔒 **中国模式地图锁定** — 地图范围锁定国境，减少无效拖动（v1.13.0）
-- 📱 **手机横屏适配** — 横屏地图按钮化，不遮挡内容（v1.13.0）
-- 📄 **错误报告导出** — 街景加载失败一键导出诊断报告（v1.13.0）
-
----
-
-## 文件结构
-
-| 文件                                   | 说明                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
-| `src/index.html`                       | 🎮 **游戏主页面**                                                               |
-| `src/css/style.css`                    | 全局样式（深色玻璃质感 UI）                                                     |
-| `src/js/config.js`                     | 全局配置：`MAPILLARY_TOKEN` / `VERSION` / `CHANGELOG` / 模式与分区计分参数      |
-| `src/js/data.js`                       | 地点题库 `LOCATIONS`（1570 条）+ 派生题库 `WORLD_LOCATIONS` / `CHINA_LOCATIONS` |
-| `src/js/game.js`                       | 游戏逻辑：状态、抽题、计分、街景加载、UI 交互                                   |
-| `index.html`                           | 站点首页，自动跳转到 `src/index.html`                                           |
-| `MmaGuessr.html`                       | 旧入口，保持旧书签可用，自动跳转到 `src/index.html`                             |
-| `archive/game.html`                    | 早期原型（自定义题库版，已归档）                                                |
-| `archive/index-prototype.html`         | 早期原型（原 `index.html` 备份，已归档）                                        |
-| `tools/add-china.js`                   | 开发工具：向 `src/js/data.js` 的 `LOCATIONS` 批量插入中国街景点位               |
-| `tools/add-hmt.js`                     | 开发工具：向 `src/js/data.js` 的 `LOCATIONS` 批量插入港澳台街景点位             |
-| `.editorconfig`                        | 编辑器编码与缩进规范                                                            |
-| `.prettierrc.json` / `.prettierignore` | Prettier 代码风格配置                                                           |
-| `package.json`                         | 仅含 Prettier（`npm run format`），无运行时依赖                                 |
-| `.nojekyll`                            | 禁用 GitHub Pages 的 Jekyll 构建                                                |
-| `.gitignore`                           | Git 忽略规则（忽略 `.workbuddy/`）                                              |
-| `README.md`                            | 项目说明文档                                                                    |
-
-> 游戏没有构建步骤：`src/` 中的 HTML/CSS/JS 为纯静态文件，浏览器直接加载。
-
----
-
-## 技术栈
-
-| 技术                                                       | 用途                                         |
-| ---------------------------------------------------------- | -------------------------------------------- |
-| **原生 HTML5 + CSS3**                                      | 页面结构与样式，无前端框架                   |
-| **原生 JavaScript (ES6)**                                  | 全部游戏逻辑，无 JS 框架                     |
-| [Leaflet.js](https://leafletjs.com/) v1.9.4                | 交互式地图（OSM 底图、标记、动画、路线绘制） |
-| [Mapillary.js](https://www.mapillary.com/developer) v4.1.2 | 街景影像加载与展示                           |
-| [OpenStreetMap](https://www.openstreetmap.org/)            | 瓦片地图数据源                               |
-| **Mapillary API** (`graph.mapillary.com`)                  | 街景图像数据接口                             |
-| **localStorage**                                           | 本地持久化存储（历史最佳）                   |
-
-纯前端单页应用，**无需后端服务器**，可部署在任何静态托管平台。
-
----
-
-## 部署
-
-### GitHub Pages（推荐）
+### 前端（无需构建）
 
 ```bash
-git push origin main
-```
-
-先在仓库 **Settings → Pages → Source** 选择 `GitHub Actions`，之后每次推送到 `main`
-都会自动触发 `CI`（代码风格/语法/题库校验）与 `Deploy`（GitHub Pages 发布），
-无需手动构建。游戏入口为 `src/index.html`。详细配置见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-### 任意静态服务器
-
-```bash
-# 使用 Python
-python -m http.server 8080
-
-# 使用 Node.js (npx)
-npx serve .
-```
-
----
-
-## 更新记录
-
-| 版本        | 日期       | 亮点                                                                                         |
-| ----------- | ---------- | -------------------------------------------------------------------------------------------- |
-| **v1.14.0** | 2026-08-01 | 🔒 题库隔离 + ⚖️ 中国题≤20%均衡分配 + 🌍 世界+502 🇨🇳 中国+215 + 🌐 区域平衡+445（题库 1570） |
-| **v1.13.0** | 2026-07-31 | 🔒 中国模式地图锁定 + 📱 横屏适配 + 📄 错误报告导出 + 🌍 世界点位 +176（题库 417）           |
-| **v1.12.0** | 2026-07-30 | 🇨🇳 中国点位全面排查：167→125，新增7城20点，全球题库283→241                                   |
-| **v1.11.0** | 2026-07-30 | 📜 历史记录面板 + Mapillary 街景回看 + r1/r2 回合排列 + 单条删除                             |
-| **v1.10.0** | 2026-07-30 | 📐 计分重构：分区参数 + α 平衡系数 + dMin 阈值；移除假远方位点                               |
-| **v1.9.1**  | 2026-07-29 | 移除管理员面板；Notion 文档同步更新                                                          |
-| **v1.9.0**  | 2026-07-29 | 🎉 新增中国模式 + 挑战模式（合并限时/竞赛）；视觉大升级                                      |
-| **v1.8.0**  | 2026-07-29 | 题库去重 173→167；新增游戏文档入口；移动端小地图优化                                         |
-| **v1.7.0**  | 2026-07-28 | 港澳台街景支持；搜索半径扩展至 1.3km                                                         |
-| **v1.6.0**  | 2026-07-28 | 统一名称为「MmaGuessr」                                                                      |
-| **v1.5.0**  | 2026-07-28 | 题库大幅扩充至 126 题                                                                        |
-| **v1.4.0**  | 2026-07-28 | 版本号展示 + 内置更新记录面板                                                                |
-| **v1.3.0**  | 2026-07-28 | 修复街景切换残留问题                                                                         |
-| **v1.2.0**  | 2026-07-28 | 洗牌牌堆公平抽题；修复时序误判                                                               |
-| **v1.1.0**  | 2026-07-27 | 修复街景加载失败问题                                                                         |
-| **v1.0.0**  | 2026-07-27 | 🚀 首次发布                                                                                  |
-
-完整更新日志可在游戏内「更新记录」面板查看。
-
----
-
-## 开发
-
-本项目为纯静态前端项目，无需安装 Node.js 依赖即可运行。代码格式化使用 [Prettier](https://prettier.io/)：
-
-```bash
-npm install        # 安装 Prettier（仅开发用）
+cd frontend
+npm install        # 仅安装 Prettier（开发工具）
 npm run format     # 格式化 src/ 与 tools/ 下全部代码
 ```
 
-如需使用 `tools/` 下的开发脚本（读写 `src/js/data.js` 的题库）：
+静态服务任选其一，浏览器访问 `http://localhost:8080/src/index.html`：
 
 ```bash
-node tools/add-china.js
-node tools/add-hmt.js
+python -m http.server 8080
+# 或
+npx serve .
 ```
 
-> 完整的配置、构建、上线与贡献指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+### 后端（开发环境）
+
+```bash
+cd backend
+npm run db:up      # docker compose 启动 PostgreSQL + Redis
+npm install
+npm run dev        # http://localhost:3000/api/health
+```
+
+详细说明见 [frontend/README.md](frontend/README.md) 与 [backend/README.md](backend/README.md)。
+
+---
+
+## CI/CD 概览（`.github/workflows/`）
+
+| 工作流          | 触发时机                              | 作用                                                          |
+| --------------- | ------------------------------------- | ------------------------------------------------------------- |
+| `ci.yml`        | `frontend/**` 推送 `main` / PR        | 前端：Prettier 风格、JS 语法、题库数据校验                     |
+| `deploy.yml`    | `frontend/**` 推送 `main`（文档除外） | 前端：校验通过后发布 GitHub Pages                              |
+| `backend.yml`   | `backend/**` 推送 `main` / PR         | 后端：类型检查 / Lint / 构建 + PG/Redis 集成验证 + GHCR 镜像推送 |
+| `streetview.yml`| 手动（`workflow_dispatch`）           | 街景覆盖验证，报告存为 artifact                               |
+
+> 后端集成验证通过 `docker/service` 方式在 CI 中临时启动 PostgreSQL 与 Redis，
+> 冒烟测试 `/api/health` 返回 `status: ok` 才算通过。
+> `backend.yml` 在 `main` 分支推送时还会构建并推送
+> `ghcr.io/<owner>/<repo>-backend` 镜像（latest + 提交 SHA 标签）。
+
+---
+
+## 目录结构
+
+```
+mma-guessr/
+├── frontend/                 # 游戏前端（纯静态，无构建步骤）
+│   ├── src/index.html        # 游戏主页面
+│   ├── src/css/style.css     # 全局样式
+│   ├── src/js/               # config.js（配置）/ data.js（题库）/ game.js（逻辑）
+│   ├── tools/                # 题库维护与验证脚本
+│   ├── archive/              # 已归档的原型文件
+│   └── README.md             # 游戏说明（模式、部署、更新记录）
+├── backend/                  # 后端服务
+│   ├── src/                  # Express + TS 源码
+│   ├── docker-compose.yml    # 开发环境：PostgreSQL + Redis
+│   └── README.md             # 后端说明
+├── .github/workflows/        # CI/CD 流水线
+├── CONTRIBUTING.md           # 开发与贡献指南
+└── LICENSE                   # Apache License 2.0
+```
 
 ---
 
@@ -166,6 +84,4 @@ node tools/add-hmt.js
 本项目以 [Apache License 2.0](LICENSE) 开源发布，版权所有 © 2026 Dinnerb0ne2。
 
 - 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](LICENSE)。
-- 本项目仅用于学习和娱乐目的，不对任何使用后果作担保。
 - Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
-- 提交的贡献（Issue / PR）默认以 Apache 2.0 条款贡献给本项目。

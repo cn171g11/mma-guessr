@@ -25,6 +25,9 @@ jobs:
         name: 运行 ${{ inputs.script }}
         runs-on: ubuntu-latest
         timeout-minutes: 120
+        defaults:
+            run:
+                working-directory: frontend
         steps:
             - name: 检出代码
               uses: actions/checkout@v4
@@ -51,7 +54,7 @@ jobs:
               with:
                   name: verify-report
                   path: |
-                      tools/.verify-report.json
-                      tools/.world-expand-report.json
-                      tools/.world-expand-report2.json
+                      frontend/tools/.verify-report.json
+                      frontend/tools/.world-expand-report.json
+                      frontend/tools/.world-expand-report2.json
                   if-no-files-found: ignore

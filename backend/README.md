@@ -55,6 +55,23 @@ backend/
 │   ├── routes/              # API 路由
 │   ├── app.ts               # Express 应用组装
 │   └── index.ts             # 启动入口
+├── Dockerfile               # 生产镜像（多阶段构建，GHCR 推送）
 ├── docker-compose.yml       # 开发环境：PostgreSQL + Redis
 └── eslint.config.mjs        # ESLint 扁平配置
+```
+
+## CI/CD
+
+由 `.github/workflows/backend.yml` 驱动（仓库根目录）：
+
+| 阶段          | 内容                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `check`       | `npm run typecheck` + `lint` + `format:check` + `build`                                |
+| `integration` | CI 中临时启动 PostgreSQL/Redis 容器，冒烟测试 `/api/health` 返回 `ok`                  |
+| `docker`      | 仅 `main` 分支推送：构建并推送 `ghcr.io/<owner>/<repo>-backend`（`latest` + SHA 标签） |
+
+本地验证与 CI 一致：
+
+```bash
+npm run typecheck && npm run lint && npm run format:check && npm run build
 ```
