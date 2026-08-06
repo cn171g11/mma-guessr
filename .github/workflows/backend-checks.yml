@@ -1,0 +1,121 @@
+name: Backend 检查与集成测试(可复用)
+
+on:
+    workflow_call:
+        inputs:
+            runIntegration:
+                description: 是否运行集成测试（PG + Redis 全流程）
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+
+jobs:
+    check:
+        name: TS 检查 / Lint / 构建
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: backend
+        steps:
+            - name: 检出代码
+              uses: actions/checkout@v4
+
+            - name: 安装 Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: backend/package-lock.json
+
+            - name: 安装依赖
+              run: npm ci
+
+            - name: 类型检查
+              run: npm run typecheck
+
+            - name: ESLint
+              run: npm run lint
+
+            - name: Prettier
+              run: npm run format:check
+
+            - name: 构建
+              run: npm run build
+
+    integration:
+        name: 集成测试：认证全流程（PG + Redis）
+        if: inputs.runIntegration
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: backend
+        env:
+            NODE_ENV: development
+            DATABASE_URL: postgres://mma:mma@localhost:5432/mma_guessr
+            REDIS_URL: redis://localhost:6379
+        services:
+            postgres:
+                image: postgres:16-alpine
+                env:
+                    POSTGRES_USER: mma
+                    POSTGRES_PASSWORD: mma
+                    POSTGRES_DB: mma_guessr
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U mma -d mma_guessr"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+        steps:
+            - name: 检出代码
+              uses: actions/checkout@v4
+
+            - name: 安装 Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: backend/package-lock.json
+
+            - name: 安装依赖
+              run: npm ci
+
+            - name: 构建
+              run: npm run build
+
+            - name: 初始化数据库表（users）
+              run: npm run db:migrate
+
+            - name: 运行认证端到端测试（注册/登录/令牌/游客绑定）
+              run: npm test
+
+            - name: 启动服务并验证 /api/health
+              run: |
+                  node dist/index.js > server.log 2>&1 &
+                  SERVER_PID=$!
+                  RESP=""
+                  for i in $(seq 1 20); do
+                      sleep 1
+                      if RESP=$(curl -fsS http://localhost:3000/api/health 2>/dev/null); then
+                          break
+                      fi
+                  done
+                  kill "$SERVER_PID" 2>/dev/null || true
+                  echo "health 响应：${RESP:-<无响应>}"
+                  echo "$RESP" | grep -q '"status":"ok"' && echo "✅ 集成验证通过"
+                  if ! echo "$RESP" | grep -q '"status":"ok"'; then
+                      cat server.log
+                      exit 1
+                  fi

@@ -1,55 +1,39 @@
-name: Backend CI/CD
+name: Release 发布
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - 'backend/**'
-            - '.github/workflows/backend.yml'
-            - '.github/workflows/backend-checks.yml'
-    pull_request:
-        paths:
-            - 'backend/**'
-            - '.github/workflows/backend.yml'
-            - '.github/workflows/backend-checks.yml'
     workflow_dispatch:
         inputs:
-            mode:
-                description: 手动执行范围（push 默认只做 typecheck）
+            version:
+                description: 发布版本号（例如 1.0.0，将打 v1.0.0 标签并推送镜像 ghcr.io/...-backend:1.0.0）
                 required: true
-                type: choice
-                default: typecheck
-                options:
-                    - typecheck
-                    - integration
-                    - image
+                type: string
+            includeIntegration:
+                description: 发布前运行集成测试（PG + Redis 全流程）
+                type: boolean
+                default: true
 
 permissions:
     contents: read
 
 concurrency:
-    group: backend-${{ github.ref }}
-    cancel-in-progress: true
+    group: release-${{ inputs.version }}
+    cancel-in-progress: false
 
 jobs:
     quality:
-        name: 代码质量（可复用）
+        name: 代码质量 + 集成测试
         uses: ./.github/workflows/backend-checks.yml
         with:
-            runIntegration: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'integration' }}
+            runIntegration: ${{ inputs.includeIntegration }}
 
-    docker:
-        name: 构建并推送镜像(GHCR)
-        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'image'
+    publish:
+        name: 推送镜像 / 打标签 / 创建 Release
         needs: quality
         runs-on: ubuntu-latest
         permissions:
-            contents: read
+            contents: write
             packages: write
             actions: write
-        outputs:
-            image: ${{ steps.meta.outputs.tags }}
         steps:
             - name: 检出代码
               uses: actions/checkout@v4
@@ -67,7 +51,7 @@ jobs:
               with:
                   images: ghcr.io/${{ github.repository }}-backend
                   tags: |
-                      type=sha
+                      type=raw,value=${{ inputs.version }}
                       type=raw,value=latest
 
             - name: 构建并推送
@@ -79,3 +63,12 @@ jobs:
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+
+            - name: 创建 Git 标签与 GitHub Release
+              run: |
+                  gh release create "v${{ inputs.version }}" \
+                    --title "Release v${{ inputs.version }}" \
+                    --notes "镜像：ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}" \
+                    --generate-notes
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
