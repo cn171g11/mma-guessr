@@ -41,7 +41,10 @@ export async function getToday(player: PlayerRef): Promise<DailyChallenge> {
     // 检测到题目缺失时重新抽题修复，避免当天挑战变成空题单
     if (locations.length < ids.length) {
         const redrawn = await locationsService.getRandomLocations({ count: APP_CONSTANTS.DAILY_CHALLENGE_ROUNDS });
-        await repository.upsertToday(date, redrawn.map((location) => location.id));
+        await repository.upsertToday(
+            date,
+            redrawn.map((location) => location.id)
+        );
         log.warn(`每日题单检测到失效条目 ${locations.length}/${ids.length}，已重新抽题 date=${date}`);
         return { date, locations: redrawn, played };
     }
