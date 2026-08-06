@@ -81,7 +81,7 @@ mma-guessr/
 
 ## 许可
 
-本项目以 [Apache License 2.0](LICENSE) 开源发布，版权所有 © 2026 Dinnerb0ne2。
+本项目以 [Apache License 2.0](LICENSE) 开源发布，版权所有 © 2026 yzuio, Dinnerb0ne
 
 - 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](LICENSE)。
 - Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
