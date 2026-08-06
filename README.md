@@ -1,5 +1,13 @@
 # MmaGuessr · 街景猜位置游戏
 
+
+[![Release](https://github.com/cn171g11/mma-guessr/actions/workflows/release.yml/badge.svg)](https://github.com/cn171g11/mma-guessr/actions/workflows/release.yml)
+[![CI](https://github.com/cn171g11/mma-guessr/actions/workflows/ci.yml/badge.svg)](https://github.com/cn171g11/mma-guessr/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-%3E%3D5.0.0-blue)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-%3E%3D15.0-blue)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/redis-%3E%3D7.0-red)](https://redis.io/)
+
 基于 [Mapillary](https://www.mapillary.com/) 街景数据的 **GeoGuessr 风格** 地理猜谜游戏，前端 + 后端一体仓库。
 
 | 目录         | 说明                                            | 入口文档                      |
