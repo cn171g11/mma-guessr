@@ -21,6 +21,7 @@ export async function prepareDatabase(): Promise<void> {
 }
 
 export async function resetAuthState(): Promise<void> {
+    await pool.query('DELETE FROM game_results');
     await pool.query('DELETE FROM users');
     await redis.flushall();
 }

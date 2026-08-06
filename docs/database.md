@@ -50,6 +50,23 @@
 `npm run db:seed`（`scripts/seed-locations.mjs`）解析 `frontend/src/js/data.js` 的 `LOCATIONS`
 并批量 upsert（按 `name` 唯一键，幂等）。当前 1570 条（中国 332 / 世界 1238）已与前端逐条比对一致。
 
+#### `game_results`（游戏成绩表）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `id` | `BIGSERIAL` | 主键 |
+| `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
+| `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
+| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless |
+| `region` | `VARCHAR(20)` | 仅区域模式非空 |
+| `total_score` | `INT` | 非空 |
+| `rounds` | `JSONB` | 回合明细（name / distanceKm / score / imageId / xp / difficulty） |
+| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
+
+索引：`game_results_player_created_idx`（玩家 + 时间倒序，历史记录）、
+`game_results_player_mode_score_idx`（玩家 + 模式 + 分数，最佳成绩）。
+不建外键：游客记录随会话过期清理，注册用户删除无需级联。
+
 ## Redis
 
 连接串来自环境变量 `REDIS_URL`（开发默认 `redis://localhost:6379`）。
@@ -72,10 +89,12 @@
 | `mly:img:<image_id>:<width>` | bytes | 24 小时 | 代理返回的图片字节缓存 |
 | `rl:mapillary-search:<ip>` | zset | 60 秒 | 搜索代理滑动窗口限频计数 |
 | `rl:mapillary-image:<ip>` | zset | 60 秒 | 图片代理滑动窗口限频计数 |
+| `rl:games-submit:<role>:<id>` | zset | 60 秒 | 成绩提交滑动窗口限频计数 |
 
 ### 数据流说明
 
 - 游客绑定注册：校验 guest 令牌 → 建号 → 把 `guest_progress` 合并（累加场次/得分、取最高分）到 `user_progress` → 清理游客键
+- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取
 - 令牌旋转：refresh 以哈希形式仅存 Redis，换取时与提交值做恒时比较（`timingSafeEqual`），不匹配即整体吊销
 - 随机抽题：`GET /api/locations/random` 先从 Redis 池 `SRANDMEMBER` 取 ID（池 miss 时才按区域/难度查 PG 重建），只对抽中的 ID 回源查全量记录，避免每次抽题压数据库
 - Mapillary 代理：`/api/proxy/mapillary/*` 服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 Redis（搜索/媒体 URL/图片字节，TTL 24h）；每次上游调用前经滑动窗口限频（按 IP 计数）

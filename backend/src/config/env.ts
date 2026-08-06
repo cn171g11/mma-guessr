@@ -33,6 +33,14 @@ export const APP_CONSTANTS = {
     MAPILLARY_RATE_WINDOW_MS: 60 * 1000,
     MAPILLARY_RATE_SEARCH_MAX: 30,
     MAPILLARY_RATE_IMAGE_MAX: 60,
+    // 游戏成绩提交
+    GAMES_RATE_WINDOW_MS: 60 * 1000,
+    GAMES_RATE_SUBMIT_MAX: 10,
+    GAMES_RECENT_MAX_LIMIT: 30,
+    GAMES_RECENT_DEFAULT_LIMIT: 20,
+    MAX_ROUND_SCORE: 5000,
+    MAX_TOTAL_SCORE: 1_000_000,
+    MAX_ROUNDS_PER_GAME: 100,
 } as const;
 
 function required(name: string, fallback: string): string {

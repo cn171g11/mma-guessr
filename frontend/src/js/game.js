@@ -70,7 +70,7 @@ function saveBestIfHigher(mode, data, cmpField) {
     }
     return false;
 }
-function renderBests() {
+function renderLocalBests() {
     const c = getBest('classic');
     $('best-classic').textContent = c ? `历史最佳：${c.score} 分` : '历史最佳：--';
     const t = getBest('challenge');
@@ -81,6 +81,46 @@ function renderBests() {
     $('best-region').textContent = r ? `历史最佳：${r.score} 分（${REGION_NAMES[r.region] || ''}）` : '历史最佳：--';
     const e = getBest('endless');
     $('best-endless').textContent = e ? `历史最佳：Lv.${e.level} · ${e.totalXp} 经验` : '历史最佳：--';
+}
+
+const BEST_ELEMENTS = {
+    classic: 'best-classic',
+    challenge: 'best-challenge',
+    china: 'best-china',
+    region: 'best-region',
+    endless: 'best-endless',
+};
+
+function fillBestText(mode, best) {
+    const el = $(BEST_ELEMENTS[mode]);
+    if (!best) {
+        el.textContent = '历史最佳：--';
+        return;
+    }
+    if (mode === 'endless') {
+        // 服务端最佳记录不保存局内等级，以经验总量作为成绩展示
+        const totalXp = best.rounds.reduce((sum, round) => sum + (round.xp || 0), 0);
+        el.textContent = `历史最佳：${totalXp} 经验`;
+    } else if (mode === 'region') {
+        el.textContent = `历史最佳：${best.totalScore} 分（${REGION_NAMES[best.region] || ''}）`;
+    } else {
+        el.textContent = `历史最佳：${best.totalScore} 分`;
+    }
+}
+
+// 在线时从服务端拉取各模式最佳；任一请求失败则整体回落到本地最佳
+function renderBests() {
+    if (!MmaApi.isOnline()) {
+        renderLocalBests();
+        return;
+    }
+    Promise.all(['classic', 'challenge', 'china', 'region', 'endless'].map((mode) => MmaApi.getBest(mode)))
+        .then((bests) => {
+            ['classic', 'challenge', 'china', 'region', 'endless'].forEach((mode, index) => {
+                fillBestText(mode, bests[index].best);
+            });
+        })
+        .catch(() => renderLocalBests());
 }
 
 // ==========================================================
@@ -123,53 +163,56 @@ function saveGameHistory() {
     const all = loadHistory();
     all.unshift(game);
     saveHistory(all);
+    // 在线时同步上报服务端；失败静默，本地记录已兜底
+    if (MmaApi.isOnline()) {
+        MmaApi.submitGame(buildGamePayload()).catch(() => {});
+    }
 }
 
-function openHistory() {
-    const list = $('history-list');
-    const all = loadHistory();
-    if (all.length === 0) {
-        list.innerHTML =
-            '<div class="hist-empty">📭 暂无游戏记录<br><span style="font-size:12px">开始一局游戏后会自动记录</span></div>';
-    } else {
-        list.innerHTML = all
-            .map((g, gi) => {
-                const scoreStr = g.maxScore ? `${g.totalScore} / ${g.maxScore} 分` : `Lv. 总分 ${g.totalScore}`;
-                const regionStr = g.regionName ? ' · ' + g.regionName : '';
-                const roundsHTML = g.rounds
-                    .map((r, ri) => {
-                        const distStr =
-                            r.distanceKm == null
-                                ? '超时'
-                                : r.distanceKm < 1
-                                  ? Math.round(r.distanceKm * 1000) + 'm'
-                                  : r.distanceKm.toFixed(0) + 'km';
-                        const mlyLink = r.imageId
-                            ? `<a class="hr-mly" href="https://www.mapillary.com/app/?pKey=${r.imageId}" target="_blank" rel="noopener noreferrer">🗺️ 查看街景</a>`
-                            : '';
-                        return `<div class="hr">
-                            <span class="hr-round">r${ri + 1}</span>
-                            <span class="hr-name">${r.name}</span>
-                            <span class="hr-dist">${distStr}</span>
-                            <span class="hr-score">${r.score}分</span>
-                            ${mlyLink}
-                        </div>`;
-                    })
-                    .join('');
-                return `<div class="hist-game">
-                        <div class="hg-head">
-                            <span class="hg-mode">${g.modeLabel}${regionStr}</span>
-                            <span class="hg-date">${g.date}</span>
-                        </div>
-                        <span class="hg-score">${scoreStr}</span>
-                        <div class="hist-rounds">${roundsHTML}</div>
-                        <div style="text-align:right;margin-top:6px">
-                            <button class="hist-delete" onclick="deleteHistory(${gi});event.stopPropagation()">🗑 删除</button>
-                        </div>
-                    </div>`;
-            })
-            .join('');
+function buildGamePayload() {
+    return {
+        mode: state.mode,
+        region: state.mode === 'region' ? state.region : null,
+        totalScore: state.totalScore,
+        rounds: state.history.map((h) => ({
+            name: h.name,
+            distanceKm: h.distanceKm,
+            score: h.score,
+            imageId: h.imageId || null,
+            xp: h.xp || 0,
+            difficulty: h.difficulty || 1,
+        })),
+    };
+}
+
+// 服务端记录转为本地历史渲染所需的结构
+function serverGameToLocal(game) {
+    const cfg = MODES[game.mode];
+    return {
+        id: game.id,
+        date: new Date(game.createdAt).toLocaleString('zh-CN', { hour12: false }),
+        mode: game.mode,
+        modeLabel: cfg ? cfg.label : game.mode,
+        region: game.region,
+        regionName: game.region ? REGION_NAMES[game.region] : null,
+        totalScore: game.totalScore,
+        maxScore: cfg && cfg.rounds !== Infinity ? cfg.rounds * MAX_SCORE : null,
+        rounds: game.rounds,
+    };
+}
+
+async function openHistory() {
+    if (MmaApi.isOnline()) {
+        try {
+            const result = await MmaApi.getRecent(HIST_MAX);
+            renderHistoryList(result.games.map(serverGameToLocal), true);
+            $('history-overlay').classList.add('show');
+            return;
+        } catch (e) {
+            /* 服务端异常时回落到本地记录 */
+        }
     }
+    renderHistoryList(loadHistory(), false);
     $('history-overlay').classList.add('show');
 }
 
@@ -177,10 +220,66 @@ function closeHistory() {
     $('history-overlay').classList.remove('show');
 }
 
-function deleteHistory(index) {
+function renderHistoryList(all, isRemote) {
+    const list = $('history-list');
+    if (all.length === 0) {
+        list.innerHTML =
+            '<div class="hist-empty">📭 暂无游戏记录<br><span style="font-size:12px">开始一局游戏后会自动记录</span></div>';
+        return;
+    }
+    list.innerHTML = all
+        .map((g, gi) => {
+            const scoreStr = g.maxScore ? `${g.totalScore} / ${g.maxScore} 分` : `Lv. 总分 ${g.totalScore}`;
+            const regionStr = g.regionName ? ' · ' + g.regionName : '';
+            const roundsHTML = g.rounds
+                .map((r, ri) => {
+                    const distStr =
+                        r.distanceKm == null
+                            ? '超时'
+                            : r.distanceKm < 1
+                              ? Math.round(r.distanceKm * 1000) + 'm'
+                              : r.distanceKm.toFixed(0) + 'km';
+                    const mlyLink = r.imageId
+                        ? `<a class="hr-mly" href="https://www.mapillary.com/app/?pKey=${r.imageId}" target="_blank" rel="noopener noreferrer">🗺️ 查看街景</a>`
+                        : '';
+                    return `<div class="hr">
+                            <span class="hr-round">r${ri + 1}</span>
+                            <span class="hr-name">${r.name}</span>
+                            <span class="hr-dist">${distStr}</span>
+                            <span class="hr-score">${r.score}分</span>
+                            ${mlyLink}
+                        </div>`;
+                })
+                .join('');
+            const deleteKey = isRemote ? g.id : gi;
+            return `<div class="hist-game">
+                    <div class="hg-head">
+                        <span class="hg-mode">${g.modeLabel}${regionStr}</span>
+                        <span class="hg-date">${g.date}</span>
+                    </div>
+                    <span class="hg-score">${scoreStr}</span>
+                    <div class="hist-rounds">${roundsHTML}</div>
+                    <div style="text-align:right;margin-top:6px">
+                        <button class="hist-delete" onclick="deleteHistory(${deleteKey}, ${isRemote});event.stopPropagation()">🗑 删除</button>
+                    </div>
+                </div>`;
+        })
+        .join('');
+}
+
+async function deleteHistory(key, isRemote) {
     if (!confirm('确定删除这条游戏记录吗？')) return;
+    if (isRemote) {
+        try {
+            await MmaApi.deleteGame(key);
+            openHistory();
+        } catch (e) {
+            showToast('❌ 删除失败，请稍后再试');
+        }
+        return;
+    }
     const all = loadHistory();
-    all.splice(index, 1);
+    all.splice(key, 1);
     saveHistory(all);
     openHistory(); // 刷新面板
 }
@@ -189,8 +288,9 @@ function deleteHistory(index) {
 // 【初始化】
 // ==========================================================
 window.onload = function () {
-    renderBests();
     initGuessMap();
+    // 后台建立游客会话；游戏流程不等待后端，离线时立即以本地模式呈现最佳成绩
+    MmaApi.init().finally(renderBests);
 };
 
 function initGuessMap() {
@@ -440,26 +540,17 @@ async function findMapillaryImage(lat, lng) {
     const errLog = [];
     for (const offset of offsets) {
         const bbox = `${lng - offset},${lat - offset},${lng + offset},${lat + offset}`;
-        const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
-        try {
-            const res = await fetch(url);
-            if (!res.ok) {
-                errLog.push(`bbox=${bbox} → HTTP ${res.status}`);
-                continue;
-            }
-            const data = await res.json();
-            if (data.data && data.data.length) {
-                // 优先全景图，体验更好
-                const panos = data.data.filter((i) => i.is_pano);
-                const list = panos.length ? panos : data.data;
-                const img = list[Math.floor(Math.random() * list.length)];
-                const [ilng, ilat] = img.geometry.coordinates;
-                return { imageId: img.id, lat: ilat, lng: ilng };
-            }
-            errLog.push(`bbox=${bbox} → 0 images`);
-        } catch (e) {
-            errLog.push(`bbox=${bbox} → 网络错误: ${e.message}`);
+        const result = await searchStreetView(bbox, errLog, offset);
+        if (result && result.data && result.data.length) {
+            // 优先全景图，体验更好
+            const panos = result.data.filter((i) => i.is_pano);
+            const list = panos.length ? panos : result.data;
+            const img = list[Math.floor(Math.random() * list.length)];
+            const [ilng, ilat] = img.geometry.coordinates;
+            return { imageId: img.id, lat: ilat, lng: ilng };
         }
+        if (!result) continue;
+        errLog.push(`bbox=${bbox} → 0 images`);
     }
     // 记录失败细节，供错误报告导出
     streetViewError = {
@@ -470,6 +561,33 @@ async function findMapillaryImage(lat, lng) {
         offsets: offsets,
     };
     return null;
+}
+
+// 街景搜索：在线时优先走服务端代理（不暴露密钥），失败或离线时回退直连
+async function searchStreetView(bbox, errLog, offset) {
+    if (MmaApi.isOnline()) {
+        try {
+            const response = await fetch(
+                `${API_BASE}/api/proxy/mapillary/search?bbox=${encodeURIComponent(bbox)}&limit=20`
+            );
+            if (response.ok) return await response.json();
+            errLog.push(`proxy bbox=${bbox} → HTTP ${response.status}`);
+        } catch (e) {
+            errLog.push(`proxy bbox=${bbox} → 网络错误: ${e.message}`);
+        }
+    }
+    const url = `https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id,geometry,is_pano&bbox=${bbox}&limit=20`;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            errLog.push(`bbox=${bbox} → HTTP ${res.status}`);
+            return null;
+        }
+        return await res.json();
+    } catch (e) {
+        errLog.push(`bbox=${bbox} → 网络错误: ${e.message}`);
+        return null;
+    }
 }
 
 // 【修复】安全的地图视角切换：容器尺寸异常时 flyTo/flyToBounds 会抛 NaN 异常，
@@ -765,7 +883,7 @@ function stopTimer() {
 function timeoutNoGuess() {
     isSubmitting = true;
     const round = state.current;
-    state.history.push({ name: round.name, distanceKm: null, score: 0 });
+    state.history.push({ name: round.name, distanceKm: null, score: 0, difficulty: round.difficulty, xp: 0 });
     const targetLatLng = L.latLng(round.lat, round.lng);
     answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
     safeFly(
@@ -833,7 +951,7 @@ function submitGuess() {
     const distanceKm = guessPoint.distanceTo(targetLatLng) / 1000;
     const score = calcScore(distanceKm);
     state.totalScore += score;
-    state.history.push({ name: round.name, distanceKm, score, imageId: round.imageId });
+    state.history.push({ name: round.name, distanceKm, score, imageId: round.imageId, difficulty: round.difficulty });
 
     // ---- 距离可视化：答案蓝点 + 虚线 + 飞行取景 ----
     answerMarker = L.marker(targetLatLng, { icon: blueIcon }).addTo(map);
@@ -870,6 +988,9 @@ function submitGuess() {
             state.endless.level++;
             leveledUp = true;
         }
+        // 回合经验随成绩上报，供服务端还原无限模式的累计经验展示
+        const lastRound = state.history[state.history.length - 1];
+        if (lastRound) lastRound.xp = xpGain;
         $('result-xp').style.display = 'block';
         $('result-xp').textContent = `✨ +${xpGain} 经验（难度 ${'★'.repeat(round.difficulty)}）`;
     } else {

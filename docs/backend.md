@@ -75,6 +75,9 @@ npm run db:up && npm run db:migrate && npm test
 backend/
 ├── src/
 │   ├── auth/              # 认证领域：密码哈希、JWT、邮箱验证码、游客、账号 service
+│   ├── games/             # 游戏成绩域：类型、仓储、提交/查询/删除 service
+│   ├── locations/         # 题库域：随机抽题池、统计缓存
+│   ├── services/          # 外部服务（Mapillary 代理）
 │   ├── config/env.ts      # 环境变量加载与校验
 │   ├── db/pool.ts         # PostgreSQL 连接池
 │   ├── db/redis.ts        # Redis 客户端
@@ -84,7 +87,7 @@ backend/
 │   ├── middleware/        # 请求日志、404、全局错误处理与认证中间件
 │   ├── routes/            # API 路由
 │   ├── types/             # 全局类型声明（Express Request 扩展）
-│   ├── utils/             # HttpError、请求参数校验
+│   ├── utils/             # HttpError、请求参数校验、滑动窗口限频
 │   ├── app.ts             # Express 应用组装
 │   └── index.ts           # 启动入口
 ├── Dockerfile               # 生产镜像（多阶段构建，GHCR 推送）

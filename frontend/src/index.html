@@ -63,6 +63,7 @@
                     📔 游戏文档
                 </a>
                 <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
+                <button class="changelog-btn" onclick="openAccount()">👤 账号</button>
             </div>
         </div>
 
@@ -214,6 +215,58 @@
             </div>
         </div>
 
+        <!-- ============ 账号面板弹窗 ============ -->
+        <div id="account-overlay" onclick="if (event.target === this) closeAccount();">
+            <div id="account-box">
+                <h2>
+                    👤 账号
+                    <button class="clog-close" onclick="closeAccount()">✕ 关闭</button>
+                </h2>
+                <div id="account-profile" style="display: none">
+                    <div class="acc-name" id="account-profile-name"></div>
+                    <div class="acc-email" id="account-profile-email"></div>
+                    <div class="acc-stats" id="account-profile-stats"></div>
+                </div>
+                <div id="account-login-form">
+                    <h3>登录</h3>
+                    <input id="login-identifier" placeholder="用户名 / 邮箱" autocomplete="username" />
+                    <input id="login-password" type="password" placeholder="密码" autocomplete="current-password" />
+                    <button class="acc-submit" onclick="doLogin()">登录</button>
+                </div>
+                <div id="account-register-form">
+                    <h3>注册</h3>
+                    <div class="acc-bind-hint" id="account-bind-hint" style="display: none">
+                        注册后自动绑定当前游客，合并游客期间的游戏记录。
+                    </div>
+                    <input
+                        id="register-username"
+                        placeholder="用户名（3-20 位字母/数字/下划线）"
+                        autocomplete="username"
+                    />
+                    <input id="register-email" placeholder="邮箱" autocomplete="email" />
+                    <input
+                        id="register-password"
+                        type="password"
+                        placeholder="密码（至少 8 位）"
+                        autocomplete="new-password"
+                    />
+                    <div class="acc-code-row">
+                        <input
+                            id="register-code"
+                            placeholder="6 位验证码"
+                            inputmode="numeric"
+                            autocomplete="one-time-code"
+                        />
+                        <button class="acc-code-btn" onclick="sendCode()">发送验证码</button>
+                    </div>
+                    <button class="acc-submit" onclick="doRegister()">注册</button>
+                </div>
+                <button id="account-logout-btn" class="acc-logout" onclick="doLogout()" style="display: none">
+                    退出登录
+                </button>
+            </div>
+        </div>
+
         <!-- ============ 街景错误报告弹窗 ============ -->
         <div id="err-overlay" onclick="if (event.target === this) closeErrReport();">
             <div id="err-box">
@@ -230,6 +283,8 @@
 
         <script src="js/config.js"></script>
         <script src="js/data.js"></script>
+        <script src="js/api.js"></script>
         <script src="js/game.js"></script>
+        <script src="js/auth.js"></script>
     </body>
 </html>

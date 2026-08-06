@@ -119,7 +119,62 @@
 ```
 
 ```json
-{ "role": "user", "user": { "id": "...", "username": "...", "email": "...", "createdAt": "..." } }
+{ "role": "user", "user": { "id": "...", "username": "...", "email": "...", "createdAt": "..." },
+  "progress": { "totalRounds": 0, "totalScore": 0, "bestScore": 0, "correctGuesses": 0 } }
+```
+
+用户的 `progress` 与游客同构，均取自 Redis 进度快照（由成绩上报增量维护）。
+
+## 游戏成绩（`/api/games`）
+
+需 Bearer 认证（游客或注册用户）。提交走 Redis 滑动窗口限频（按身份，10 次/分钟）。
+
+| 方法 | 路径 | 说明 |
+| ---- | ---- | ---- |
+| POST | `/` | 提交一局成绩 |
+| GET | `/recent?limit=20` | 最近记录（1-30，默认 20） |
+| GET | `/best?mode=classic` | 该模式最高分记录（无则 `null`） |
+| GET | `/summary` | 累计进度快照（场次/总分/最佳/猜中轮数） |
+| DELETE | `/:gameId` | 删除自己的某条记录 |
+
+### `POST /api/games`
+
+```json
+{
+  "mode": "challenge",
+  "region": null,
+  "totalScore": 12000,
+  "rounds": [
+    { "name": "北京·天安门", "distanceKm": 2.5, "score": 4800, "imageId": "img-1", "xp": 0, "difficulty": 3 }
+  ]
+}
+```
+
+- `mode`：`classic` / `challenge` / `region` / `china` / `endless`
+- `region`：仅 `region` 模式必填；其他模式传了返回 `400`
+- 乐观校验：`totalScore` 必须等于 `rounds` 各 `score` 之和，杜绝明显刷分
+- 每轮 `score` 上限 5000；`distanceKm` 为 `null` 表示超时未提交
+- 成功后进度快照增量累计：场次 += 轮数、总分 += totalScore、最佳取最高、猜中计为得分 > 0 的轮数
+
+返回 `201`：
+
+```json
+{ "game": { "id": 1, "mode": "challenge", "region": null, "totalScore": 12000,
+  "rounds": [ ... ], "createdAt": "..." } }
+```
+
+### `GET /api/games/best`
+
+```json
+{ "best": { "id": 3, "mode": "classic", "totalScore": 4800, "rounds": [ ... ], "createdAt": "..." } }
+```
+
+按 `mode` 取该玩家最高 `totalScore` 的一条记录；`endless` 模式的记录含各轮 `xp`，前端据此展示累计经验。
+
+### `GET /api/games/summary`
+
+```json
+{ "progress": { "totalRounds": 12, "totalScore": 34500, "bestScore": 8900, "correctGuesses": 9 } }
 ```
 
 ## 题库（`/api/locations`）

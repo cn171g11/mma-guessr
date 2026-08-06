@@ -49,7 +49,9 @@ jobs:
               run: |
                   node --check src/js/config.js
                   node --check src/js/data.js
+                  node --check src/js/api.js
                   node --check src/js/game.js
+                  node --check src/js/auth.js
                   for f in tools/*.js; do node --check "$f"; done
 
             - name: Location data validation

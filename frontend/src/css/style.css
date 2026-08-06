@@ -415,6 +415,141 @@ button {
     border-radius: 3px;
 }
 
+/* ============ 账号面板 ============ */
+#account-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    background: rgba(10, 15, 35, 0.92);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+#account-overlay.show {
+    display: flex;
+}
+#account-box {
+    background: #16213e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 26px 30px;
+}
+#account-box h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+#account-box h3 {
+    font-size: 15px;
+    margin: 16px 0 10px;
+    color: #58a6ff;
+}
+#account-box input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    color: #e6edf3;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+#account-box input:focus {
+    outline: none;
+    border-color: #58a6ff;
+}
+#account-box input::placeholder {
+    color: #7d8590;
+}
+.acc-name {
+    font-size: 17px;
+    font-weight: bold;
+    color: #e6edf3;
+    margin-bottom: 4px;
+}
+.acc-email {
+    font-size: 13px;
+    color: #8899bb;
+    margin-bottom: 8px;
+}
+.acc-stats {
+    font-size: 13px;
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.12);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 10px;
+    padding: 8px 12px;
+}
+.acc-bind-hint {
+    font-size: 12px;
+    color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+}
+.acc-code-row {
+    display: flex;
+    gap: 8px;
+}
+.acc-code-row input {
+    flex: 1;
+    margin-bottom: 10px;
+}
+.acc-code-btn {
+    background: rgba(52, 152, 219, 0.2);
+    border: 1px solid #3498db;
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 14px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    margin-bottom: 10px;
+}
+.acc-code-btn:hover {
+    background: rgba(52, 152, 219, 0.45);
+}
+.acc-submit {
+    width: 100%;
+    padding: 11px 0;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.acc-submit:hover {
+    transform: translateY(-1px);
+}
+.acc-logout {
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px 0;
+    background: rgba(255, 77, 77, 0.15);
+    border: 1px solid rgba(255, 77, 77, 0.35);
+    border-radius: 12px;
+    color: #ff6b6b;
+    font-size: 14px;
+    cursor: pointer;
+}
+.acc-logout:hover {
+    background: rgba(255, 77, 77, 0.3);
+}
+
 /* ============ 区域选择 ============ */
 #region-screen {
     position: fixed;

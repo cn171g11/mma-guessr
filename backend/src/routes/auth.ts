@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { getGuestProfile, getGuestProgress } from '../auth/guest.js';
+import { getGuestProfile, getGuestProgress, getUserProgress } from '../auth/guest.js';
 import { createGuestSession } from '../auth/guest.js';
 import { loginAccount, registerAccount, getUserProfile } from '../auth/accounts.js';
 import { findUserByEmail } from '../auth/users.js';
@@ -133,6 +133,6 @@ authRouter.get('/me', requireAuth, async (req, res) => {
         res.json({ role: 'guest', profile: guestProfile, progress });
         return;
     }
-    const userProfile = await getUserProfile(subject);
-    res.json({ role: 'user', user: userProfile });
+    const [userProfile, progress] = await Promise.all([getUserProfile(subject), getUserProgress(subject)]);
+    res.json({ role: 'user', user: userProfile, progress });
 });

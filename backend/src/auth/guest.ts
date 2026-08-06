@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import { APP_CONSTANTS } from '../config/env.js';
+import type { PlayerRole } from '../games/types.js';
 import { redis } from '../db/redis.js';
 import { createLogger } from '../logger/index.js';
 import { signGuestToken } from './tokens.js';
@@ -85,6 +86,41 @@ export async function getGuestProgress(guestId: string): Promise<GameProgressSna
 export async function upsertGuestProgress(guestId: string, snapshot: GameProgressSnapshot): Promise<void> {
     await redis.hset(guestProgressKeyFor(guestId), snapshot);
     await redis.expire(guestProgressKeyFor(guestId), TTL_SECONDS);
+}
+
+export async function getUserProgress(userId: string): Promise<GameProgressSnapshot | null> {
+    const rawValues = await redis.hgetall(userProgressKeyFor(userId));
+    if (Object.keys(rawValues).length === 0) {
+        return null;
+    }
+    return {
+        totalRounds: toNumber(rawValues.totalRounds),
+        totalScore: toNumber(rawValues.totalScore),
+        bestScore: toNumber(rawValues.bestScore),
+        correctGuesses: toNumber(rawValues.correctGuesses),
+    };
+}
+
+export async function upsertUserProgress(userId: string, snapshot: GameProgressSnapshot): Promise<void> {
+    await redis.hset(userProgressKeyFor(userId), snapshot);
+    await redis.expire(userProgressKeyFor(userId), TTL_SECONDS);
+}
+
+// 按身份角色读写进度：成绩上报与 /me 查询共用，避免调用方感知键前缀差异
+export async function getProgress(role: PlayerRole, playerId: string): Promise<GameProgressSnapshot | null> {
+    return role === 'guest' ? getGuestProgress(playerId) : getUserProgress(playerId);
+}
+
+export async function upsertProgress(
+    role: PlayerRole,
+    playerId: string,
+    snapshot: GameProgressSnapshot
+): Promise<void> {
+    if (role === 'guest') {
+        await upsertGuestProgress(playerId, snapshot);
+        return;
+    }
+    await upsertUserProgress(playerId, snapshot);
 }
 
 export async function mergeGuestProgressIntoUser(guestId: string, userId: string): Promise<number> {
