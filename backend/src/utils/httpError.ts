@@ -13,3 +13,5 @@ export const unauthorized = (message: string): HttpError => new HttpError(401, m
 export const forbidden = (message: string): HttpError => new HttpError(403, message);
 export const notFound = (message: string): HttpError => new HttpError(404, message);
 export const conflict = (message: string): HttpError => new HttpError(409, message);
+export const tooManyRequests = (message: string): HttpError => new HttpError(429, message);
+export const serviceUnavailable = (message: string): HttpError => new HttpError(503, message);

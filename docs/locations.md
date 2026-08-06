@@ -1,6 +1,10 @@
 # 题库维护
 
-题库位于 `frontend/src/js/data.js` 的 `LOCATIONS` 常量，并派生 `WORLD_LOCATIONS` / `CHINA_LOCATIONS`（按名称前缀区分）。当前共 **1570 题**（中国 332 · 世界 1238）。
+题库源数据位于 `frontend/src/js/data.js` 的 `LOCATIONS` 常量，并派生 `WORLD_LOCATIONS` / `CHINA_LOCATIONS`（按名称前缀区分）。当前共 **1570 题**（中国 332 · 世界 1238）。
+
+> 后端同步：`backend` 侧通过 `npm run db:seed` 将同一份数据导入 PostgreSQL `locations` 表
+> （幂等 upsert，按 `name` 唯一键），供 `/api/locations/random` 等在线接口使用；详见
+> [database.md](database.md)。
 
 ## 条目结构
 

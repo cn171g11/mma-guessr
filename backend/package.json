@@ -20,6 +20,7 @@
         "db:up": "docker compose up -d",
         "db:down": "docker compose down",
         "db:migrate": "tsx src/db/migrate.ts",
+        "db:seed": "node scripts/seed-locations.mjs",
         "test": "vitest run",
         "test:watch": "vitest",
         "script:check": "node scripts/check.mjs",

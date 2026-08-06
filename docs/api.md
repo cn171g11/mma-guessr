@@ -122,6 +122,56 @@
 { "role": "user", "user": { "id": "...", "username": "...", "email": "...", "createdAt": "..." } }
 ```
 
+## 题库（`/api/locations`）
+
+### `GET /api/locations/random`
+
+随机抽取题目。题目 ID 池按参数维度缓存于 Redis（`locations:pool:<区域|all>:<难度|all>`），池 miss 时回源 PostgreSQL 重建，过期自动重建：
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `region` | 否 | 大洲：`asia` / `europe` / `northamerica` / `southamerica` / `africa` / `oceania` |
+| `difficulty` | 否 | 1-5 |
+| `count` | 否 | 1-20，默认 1 |
+
+```json
+{ "locations": [ { "id": 1001, "name": "日本东京·东京塔", "lat": 35.6586, "lng": 139.7454,
+  "country": null, "city": null, "region": "asia", "difficulty": 1, "mapillaryId": null, "panoramaUrl": null } ] }
+```
+
+参数非法返回 `400`。
+
+### `GET /api/locations/stats`
+
+题库总量与各洲计数（Redis 缓存 5 分钟）：
+
+```json
+{ "total": 1570, "byRegion": { "asia": 527, "africa": 269, "europe": 188, "northamerica": 200, "oceania": 193, "southamerica": 193 } }
+```
+
+## Mapillary 代理（`/api/proxy/mapillary`）
+
+服务端携带 `MAPILLARY_TOKEN` 请求 Mapillary，前端只与后端通信，**密钥永不下发**。两类接口均先过 Redis 滑动窗口限频（按 IP），再查 Redis 缓存，miss 时回源上游。
+
+### `GET /api/proxy/mapillary/search`
+
+按 bbox 搜索街景图片，返回与上游一致的 `{ data: [...] }` 结构（`id` / `geometry` / `is_pano`）。结果按 `bbox+limit` 缓存 24h。
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `bbox` | 是 | `minLng,minLat,maxLng,maxLat`；格式非法返回 `400` |
+| `limit` | 否 | 1-50，默认 20 |
+
+### `GET /api/proxy/mapillary/image/:imageId`
+
+代理返回图片字节流（`Content-Type: image/jpeg`），字节按 `imageId+width` 缓存 24h。
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `width` | 否 | 1-2048，默认 1024；内部选择不小于该值的一档缩略图（256/1024/2048） |
+
+限频超限返回 `429`；未配置 `MAPILLARY_TOKEN` 或上游异常返回 `503`/`502`。
+
 ## 令牌约定
 
 | 令牌 | 签发对象 | 有效期 |

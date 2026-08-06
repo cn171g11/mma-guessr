@@ -37,6 +37,7 @@ npm run dev
 | `npm run db:up`      | 启动 PostgreSQL + Redis 容器                |
 | `npm run db:down`    | 停止容器                                    |
 | `npm run db:migrate` | 执行数据库迁移（`src/db/migrations/*.sql`） |
+| `npm run db:seed`    | 题库导入：解析 `frontend/src/js/data.js` 批量 upsert 到 `locations`（幂等） |
 | `npm test`           | 端到端测试（需要 PG + Redis 可用）          |
 | `npm run test:watch` | 测试监听模式                                |
 | `npm run script:*`   | 运维脚本（见 [scripts.md](scripts.md)）          |
