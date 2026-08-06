@@ -1,0 +1,43 @@
+{
+    "name": "mma-guessr-backend",
+    "version": "0.1.0",
+    "private": true,
+    "description": "MmaGuessr 后端服务：Express + TypeScript + PostgreSQL + Redis",
+    "license": "Apache-2.0",
+    "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc -p tsconfig.build.json",
+        "start": "node dist/index.js",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "db:up": "docker compose up -d",
+        "db:down": "docker compose down"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "express": "^5.0.1",
+        "ioredis": "^5.4.1",
+        "pg": "^8.14.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.17.0",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.10.5",
+        "@types/pg": "^8.11.10",
+        "eslint": "^9.17.0",
+        "eslint-config-prettier": "^9.1.0",
+        "prettier": "^3.3.3",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.2",
+        "typescript-eslint": "^8.18.2"
+    }
+}
