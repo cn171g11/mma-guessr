@@ -31,11 +31,26 @@ function getTransport(): Transporter | null {
     return transporter;
 }
 
+function maskEmail(email: string): string {
+    const [local, domain] = email.split('@');
+    if (local === undefined || domain === undefined) {
+        return '***';
+    }
+    const head = local.slice(0, 1);
+    const tail = local.length > 1 ? local.slice(-1) : '';
+    return `${head}***${tail}@${domain}`;
+}
+
 export async function sendVerificationEmail(email: string, verificationCode: string): Promise<void> {
     const mailer = getTransport();
     if (mailer === null) {
-        log.warn(`SMTP 未配置，验证码将以日志形式输出（开发模式）`);
-        log.info(`[验证码] 收件人=${email} code=${verificationCode}`);
+        // 验证码仅在非生产环境输出到日志（开发联调）；生产缺 SMTP 时绝不落日志
+        if (env.NODE_ENV !== 'production') {
+            log.warn(`SMTP 未配置，验证码将以日志形式输出（开发模式）`);
+            log.info(`[验证码] 收件人=${maskEmail(email)} code=${verificationCode}`);
+        } else {
+            log.warn('SMTP 未配置，无法发送验证码邮件');
+        }
         return;
     }
 
@@ -45,5 +60,5 @@ export async function sendVerificationEmail(email: string, verificationCode: str
         subject: 'MmaGuessr 邮箱验证码',
         text: `您的验证码是：${verificationCode}，10 分钟内有效。若非本人操作，请忽略本邮件。`,
     });
-    log.info(`已向 ${email} 发送验证码邮件`);
+    log.info(`已向 ${maskEmail(email)} 发送验证码邮件`);
 }

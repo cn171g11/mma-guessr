@@ -69,6 +69,7 @@ npm run db:up && npm run db:migrate && npm test
 - `MAPILLARY_TOKEN`：Mapillary API 密钥（仅服务端持有）
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`：JWT 签名密钥（生产必须改为强随机值）
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`：邮箱验证码 SMTP 配置
+- `CORS_ALLOWED_ORIGINS`：前端来源白名单（逗号分隔）。为空时仅放行 `localhost`/`127.0.0.1`（开发默认）；**生产必须配置为前端实际域名**，SOCKET.IO 与 REST 同源校验共用该白名单，否则浏览器请求会被拒绝
 
 ## 目录结构
 

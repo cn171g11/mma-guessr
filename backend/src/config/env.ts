@@ -100,4 +100,8 @@ export const env = {
     SMTP_USER: process.env.SMTP_USER ?? '',
     SMTP_PASS: process.env.SMTP_PASS ?? '',
     SMTP_FROM: process.env.SMTP_FROM ?? '',
+
+    // CORS 白名单（逗号分隔）。未配置时（开发默认）仅放行 localhost/127.0.0.1；
+    // 生产环境必须显式配置为前端域名，否则同源校验会拒绝浏览器请求
+    CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? '',
 } as const;
