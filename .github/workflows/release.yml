@@ -1,14 +1,14 @@
-name: Release 发布
+name: Release
 
 on:
     workflow_dispatch:
         inputs:
             version:
-                description: 发布版本号（例如 1.0.0，将打 v1.0.0 标签并推送镜像 ghcr.io/...-backend:1.0.0）
+                description: Release version (e.g. 1.0.0; creates tag v1.0.0 and pushes image ghcr.io/...-backend:1.0.0)
                 required: true
                 type: string
             includeIntegration:
-                description: 发布前运行集成测试（PG + Redis 全流程）
+                description: Run integration tests (PG + Redis full flow) before publishing
                 type: boolean
                 default: true
 
@@ -21,13 +21,13 @@ concurrency:
 
 jobs:
     quality:
-        name: 代码质量 + 集成测试
+        name: Quality gates + integration tests
         uses: ./.github/workflows/backend-checks.yml
         with:
             runIntegration: ${{ inputs.includeIntegration }}
 
     publish:
-        name: 推送镜像 / 打标签 / 创建 Release
+        name: Push image / tag / create Release
         needs: quality
         runs-on: ubuntu-latest
         permissions:
@@ -35,17 +35,17 @@ jobs:
             packages: write
             actions: write
         steps:
-            - name: 检出代码
+            - name: Checkout
               uses: actions/checkout@v4
 
-            - name: 登录 GHCR
+            - name: Login to GHCR
               uses: docker/login-action@v3
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: 提取镜像元数据
+            - name: Extract image metadata
               id: meta
               uses: docker/metadata-action@v5
               with:
@@ -54,7 +54,7 @@ jobs:
                       type=raw,value=${{ inputs.version }}
                       type=raw,value=latest
 
-            - name: 构建并推送
+            - name: Build and push
               uses: docker/build-push-action@v6
               with:
                   context: backend
@@ -64,11 +64,11 @@ jobs:
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
 
-            - name: 创建 Git 标签与 GitHub Release
+            - name: Create git tag and GitHub Release
               run: |
                   gh release create "v${{ inputs.version }}" \
                     --title "Release v${{ inputs.version }}" \
-                    --notes "镜像：ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}" \
+                    --notes "Image: ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}" \
                     --generate-notes
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

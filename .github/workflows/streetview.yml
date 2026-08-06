@@ -1,10 +1,10 @@
-name: 街景覆盖验证（手动）
+name: Street View Coverage Verification (manual)
 
 on:
     workflow_dispatch:
         inputs:
             script:
-                description: 目标验证脚本（逐点调用 Mapillary API，耗时较长）
+                description: Target verification script (calls Mapillary API per point, slow)
                 required: true
                 type: choice
                 default: verify-cn-streetview
@@ -13,7 +13,7 @@ on:
                     - verify-world-expand
                     - verify-world-expand2
             expectTotal:
-                description: 预检期望题库总量（默认 1570）
+                description: Expected total location count (default 1570)
                 required: false
                 type: string
 
@@ -22,34 +22,34 @@ permissions:
 
 jobs:
     verify:
-        name: 运行 ${{ inputs.script }}
+        name: Run ${{ inputs.script }}
         runs-on: ubuntu-latest
         timeout-minutes: 120
         defaults:
             run:
                 working-directory: frontend
         steps:
-            - name: 检出代码
+            - name: Checkout
               uses: actions/checkout@v4
 
-            - name: 安装 Node.js
+            - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
                   node-version: 20
 
-            - name: 题库数据预检
+            - name: Location data pre-check
               run: node tools/validate-data.js
               env:
-                  # 未填写时回退到 1570
+                  # Fallback to 1570 when not provided
                   EXPECTED_LOCATIONS: ${{ inputs.expectTotal != '' && inputs.expectTotal || '1570' }}
 
-            - name: 运行验证脚本
+            - name: Run verification script
               run: node tools/${{ inputs.script }}.js
               env:
-                  # 优先使用仓库 Secret；未配置时脚本回退到内置 token
+                  # Prefer the repo secret; fall back to the built-in token when unset
                   MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN }}
 
-            - name: 上传验证报告
+            - name: Upload verification report
               uses: actions/upload-artifact@v4
               with:
                   name: verify-report

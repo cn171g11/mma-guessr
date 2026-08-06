@@ -4,9 +4,10 @@
 
 | 目录         | 说明                                            | 入口文档                      |
 | ------------ | ----------------------------------------------- | ----------------------------- |
-| `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [frontend/README.md](frontend/README.md) |
-| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [backend/README.md](backend/README.md) |
+| `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [docs/frontend/README.md](docs/frontend/README.md) |
+| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [docs/backend/README.md](docs/backend/README.md) |
 | `.github/`   | CI/CD 工作流（前端校验/发布、后端校验/镜像）       | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| `docs/`      | 开发文档汇总（前端/后端/运维脚本说明）            | [docs/](docs/) |
 
 ---
 
@@ -37,23 +38,25 @@ npm install
 npm run dev        # http://localhost:3000/api/health
 ```
 
-详细说明见 [frontend/README.md](frontend/README.md) 与 [backend/README.md](backend/README.md)。
+详细说明见 [docs/frontend/README.md](docs/frontend/README.md) 与 [docs/backend/README.md](docs/backend/README.md)。
 
 ---
 
 ## CI/CD 概览（`.github/workflows/`）
 
-| 工作流          | 触发时机                              | 作用                                                          |
-| --------------- | ------------------------------------- | ------------------------------------------------------------- |
-| `ci.yml`        | `frontend/**` 推送 `main` / PR        | 前端：Prettier 风格、JS 语法、题库数据校验                     |
-| `deploy.yml`    | `frontend/**` 推送 `main`（文档除外） | 前端：校验通过后发布 GitHub Pages                              |
-| `backend.yml`   | `backend/**` 推送 `main` / PR         | 后端：类型检查 / Lint / 构建 + PG/Redis 集成验证 + GHCR 镜像推送 |
-| `streetview.yml`| 手动（`workflow_dispatch`）           | 街景覆盖验证，报告存为 artifact                               |
+| 工作流            | 触发时机                              | 作用                                                          |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------- |
+| `ci.yml`          | `frontend/**` 推送 `main` / PR        | 前端：Prettier 风格、JS 语法、题库数据校验                     |
+| `deploy.yml`      | `frontend/**` 推送 `main`（文档除外） | 前端：校验通过后发布 GitHub Pages                              |
+| `backend.yml`     | `backend/**` 推送 `main` / PR         | 后端：快速检查（typecheck / lint / 构建）；手动可选择集成测试或推送镜像 |
+| `backend-checks.yml` | 供其他工作流复用（`workflow_call`）| 后端检查 + PG/Redis 集成测试的共享实现                        |
+| `release.yml`     | 手动（`workflow_dispatch`，填版本号） | 集成测试 → 推送 GHCR `:版本` 镜像 → 打 `v版本` 标签 → 创建 GitHub Release |
+| `streetview.yml`  | 手动（`workflow_dispatch`）           | 街景覆盖验证，报告存为 artifact                               |
 
-> 后端集成验证通过 `docker/service` 方式在 CI 中临时启动 PostgreSQL 与 Redis，
+> 后端推送到 `main` 默认只做快速检查（typecheck / lint / 构建）；完整的集成测试与镜像推送
+> 通过 Actions 页手动触发 `backend.yml`（`mode=integration` / `mode=image`）或 `release.yml` 完成。
+> 集成验证通过 `docker/service` 方式在 CI 中临时启动 PostgreSQL 与 Redis，
 > 冒烟测试 `/api/health` 返回 `status: ok` 才算通过。
-> `backend.yml` 在 `main` 分支推送时还会构建并推送
-> `ghcr.io/<owner>/<repo>-backend` 镜像（latest + 提交 SHA 标签）。
 
 ---
 
@@ -66,13 +69,15 @@ mma-guessr/
 │   ├── src/css/style.css     # 全局样式
 │   ├── src/js/               # config.js（配置）/ data.js（题库）/ game.js（逻辑）
 │   ├── tools/                # 题库维护与验证脚本
-│   ├── archive/              # 已归档的原型文件
-│   └── README.md             # 游戏说明（模式、部署、更新记录）
+│   └── archive/              # 已归档的原型文件
 ├── backend/                  # 后端服务
 │   ├── src/                  # Express + TS 源码
+│   ├── scripts/              # 运维脚本（check/build/test/clean/debug/deploy）
 │   ├── docker-compose.yml    # 开发环境：PostgreSQL + Redis
-│   └── README.md             # 后端说明
+│   └── Dockerfile            # 生产镜像（多阶段构建）
+├── docs/                     # 文档汇总：frontend/、backend/、backend/scripts/ 说明
 ├── .github/workflows/        # CI/CD 流水线
+├── AGENTS.md                 # AI 助手项目指令（opencode 读取）
 ├── CONTRIBUTING.md           # 开发与贡献指南
 └── LICENSE                   # Apache License 2.0
 ```

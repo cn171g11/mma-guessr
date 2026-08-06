@@ -103,13 +103,14 @@ backend/
 
 ## CI/CD
 
-由 `.github/workflows/backend.yml` 驱动（仓库根目录）：
+由 `.github/workflows/backend.yml` 与 `.github/workflows/release.yml` 驱动（仓库根目录）：
 
-| 阶段          | 内容                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `check`       | `npm run typecheck` + `lint` + `format:check` + `build`                                    |
-| `integration` | CI 中临时启动 PostgreSQL/Redis 容器：迁移建表 → `npm test` 认证端到端 → `/api/health` 冒烟 |
-| `docker`      | 仅 `main` 分支推送：构建并推送 `ghcr.io/<owner>/<repo>-backend`（`latest` + SHA 标签）     |
+| 触发方式                                                    | 内容                                                                                                  |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `push` / `pull_request`（仅 `backend/**` 变更）             | 快速检查：`npm run typecheck` + `lint` + `format:check` + `build`                                     |
+| 手动 `workflow_dispatch`（`mode=integration`）              | 追加集成测试：CI 临时启动 PostgreSQL/Redis → 迁移建表 → `npm test` → `/api/health` 冒烟              |
+| 手动 `workflow_dispatch`（`mode=image`）                    | 构建并推送 `ghcr.io/<owner>/<repo>-backend`（`latest` + SHA 标签）                                    |
+| 手动 `workflow_dispatch`（`release.yml`，填写 `version`）   | 集成测试 + 推送 `:版本号` 镜像 + 打 `v版本号` Git 标签 + 创建 GitHub Release                          |
 
 本地验证与 CI 一致：
 
