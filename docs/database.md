@@ -57,7 +57,7 @@
 | `id` | `BIGSERIAL` | 主键 |
 | `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
 | `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
-| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless |
+| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless / daily / duel |
 | `region` | `VARCHAR(20)` | 仅区域模式非空 |
 | `total_score` | `INT` | 非空 |
 | `rounds` | `JSONB` | 回合明细（name / distanceKm / score / imageId / xp / difficulty） |
@@ -66,6 +66,30 @@
 索引：`game_results_player_created_idx`（玩家 + 时间倒序，历史记录）、
 `game_results_player_mode_score_idx`（玩家 + 模式 + 分数，最佳成绩）。
 不建外键：游客记录随会话过期清理，注册用户删除无需级联。
+
+#### `scores`（排行榜计分表，迁移 004）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `id` | `BIGSERIAL` | 主键 |
+| `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
+| `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
+| `mode` | `VARCHAR(20)` | 非空 |
+| `score` | `INT` | 非负，CHECK `>= 0` |
+| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
+
+索引：`scores_user_created_idx`（玩家 + 时间）、`scores_mode_created_idx`（模式 + 时间）。
+仅记录“新最佳”：某玩家某模式的成绩高于历史最高时才插入，排行榜读取时按 `MAX(score)` 聚合，天然每人每模式只占一行。
+
+#### `daily_challenges`（每日挑战题单，迁移 004）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `date` | `DATE` | 主键（UTC 日期） |
+| `location_ids` | `BIGINT[]` | 当天 10 题的地点 ID 数组 |
+| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
+
+当天首次访问时惰性抽题 `ON CONFLICT (date) DO UPDATE` 幂等写入；检测到题单失效（seed 重建致 ID 漂移）时自愈重抽。
 
 ## Redis
 
@@ -90,14 +114,23 @@
 | `rl:mapillary-search:<ip>` | zset | 60 秒 | 搜索代理滑动窗口限频计数 |
 | `rl:mapillary-image:<ip>` | zset | 60 秒 | 图片代理滑动窗口限频计数 |
 | `rl:games-submit:<role>:<id>` | zset | 60 秒 | 成绩提交滑动窗口限频计数 |
+| `lb:overall:<mode>` | zset | 永续 | 各模式总榜（成员 = 玩家 ID，分数 = 最高分） |
+| `lb:daily:<mode>:<yyyymmdd>` | zset | 7 天 | 各模式日榜（当日最高分，过期键由夜间重建任务清理） |
+| `user_daily:<player_id>:<date>` | string | 至次日 UTC 零点 | 每日挑战已提交标记（SET NX 抢占，冲突返回 409） |
+| `profile:stats:<role>:<id>` | string | 5 分钟 | 个人统计聚合缓存，成绩落库后立即失效 |
+| `mp:queue` | list | 永续 | 对战匹配队列（RPopLPush 出队匹配） |
+| `mp:room:<room_id>` | hash | 2 小时 | 对局房间状态（模式/回合/双方状态/题目/历史） |
 
 ### 数据流说明
 
 - 游客绑定注册：校验 guest 令牌 → 建号 → 把 `guest_progress` 合并（累加场次/得分、取最高分）到 `user_progress` → 清理游客键
-- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取
+- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取；同时校验该成绩是否为某模式新最佳，是则写入 `scores` 并更新排行榜 zset（`ZADD GT`，仅提升不降低），并使个人统计缓存失效
 - 令牌旋转：refresh 以哈希形式仅存 Redis，换取时与提交值做恒时比较（`timingSafeEqual`），不匹配即整体吊销
 - 随机抽题：`GET /api/locations/random` 先从 Redis 池 `SRANDMEMBER` 取 ID（池 miss 时才按区域/难度查 PG 重建），只对抽中的 ID 回源查全量记录，避免每次抽题压数据库
 - Mapillary 代理：`/api/proxy/mapillary/*` 服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 Redis（搜索/媒体 URL/图片字节，TTL 24h）；每次上游调用前经滑动窗口限频（按 IP 计数）
+- 排行榜：数据源是 `scores` 表（`MAX(score) GROUP BY player_id`）；zset 仅作读缓存，每日 UTC 零点重建 + 清理 7 天前的日榜键，key 丢失时按需懒重建
+- 每日挑战：`GET /api/daily/today` 惰性抽题写入 `daily_challenges`；提交成绩时以 `user_daily` 键 SET NX 抢占（TTL 至 UTC 零点），抢不到返回 409，实现“每人每天一次”
+- 对战：`mp:queue` 列表双出队配对 → `mp:room:<id>` 哈希保存房间状态（回合/双方答案/总分）→ 结束自动落库 `game_results`（mode=duel），房间 2 小时后过期
 
 ## 本地开发环境
 

@@ -42,6 +42,10 @@ export async function getRandomLocations(query: RandomLocationsQuery): Promise<L
     return repository.fetchByIds(ids.map((id) => Number(id)));
 }
 
+export async function getLocationsByIds(ids: number[]): Promise<LocationRecord[]> {
+    return repository.fetchByIds(ids);
+}
+
 export async function getLocationStats(): Promise<LocationStats> {
     const cached = await redis.get(STATS_KEY);
     if (cached !== null) {

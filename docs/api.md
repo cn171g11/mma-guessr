@@ -150,8 +150,9 @@
 }
 ```
 
-- `mode`：`classic` / `challenge` / `region` / `china` / `endless`
+- `mode`：`classic` / `challenge` / `region` / `china` / `endless` / `daily` / `duel`
 - `region`：仅 `region` 模式必填；其他模式传了返回 `400`
+- `daily` 模式：仅注册用户可提交、每天限一次（重复提交返回 `409`）；`duel` 模式由对战服务在对局结束时自动落库
 - 乐观校验：`totalScore` 必须等于 `rounds` 各 `score` 之和，杜绝明显刷分
 - 每轮 `score` 上限 5000；`distanceKm` 为 `null` 表示超时未提交
 - 成功后进度快照增量累计：场次 += 轮数、总分 += totalScore、最佳取最高、猜中计为得分 > 0 的轮数
@@ -175,6 +176,52 @@
 
 ```json
 { "progress": { "totalRounds": 12, "totalScore": 34500, "bestScore": 8900, "correctGuesses": 9 } }
+```
+
+## 排行榜（`/api/leaderboard`）
+
+`GET /api/leaderboard`，需 Bearer 认证（用户/游客均可读取）。
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `mode` | 否 | 默认 `classic`，支持全部模式（含 `daily`、`duel`） |
+| `period` | 否 | `overall` 总榜 / `daily` 日榜，默认 `overall` |
+| `limit` | 否 | 1-50，默认 20 |
+| `date` | 否 | `daily` 期需 YYYY-MM-DD；缺省取当天（UTC） |
+
+- 记为各玩家在 `scores` 表中的最高分（每人每个模式仅记一次最佳）
+- 读 Redis 有序集合（`lb:overall:<mode>` / `lb:daily:<mode>:<日期>`），key 缺失时自动按数据库重建，夜间 UTC 零点例行重建
+- 日榜/总榜均取个人最高分，故 `overall` 为累积性排名
+
+```json
+{ "period": "overall", "mode": "classic", "date": null,
+  "entries": [ { "id": 1, "username": "alice", "score": 4800 }, ... ] }
+```
+
+## 每日挑战（`/api/daily`）
+
+### `GET /api/daily/today`
+
+需 Bearer 认证。返回当天（UTC）题单；服务端惰性抽 10 题并入库，全天固定不变：
+
+```json
+{ "date": "2026-08-06", "played": false,
+  "locations": [ { "id": 1001, "name": "日本东京·东京塔", "lat": 35.6586, "lng": 139.7454,
+    "country": null, "city": null, "region": "asia", "difficulty": 1, "mapillaryId": null, "panoramaUrl": null } ] }
+```
+
+- `played`：Redis 抢占（`user_daily:<id>:<date>`）已生效则为 `true`，表示当天已提交
+- 题单失效（如重跑 seed 使自增 ID 漂移）时自愈重抽，不会返回空题单
+
+## 个人统计（`/api/profile`）
+
+`GET /api/profile`，需 Bearer 认证。返回该玩家的多维度聚合统计（结果缓存 5 分钟，新成绩落库立即失效）。
+
+```json
+{ "username": "alice", "role": "user",
+  "stats": { "totalGames": 12, "totalRounds": 60, "totalScore": 34500, "avgScore": 2875,
+    "bestScore": 8900, "bestMode": "challenge", "correctGuesses": 48, "accuracy": 40.0,
+    "byMode": { "classic": { "games": 4, "rounds": 4, "bestScore": 4800, "avgScore": 4100 } } } }
 ```
 
 ## 题库（`/api/locations`）

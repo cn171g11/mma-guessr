@@ -17,8 +17,19 @@ const API_BASE = 'http://localhost:3000';
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v1.15.0';
+const VERSION = 'v1.16.0';
 const CHANGELOG = [
+    {
+        version: 'v1.16.0',
+        date: '2026-08-06 12:00:00',
+        changes: [
+            '📅 每日挑战：每天一组 10 题全球街景，每位注册用户每天限一次，与全球玩家同题竞技。',
+            '🏆 排行榜：新增经典/挑战/区域/中国/每日模式的日榜与总榜，取各自最高分排名。',
+            '📊 账号面板升级：累计轮数 / 总分 / 最佳 / 命中率 / 分模式统计来自服务端。',
+            '⚔️ 多人对战（测试中）：实时匹配 1v1，各 5 题 PK 总分。',
+            '版本号递增至 v1.16.0。',
+        ],
+    },
     {
         version: 'v1.15.0',
         date: '2026-08-06 10:00:00',
@@ -229,6 +240,7 @@ const MODES = {
     region: { label: '🗺️ 区域限定', rounds: 5, timer: 0, scale: 1200, diffPool: [1, 2, 3, 4] },
     china: { label: '🇨🇳 中国模式', rounds: 5, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
     endless: { label: '♾️ 无限模式', rounds: Infinity, timer: 0, scale: 2000, diffPool: null },
+    daily: { label: '📅 每日挑战', rounds: 10, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
 };
 const REGION_NAMES = {
     asia: '亚洲',

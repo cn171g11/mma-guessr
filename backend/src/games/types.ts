@@ -1,4 +1,4 @@
-export const GAME_MODES = ['classic', 'challenge', 'region', 'china', 'endless'] as const;
+export const GAME_MODES = ['classic', 'challenge', 'region', 'china', 'endless', 'daily', 'duel'] as const;
 
 export type GameMode = (typeof GAME_MODES)[number];
 

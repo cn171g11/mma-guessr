@@ -41,6 +41,19 @@ export const APP_CONSTANTS = {
     MAX_ROUND_SCORE: 5000,
     MAX_TOTAL_SCORE: 1_000_000,
     MAX_ROUNDS_PER_GAME: 100,
+    // 排行榜
+    LEADERBOARD_MAX_LIMIT: 50,
+    LEADERBOARD_DEFAULT_LIMIT: 20,
+    LEADERBOARD_DAILY_RETENTION_DAYS: 7,
+    // 每日挑战
+    DAILY_CHALLENGE_ROUNDS: 10,
+    // 用户资料统计
+    PROFILE_STATS_TTL_SECONDS: 5 * 60,
+    // 多人对战
+    MP_TOTAL_ROUNDS: 5,
+    MP_ROUND_SECONDS: 60,
+    MP_MATCHMAKER_TICK_MS: 1500,
+    MP_ROOM_TTL_SECONDS: 2 * 60 * 60,
 } as const;
 
 function required(name: string, fallback: string): string {

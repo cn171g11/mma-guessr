@@ -38,6 +38,7 @@ npm run dev
 | `npm run db:down`    | 停止容器                                    |
 | `npm run db:migrate` | 执行数据库迁移（`src/db/migrations/*.sql`） |
 | `npm run db:seed`    | 题库导入：解析 `frontend/src/js/data.js` 批量 upsert 到 `locations`（幂等） |
+| `npm run lb:rebuild` | 手动重建排行榜 zset（每日 UTC 零点自动执行） |
 | `npm test`           | 端到端测试（需要 PG + Redis 可用）          |
 | `npm run test:watch` | 测试监听模式                                |
 | `npm run script:*`   | 运维脚本（见 [scripts.md](scripts.md)）          |
@@ -76,6 +77,10 @@ backend/
 ├── src/
 │   ├── auth/              # 认证领域：密码哈希、JWT、邮箱验证码、游客、账号 service
 │   ├── games/             # 游戏成绩域：类型、仓储、提交/查询/删除 service
+│   ├── leaderboard/       # 排行榜域：scores 落库、zset 缓存、夜间重建
+│   ├── daily/             # 每日挑战域：惰性抽题、每日一次校验
+│   ├── profile/           # 个人统计域：多维聚合 + 缓存失效
+│   ├── multiplayer/       # 对战域：匹配队列、房间状态、回合结算（socket.io）
 │   ├── locations/         # 题库域：随机抽题池、统计缓存
 │   ├── services/          # 外部服务（Mapillary 代理）
 │   ├── config/env.ts      # 环境变量加载与校验
@@ -86,10 +91,11 @@ backend/
 │   ├── logger/index.ts    # 统一日志模块（级别控制 + 生产 JSON 输出）
 │   ├── middleware/        # 请求日志、404、全局错误处理与认证中间件
 │   ├── routes/            # API 路由
+│   ├── socket.ts          # Socket.IO 挂载 / 关闭（对战长连接）
 │   ├── types/             # 全局类型声明（Express Request 扩展）
-│   ├── utils/             # HttpError、请求参数校验、滑动窗口限频
+│   ├── utils/             # HttpError、请求参数校验、滑动窗口限频、UTC 日期工具
 │   ├── app.ts             # Express 应用组装
-│   └── index.ts           # 启动入口
+│   └── index.ts           # 启动入口（HTTP + Socket.IO 挂载）
 ├── Dockerfile               # 生产镜像（多阶段构建，GHCR 推送）
 ├── docker-compose.yml       # 开发环境：PostgreSQL + Redis
 └── eslint.config.mjs        # ESLint 扁平配置

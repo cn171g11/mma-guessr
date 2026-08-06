@@ -49,6 +49,23 @@ const blueIcon = new L.Icon({
 
 const $ = (id) => document.getElementById(id);
 
+// 多人对战开关：mp.js 在进入/退出对战时切换；提交与退出按钮据此路由到对战逻辑
+let mpActive = false;
+function routeSubmit() {
+    if (mpActive) {
+        mpSubmitGuess();
+    } else {
+        submitGuess();
+    }
+}
+function routeQuit() {
+    if (mpActive) {
+        mpQuit();
+    } else {
+        quitGame();
+    }
+}
+
 // ==========================================================
 // 【历史最佳成绩 localStorage】
 // ==========================================================
@@ -311,9 +328,20 @@ function initGuessMap() {
 // ==========================================================
 // 【模式选择 / 启动】
 // ==========================================================
+// 每日挑战题单：由 daily.js 拉取 /api/daily/today 后注入，daily 模式固定使用该题单
+let dailyChallenge = { date: null, locations: [] };
+function startDailyChallenge(challenge) {
+    dailyChallenge = { date: challenge.date, locations: challenge.locations };
+    startGame('daily', null);
+}
+
 function chooseMode(mode) {
     if (mode === 'region') {
         $('region-screen').classList.add('show');
+        return;
+    }
+    if (mode === 'daily') {
+        openDailyPanel();
         return;
     }
     startGame(mode, null);
@@ -455,13 +483,17 @@ function poolKeyFor() {
     if (state.mode === 'endless') return 'endless:' + currentDifficulty();
     if (state.mode === 'region') return 'region:' + state.region;
     if (state.mode === 'china') return 'china';
+    if (state.mode === 'daily') return 'daily:' + dailyChallenge.date;
     return 'mode:' + state.mode;
 }
 
 // 构建当前模式/区域/难度对应的候选地点池
 function buildPool() {
     let pool;
-    if (state.mode === 'endless') {
+    if (state.mode === 'daily') {
+        pool = dailyChallenge.locations.slice();
+        if (!pool.length) pool = WORLD_LOCATIONS.slice();
+    } else if (state.mode === 'endless') {
         const d = currentDifficulty();
         const world = WORLD_LOCATIONS.filter((l) => l.difficulty === d);
         const base = world.length ? world : WORLD_LOCATIONS.filter((l) => Math.abs(l.difficulty - d) <= 1);

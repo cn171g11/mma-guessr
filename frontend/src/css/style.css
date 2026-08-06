@@ -1363,3 +1363,199 @@ button {
         padding: 6px 16px;
     }
 }
+
+/* ============ 排行榜 & 每日挑战面板 ============ */
+#leaderboard-overlay,
+#daily-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    background: rgba(10, 15, 35, 0.92);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+#leaderboard-overlay.show,
+#daily-overlay.show {
+    display: flex;
+}
+#leaderboard-box,
+#daily-box {
+    background: #16213e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 440px;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 26px 30px;
+}
+#leaderboard-box h2,
+#daily-box h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.lb-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.lb-tab {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    color: #e6edf3;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.lb-tab.active {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    border-color: #3498db;
+}
+.lb-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.lb-sub {
+    font-size: 12px;
+    color: #8899bb;
+    margin-bottom: 10px;
+}
+.lb-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.lb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+.lb-row.me {
+    background: rgba(52, 152, 219, 0.18);
+    border-color: #3498db;
+}
+.lb-rank {
+    width: 28px;
+    color: #ffd700;
+    font-weight: bold;
+    text-align: center;
+}
+.lb-name {
+    flex: 1;
+    color: #e6edf3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lb-score {
+    color: #4caf50;
+    font-weight: bold;
+}
+.lb-empty {
+    text-align: center;
+    color: #8899bb;
+    padding: 20px 0;
+    font-size: 14px;
+}
+.lb-best {
+    font-size: 13px;
+    color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 10px;
+}
+.lb-played {
+    font-size: 13px;
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.12);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 10px;
+}
+.lb-start {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px 0;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+}
+.lb-start:hover {
+    filter: brightness(1.1);
+}
+
+/* ============ 多人对战面板 ============ */
+#mp-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    background: rgba(10, 15, 35, 0.92);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+#mp-overlay.show {
+    display: flex;
+}
+#mp-box {
+    background: #16213e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 26px 30px;
+}
+#mp-box h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.mp-status {
+    font-size: 14px;
+    color: #e6edf3;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    text-align: center;
+}
+.mp-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+#panorama-view img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}

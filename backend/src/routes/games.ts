@@ -3,11 +3,12 @@ import { z } from 'zod';
 
 import { getProgress } from '../auth/guest.js';
 import { APP_CONSTANTS } from '../config/env.js';
-import { GAME_MODES, type GameMode, type PlayerRef } from '../games/types.js';
+import { GAME_MODES, type GameMode } from '../games/types.js';
 import * as gamesService from '../games/service.js';
 import { LOCATION_REGIONS } from '../locations/types.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { badRequest } from '../utils/httpError.js';
+import { playerRefOf } from '../utils/playerRef.js';
 import { slidingWindowRateLimit } from '../utils/slidingWindowRateLimit.js';
 import { parseBody, parseQuery } from '../utils/validate.js';
 
@@ -41,13 +42,6 @@ const bestQuerySchema = z.object({
 });
 
 const gameIdSchema = z.coerce.number().int().min(1);
-
-function playerRefOf(req: Request): PlayerRef {
-    if (req.auth === undefined) {
-        throw badRequest('缺少身份信息');
-    }
-    return { role: req.auth.role, id: req.auth.subject };
-}
 
 // 区域模式的 region 必填，其他模式一律不允许携带
 function resolveRegion(mode: GameMode, region: string | null | undefined): string | null {

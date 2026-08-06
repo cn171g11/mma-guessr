@@ -1,4 +1,7 @@
 import { getProgress, upsertProgress } from '../auth/guest.js';
+import { guardDailySubmission } from '../daily/service.js';
+import * as leaderboardService from '../leaderboard/service.js';
+import * as profileService from '../profile/service.js';
 import { createLogger } from '../logger/index.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import * as repository from './repository.js';
@@ -36,8 +39,15 @@ async function accumulateProgress(player: PlayerRef, input: SubmitGameInput): Pr
 
 export async function submitGame(player: PlayerRef, input: SubmitGameInput): Promise<GameRecord> {
     assertScoreConsistent(input);
+    if (input.mode === 'daily') {
+        await guardDailySubmission(player);
+    }
     const game = await repository.insertGameRecord(player, input);
     await accumulateProgress(player, input);
+    await profileService.invalidateStatsCache(player);
+    if (player.role === 'user') {
+        await leaderboardService.recordScore(player.id, input.mode, input.totalScore);
+    }
     log.info(`游戏成绩已记录 player=${player.role}:${player.id} mode=${input.mode} score=${input.totalScore}`);
     return game;
 }

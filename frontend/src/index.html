@@ -3,13 +3,14 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>🌍 MmaGuessr v1.14.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+        <title>🌍 MmaGuessr v1.16.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
         <link rel="stylesheet" href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" />
         <script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+        <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
 
         <link rel="stylesheet" href="css/style.css" />
     </head>
@@ -49,10 +50,16 @@
                     <p>从最简单的地标起步，凭得分赚经验、升等级。等级越高题目越难，难题经验也越多！</p>
                     <div class="best" id="best-endless">历史最佳：--</div>
                 </div>
+                <div class="mode-card" onclick="chooseMode('daily')">
+                    <div class="icon">📅</div>
+                    <h3>每日挑战</h3>
+                    <p>每天一组全球 10 题，注册用户每天限一次，与全球玩家同题竞技一较高下。</p>
+                    <div class="best" id="best-daily">需登录 · 每日一次</div>
+                </div>
             </div>
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-                <span class="ver-badge" id="home-version">版本 v1.14.0</span>
+                <span class="ver-badge" id="home-version">版本 v1.16.0</span>
                 <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
                 <a
                     class="notion-btn"
@@ -62,6 +69,9 @@
                 >
                     📔 游戏文档
                 </a>
+                <button class="changelog-btn" onclick="openLeaderboard()">🏆 排行榜</button>
+                <button class="changelog-btn" onclick="openDailyPanel()">📅 每日挑战</button>
+                <button class="changelog-btn" onclick="openMpPanel()">⚔️ 对战</button>
                 <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
                 <button class="changelog-btn" onclick="openAccount()">👤 账号</button>
             </div>
@@ -132,7 +142,7 @@
                 <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
                 <div id="diff-stars">难度 ★☆☆☆☆</div>
             </div>
-            <div id="version-line">版本 v1.14.0</div>
+            <div id="version-line">版本 v1.16.0</div>
         </div>
 
         <div id="timer-box">
@@ -140,7 +150,7 @@
             <span id="timer-num">60</span>
             s
         </div>
-        <button id="quit-btn" onclick="quitGame()">✕ 退出</button>
+        <button id="quit-btn" onclick="routeQuit()">✕ 退出</button>
 
         <div id="game-container">
             <div id="panorama-area">
@@ -163,7 +173,7 @@
             <div id="guess-map"></div>
         </div>
 
-        <button id="submit-btn" onclick="submitGuess()" disabled>🎯 提交选择</button>
+        <button id="submit-btn" onclick="routeSubmit()" disabled>🎯 提交选择</button>
         <button id="mobile-map-btn" onclick="toggleMobileMap()">🗺️ 地图</button>
 
         <!-- ============ 结果弹窗 ============ -->
@@ -267,6 +277,54 @@
             </div>
         </div>
 
+        <!-- ============ 排行榜弹窗 ============ -->
+        <div id="leaderboard-overlay" onclick="if (event.target === this) closeLeaderboard();">
+            <div id="leaderboard-box">
+                <h2>
+                    🏆 排行榜
+                    <button class="clog-close" onclick="closeLeaderboard()">✕ 关闭</button>
+                </h2>
+                <div class="lb-tabs">
+                    <button class="lb-tab active" id="lb-period-overall" onclick="switchLbPeriod('overall')">
+                        总榜
+                    </button>
+                    <button class="lb-tab" id="lb-period-daily" onclick="switchLbPeriod('daily')">今日榜</button>
+                </div>
+                <div class="lb-modes" id="lb-modes"></div>
+                <div class="lb-sub" id="lb-sub"></div>
+                <div id="lb-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 每日挑战弹窗 ============ -->
+        <div id="daily-overlay" onclick="if (event.target === this) closeDailyPanel();">
+            <div id="daily-box">
+                <h2>
+                    📅 每日挑战
+                    <button class="clog-close" onclick="closeDailyPanel()">✕ 关闭</button>
+                </h2>
+                <div id="daily-content"></div>
+            </div>
+        </div>
+
+        <!-- ============ 多人对战弹窗 ============ -->
+        <div id="mp-overlay" onclick="if (event.target === this) mpCloseLobby();">
+            <div id="mp-box">
+                <h2>
+                    ⚔️ 多人对战
+                    <button class="clog-close" onclick="mpCloseLobby()">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats">实时匹配 1v1 · 共 5 题 · 每题 60 秒 · 取总分分胜负</div>
+                <div class="mp-status" id="mp-status">尚未连接</div>
+                <div class="mp-btns">
+                    <button class="acc-submit" id="mp-find-btn" onclick="mpFindMatch()">🔍 开始匹配</button>
+                    <button class="acc-logout" id="mp-cancel-btn" onclick="mpCancelMatch()" style="display: none">
+                        取消匹配
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- ============ 街景错误报告弹窗 ============ -->
         <div id="err-overlay" onclick="if (event.target === this) closeErrReport();">
             <div id="err-box">
@@ -286,5 +344,8 @@
         <script src="js/api.js"></script>
         <script src="js/game.js"></script>
         <script src="js/auth.js"></script>
+        <script src="js/lb.js"></script>
+        <script src="js/daily.js"></script>
+        <script src="js/mp.js"></script>
     </body>
 </html>

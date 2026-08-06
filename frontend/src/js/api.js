@@ -127,6 +127,7 @@ const MmaApi = (() => {
         init,
         isOnline: () => isOnline,
         getIdentity: () => identity,
+        getAccessToken: () => localStorage.getItem(ACCESS_KEY),
         getGuestToken: () => localStorage.getItem(GUEST_KEY),
         getMe: () => request('/api/auth/me'),
         getBest: (mode) => request('/api/games/best?mode=' + encodeURIComponent(mode)),
@@ -134,6 +135,13 @@ const MmaApi = (() => {
         getSummary: () => request('/api/games/summary'),
         submitGame: (payload) => request('/api/games', { method: 'POST', body: payload }),
         deleteGame: (id) => request('/api/games/' + id, { method: 'DELETE' }),
+        getProfile: () => request('/api/profile'),
+        getDaily: () => request('/api/daily/today'),
+        getLeaderboard: (mode, period, limit, date) => {
+            const params = new URLSearchParams({ mode, period, limit: String(limit || 20) });
+            if (date) params.set('date', date);
+            return request('/api/leaderboard?' + params.toString());
+        },
         sendVerificationCode: (email) => request('/api/auth/verification-code', { method: 'POST', body: { email } }),
         login: (identifier, password) =>
             request('/api/auth/login', { method: 'POST', body: { identifier, password } }).then(afterAuth),

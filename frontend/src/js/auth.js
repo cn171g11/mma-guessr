@@ -34,12 +34,26 @@ async function refreshAccountPanel() {
 }
 
 // 从服务端读取累计统计；请求失败时保持占位文案，不打断面板展示
+const PROFILE_MODE_LABELS = {
+    classic: '经典',
+    challenge: '挑战',
+    region: '区域',
+    china: '中国',
+    endless: '无限',
+    daily: '每日',
+    duel: '对战',
+};
 async function loadProfileStats() {
     try {
-        const summary = await MmaApi.getSummary();
-        const progress = summary.progress;
-        if (!progress) return '暂无游戏数据';
-        return `共 ${progress.totalRounds} 轮 · 总分 ${progress.totalScore} 分 · 最佳 ${progress.bestScore} 分`;
+        const profile = await MmaApi.getProfile();
+        const s = profile.stats;
+        if (!s || s.totalGames === 0) return '暂无游戏数据';
+        const bestMode = s.bestMode ? ' · 最佳模式 ' + (PROFILE_MODE_LABELS[s.bestMode] || s.bestMode) : '';
+        return (
+            `共 ${s.totalGames} 局 / ${s.totalRounds} 轮 · 总分 ${s.totalScore} 分 · 最佳 ${s.bestScore} 分` +
+            ` · 命中率 ${s.accuracy}%` +
+            bestMode
+        );
     } catch (e) {
         return '暂无游戏数据';
     }
