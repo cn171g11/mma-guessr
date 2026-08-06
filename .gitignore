@@ -41,5 +41,5 @@ AGENTS.md
 CLAUDE.md
 SKILL.md
 
-# Redis 持久化文件
+# Redis
 *.rdb
