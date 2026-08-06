@@ -1,6 +1,6 @@
 # MmaGuessr · 街景猜位置游戏（前端）
 
-> 本文档为**游戏前端**说明（纯静态文件）。后端服务与整仓结构见[仓库根 README](../../README.md)。
+> 本文档为**游戏前端**说明（纯静态文件）。后端服务与整仓结构见[仓库根 README](../README.md)，全部文档见 [docs/README.md](README.md)。
 
 一个以 [Mapillary](https://www.mapillary.com/) 为数据源的 **GeoGuessr 风格** 地理猜谜游戏。观察世界各地随机街景，在地图上标记你猜测的位置，系统按实际距离计分。
 
@@ -54,8 +54,8 @@
 
 ## 文件结构
 
-| 文件                                   | 说明                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
+| 文件                     | 说明                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------- |
 | `src/index.html`                       | 🎮 **游戏主页面**                                                               |
 | `src/css/style.css`                    | 全局样式（深色玻璃质感 UI）                                                     |
 | `src/js/config.js`                     | 全局配置：`MAPILLARY_TOKEN` / `VERSION` / `CHANGELOG` / 模式与分区计分参数      |
@@ -72,7 +72,6 @@
 | `package.json`                         | 仅含 Prettier（`npm run format`），无运行时依赖                                 |
 | `.nojekyll`                            | 禁用 GitHub Pages 的 Jekyll 构建                                                |
 | `.gitignore`                           | Git 忽略规则（忽略 `.workbuddy/`）                                              |
-| `README.md`                            | 前端说明文档（整仓概览见仓库根 README）                                         |
 
 > 游戏没有构建步骤：`src/` 中的 HTML/CSS/JS 为纯静态文件，浏览器直接加载。
 
@@ -92,24 +91,15 @@
 
 纯前端单页应用，**无构建步骤**（`frontend/` 下的文件即最终产物）。
 
-> 游戏本体运行无需后端；如需在线对战、排行榜、账号等能力，可配合仓库内 [`backend/`](../../backend/) 使用。
+> 游戏本体运行无需后端；如需在线对战、排行榜、账号等能力，可配合仓库内 [`backend/`](../backend/) 使用。
 
 ---
 
 ## 部署
 
-### GitHub Pages（推荐）
+- **GitHub Pages（推荐）**：推送 `frontend/**` 至 `main` 后由 `deploy.yml` 自动发布，详细步骤见 [deploy.md](deploy.md)。
 
-```bash
-git push origin main
-```
-
-先在仓库 **Settings → Pages → Source** 选择 `GitHub Actions`，当 `frontend/**` 发生变更推送
-至 `main` 时，会自动触发 `CI`（代码风格/语法/题库校验）与 `Deploy`（GitHub Pages 发布），
-无需手动构建。发布产物由 `deploy.yml` 从 `frontend/` 组装，游戏入口为 `frontend/src/index.html`。
-详细配置见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
-
-### 任意静态服务器
+### 本地静态服务器
 
 ```bash
 # 使用 Python
@@ -169,9 +159,9 @@ node tools/add-hmt.js
 
 ## 许可
 
-本项目以 [Apache License 2.0](../../LICENSE) 开源发布，版权所有 © 2026 Dinnerb0ne2。
+本项目以 [Apache License 2.0](../LICENSE) 开源发布，版权所有 © 2026 Dinnerb0ne2。
 
-- 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](LICENSE)。
+- 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](../LICENSE)。
 - 本项目仅用于学习和娱乐目的，不对任何使用后果作担保。
 - Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
 - 提交的贡献（Issue / PR）默认以 Apache 2.0 条款贡献给本项目。

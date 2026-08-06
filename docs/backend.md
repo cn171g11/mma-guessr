@@ -2,6 +2,8 @@
 
 MmaGuessr 后端服务：Node.js + Express + TypeScript + PostgreSQL + Redis。
 
+> 相关主题文档：[api.md](api.md)（API）、[database.md](database.md)（数据层）、[testing.md](testing.md)（测试）、[deploy.md](deploy.md)（部署）、[scripts.md](scripts.md)（运维脚本）。
+
 ## 快速开始
 
 ```bash
@@ -37,34 +39,22 @@ npm run dev
 | `npm run db:migrate` | 执行数据库迁移（`src/db/migrations/*.sql`） |
 | `npm test`           | 端到端测试（需要 PG + Redis 可用）          |
 | `npm run test:watch` | 测试监听模式                                |
-| `npm run script:*`   | 运维脚本（见 `scripts/README.md`）          |
+| `npm run script:*`   | 运维脚本（见 [scripts.md](scripts.md)）          |
 
 ## 测试
 
-`npm test`（Vitest + supertest）直接对 Express 应用发起真实请求，覆盖认证全流程：
+`npm test`（Vitest + supertest）对 Express 应用发起真实请求，覆盖认证全流程（详见 [testing.md](testing.md)）：
 
-注册/登录 / 验证码限频与错误 / 刷新令牌旋转与复用吊销 / 登出 / 登录防爆破 / 游客会话与绑定注册迁移。
-
-- 测试以开发模式运行：`DATABASE_URL` 默认 `postgres://mma:mma@localhost:5432/mma_guessr`，`REDIS_URL` 默认 `redis://localhost:6379`
-- 执行前请先 `npm run db:up`（或使用任意可用的 PG + Redis），并运行一次 `npm run db:migrate` 建表
-- SMTP 未配置时验证码会打印到日志，测试即从日志捕获验证码
+```bash
+npm run db:up && npm run db:migrate && npm test
+```
 
 ## 认证 API（`/api/auth`）
 
-| 方法 | 路径                 | 说明                                                           |
-| ---- | -------------------- | -------------------------------------------------------------- |
-| POST | `/verification-code` | 发送邮箱验证码（60 秒限频，10 分钟有效）                       |
-| POST | `/register`          | 注册（邮箱验证码校验，可选携带 `guestToken` 一并迁移游客数据） |
-| POST | `/login`             | 登录（邮箱或用户名 + 密码，失败 5 次锁 15 分钟）               |
-| POST | `/refresh`           | 用 refresh token 换取新令牌对（旧 refresh 立即作废，旋转式）   |
-| POST | `/logout`            | 注销并吊销 Redis 中的 refresh token                            |
-| POST | `/guest`             | 创建游客会话（UUID 身份 + 游戏进度暂存 Redis，30 天过期）      |
-| POST | `/guest/bind`        | 游客绑定注册：校验邮箱验证码后建号并把游客进度迁移到正式账号   |
-| GET  | `/me`                | 获取当前身份信息（注册用户或游客）                             |
+注册 / 登录 / 刷新令牌 / 登出 / 游客会话与绑定等接口的完整参考见 [api.md](api.md)。
 
 - 注册/登录返回 `accessToken`（15 分钟）+ `refreshToken`（7 天，Redis 键 `refresh:<user_id>`）
-- 游客登录返回 `guestToken`（30 天），后续请求同样放入 `Authorization: Bearer <token>`
-- 密码使用 bcrypt 哈希（成本因子 10）；SMTP 未配置时开发模式会把验证码打印到日志
+- 游客返回 `guestToken`（30 天），后续请求同样放入 `Authorization: Bearer <token>`
 
 ## 环境变量
 
@@ -103,16 +93,7 @@ backend/
 
 ## CI/CD
 
-由 `.github/workflows/backend.yml` 与 `.github/workflows/release.yml` 驱动（仓库根目录）：
-
-| 触发方式                                                    | 内容                                                                                                  |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `push` / `pull_request`（仅 `backend/**` 变更）             | 快速检查：`npm run typecheck` + `lint` + `format:check` + `build`                                     |
-| 手动 `workflow_dispatch`（`mode=integration`）              | 追加集成测试：CI 临时启动 PostgreSQL/Redis → 迁移建表 → `npm test` → `/api/health` 冒烟              |
-| 手动 `workflow_dispatch`（`mode=image`）                    | 构建并推送 `ghcr.io/<owner>/<repo>-backend`（`latest` + SHA 标签）                                    |
-| 手动 `workflow_dispatch`（`release.yml`，填写 `version`）   | 集成测试 + 推送 `:版本号` 镜像 + 打 `v版本号` Git 标签 + 创建 GitHub Release                          |
-
-本地验证与 CI 一致：
+由 `.github/workflows/backend.yml` 与 `.github/workflows/release.yml` 驱动，触发方式与部署详情见 [deploy.md](deploy.md)。本地验证与 CI 一致：
 
 ```bash
 npm run db:up       # 启动 PostgreSQL + Redis

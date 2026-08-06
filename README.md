@@ -4,10 +4,10 @@
 
 | 目录         | 说明                                            | 入口文档                      |
 | ------------ | ----------------------------------------------- | ----------------------------- |
-| `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [docs/frontend/README.md](docs/frontend/README.md) |
-| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [docs/backend/README.md](docs/backend/README.md) |
+| `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [docs/frontend.md](docs/frontend.md) |
+| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [docs/backend.md](docs/backend.md) |
 | `.github/`   | CI/CD 工作流（前端校验/发布、后端校验/镜像）       | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| `docs/`      | 开发文档汇总（前端/后端/运维脚本说明）            | [docs/](docs/) |
+| `docs/`      | 主题文档汇总（frontend / backend / api / database / build / deploy / testing / locations / scripts） | [docs/README.md](docs/README.md) |
 
 ---
 
@@ -38,7 +38,7 @@ npm install
 npm run dev        # http://localhost:3000/api/health
 ```
 
-详细说明见 [docs/frontend/README.md](docs/frontend/README.md) 与 [docs/backend/README.md](docs/backend/README.md)。
+详细说明见 [docs/frontend.md](docs/frontend.md) 与 [docs/backend.md](docs/backend.md)。
 
 ---
 
@@ -75,7 +75,7 @@ mma-guessr/
 │   ├── scripts/              # 运维脚本（check/build/test/clean/debug/deploy）
 │   ├── docker-compose.yml    # 开发环境：PostgreSQL + Redis
 │   └── Dockerfile            # 生产镜像（多阶段构建）
-├── docs/                     # 文档汇总：frontend/、backend/、backend/scripts/ 说明
+├── docs/                     # 主题文档（README 索引 + frontend/backend/api/database/build/deploy/testing/locations/scripts）
 ├── .github/workflows/        # CI/CD 流水线
 ├── AGENTS.md                 # AI 助手项目指令（opencode 读取）
 ├── CONTRIBUTING.md           # 开发与贡献指南
