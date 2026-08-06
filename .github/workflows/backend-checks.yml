@@ -98,6 +98,9 @@ jobs:
             - name: Run database migrations (users)
               run: npm run db:migrate
 
+            - name: Seed location database (1570 entries)
+              run: npm run db:seed
+
             - name: Run auth e2e tests (register/login/token/guest)
               run: npm test
 

@@ -16,8 +16,21 @@ let server: http.Server;
 let serverUrl: string;
 const liveClients: ClientSocket[] = [];
 
+// 服务端中止对局（mp:error，如题目池为空）时立即拒绝挂起的等待，
+// 让失败信息直接指向根因，而不是空等 8 秒后报"事件超时"
+function attachAbortHandler(client: ClientSocket, reject: (reason: Error) => void): void {
+    client.once('mp:error', (data: unknown) => {
+        const message =
+            typeof data === 'object' && data !== null && 'message' in data
+                ? String((data as { message: unknown }).message)
+                : '未知错误';
+        reject(new Error(`服务端中止对局：${message}`));
+    });
+}
+
 function waitFor(client: ClientSocket, event: string, timeoutMs = 8000): Promise<unknown> {
     return new Promise((resolve, reject) => {
+        attachAbortHandler(client, reject);
         const timer = setTimeout(() => {
             client.off(event, handler);
             reject(new Error(`等待事件 ${event} 超时`));
@@ -51,6 +64,7 @@ function makeEventBuffer<T>(client: ClientSocket, event: string): { next(timeout
                 return Promise.resolve(queued);
             }
             return new Promise((resolve, reject) => {
+                attachAbortHandler(client, reject);
                 const timer = setTimeout(() => reject(new Error(`等待事件 ${event} 超时`)), timeoutMs);
                 waiters.push({ resolve, timer });
             });
