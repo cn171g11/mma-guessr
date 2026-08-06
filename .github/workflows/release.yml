@@ -4,7 +4,7 @@ on:
     workflow_dispatch:
         inputs:
             version:
-                description: Release version (e.g. 1.0.0; creates tag v1.0.0 and pushes image ghcr.io/...-backend:1.0.0)
+                description: Release version (e.g. 1.0.0; creates tag v1.0.0, pushes multi-arch image ghcr.io/...-backend:1.0.0 and attaches cross-platform artifacts)
                 required: true
                 type: string
             includeIntegration:
@@ -26,9 +26,66 @@ jobs:
         with:
             runIntegration: ${{ inputs.includeIntegration }}
 
-    publish:
-        name: Push image / tag / create Release
+    # 跨平台发布产物：前端为纯静态包（任意平台直接部署/本地打开），
+    # 后端为 Node 运行包（dist + package.json + lockfile + .env.example，任意平台 npm ci 后即可运行）
+    artifacts:
+        name: Build cross-platform artifacts
         needs: quality
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Validate version input
+              run: |
+                  if ! echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                      echo "::error::version 必须为语义化版本号（例如 1.0.0）"
+                      exit 1
+                  fi
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: backend/package-lock.json
+
+            - name: Build backend (tsc)
+              working-directory: backend
+              run: |
+                  npm ci
+                  npm run build
+
+            - name: Package frontend (static site)
+              working-directory: frontend
+              run: |
+                  mkdir -p release
+                  cp -r index.html MmaGuessr.html src .nojekyll release/frontend/
+                  (cd release/frontend && zip -rq ../mma-guessr-frontend-${{ inputs.version }}.zip .)
+
+            - name: Package backend (Node runtime bundle)
+              working-directory: backend
+              run: |
+                  mkdir -p release
+                  cp -r dist package.json package-lock.json .env.example release/backend/
+                  (cd release/backend && zip -rq ../mma-guessr-backend-${{ inputs.version }}.zip .)
+
+            - name: Collect artifacts and generate checksums
+              run: |
+                  mkdir -p release
+                  cp frontend/release/mma-guessr-frontend-${{ inputs.version }}.zip release/
+                  cp backend/release/mma-guessr-backend-${{ inputs.version }}.zip release/
+                  cd release && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+            - name: Upload release assets
+              uses: actions/upload-artifact@v4
+              with:
+                  name: release-assets
+                  path: release/*
+
+    publish:
+        name: Multi-arch image / tag / GitHub Release
+        needs: artifacts
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -37,6 +94,12 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+
+            - name: Set up QEMU (cross-platform build)
+              uses: docker/setup-qemu-action@v3
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
             - name: Login to GHCR
               uses: docker/login-action@v3
@@ -54,21 +117,45 @@ jobs:
                       type=raw,value=${{ inputs.version }}
                       type=raw,value=latest
 
-            - name: Build and push
+            - name: Build and push (linux/amd64 + linux/arm64)
               uses: docker/build-push-action@v6
               with:
                   context: backend
                   push: true
+                  platforms: linux/amd64,linux/arm64
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
 
+            - name: Download release assets
+              uses: actions/download-artifact@v4
+              with:
+                  name: release-assets
+                  path: release-assets
+
             - name: Create git tag and GitHub Release
-              run: |
-                  gh release create "v${{ inputs.version }}" \
-                    --title "Release v${{ inputs.version }}" \
-                    --notes "Image: ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}" \
-                    --generate-notes
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  cat > release-notes.md <<EOF
+                  ## 镜像（多架构 linux/amd64 + linux/arm64）
+
+                  \`\`\`
+                  ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}
+                  ghcr.io/${{ github.repository }}-backend:latest
+                  \`\`\`
+
+                  ## 跨平台产物
+
+                  - \`mma-guessr-frontend-${{ inputs.version }}.zip\`：前端静态包，任意平台解压后打开 \`src/index.html\` 或部署到任意静态服务器
+                  - \`mma-guessr-backend-${{ inputs.version }}.zip\`：后端 Node 运行包，任意平台执行 \`npm ci --omit=dev && node dist/index.js\`（需 Node.js 20+，环境变量见 \`.env.example\`）
+                  - \`SHA256SUMS.txt\`：产物校验和
+
+                  ## 变更
+                  EOF
+                  gh release create "v${{ inputs.version }}" \
+                    --title "Release v${{ inputs.version }}" \
+                    --notes-file release-notes.md \
+                    --generate-notes \
+                    release-assets/*

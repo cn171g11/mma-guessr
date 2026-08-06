@@ -36,6 +36,9 @@ npm run script:build -- --docker --tag mma-guessr-backend:v1.0
 
 # 推送 GHCR（需先 docker login ghcr.io）
 npm run script:deploy -- --push
+
+# 多架构构建（linux/amd64 + linux/arm64，需启用 buildx + QEMU）
+docker buildx build --platform linux/amd64,linux/arm64 --push -t ghcr.io/<owner>/<repo>-backend:v1.0 backend
 ```
 
 CI 中的镜像构建与推送见 [deploy.md](deploy.md)。

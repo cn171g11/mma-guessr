@@ -27,8 +27,13 @@ git push origin main
 
 | 入口 | 方式 | 产物 |
 | --- | --- | --- |
-| `backend.yml` | Actions 页手动运行，`mode=image` | `ghcr.io/<owner>/<repo>-backend`（`latest` + 提交 SHA） |
-| `release.yml` | Actions 页手动运行，填写 `version` | 集成测试 → 镜像 `:版本号` + `latest` → Git 标签 `v版本号` → GitHub Release |
+| `backend.yml` | Actions 页手动运行，`mode=image` | `ghcr.io/<owner>/<repo>-backend`（`latest` + 提交 SHA，linux/amd64 + linux/arm64 多架构） |
+| `release.yml` | Actions 页手动运行，填写 `version` | 集成测试 → 多架构镜像 `:版本号` + `latest` → Git 标签 `v版本号` → GitHub Release（含跨平台产物） |
+
+`release.yml` 的 Release 附带跨平台产物（已附 SHA256 校验和）：
+
+- `mma-guessr-frontend-<version>.zip`：前端静态包，任意平台解压后打开 `src/index.html` 或部署到任意静态服务器
+- `mma-guessr-backend-<version>.zip`：后端 Node 运行包，任意平台执行 `npm ci --omit=dev && node dist/index.js`（需 Node.js 20+，环境变量见 `.env.example`）
 
 工作流需 `actions: write` 权限配合 BuildKit `type=gha` 缓存，已按 job 单独授予。
 
