@@ -56,7 +56,7 @@ jobs:
               run: npm run build
 
     integration:
-        name: 集成验证 PG + Redis / health
+        name: 集成测试：认证全流程（PG + Redis）
         needs: check
         runs-on: ubuntu-latest
         defaults:
@@ -105,6 +105,12 @@ jobs:
 
             - name: 构建
               run: npm run build
+
+            - name: 初始化数据库表（users）
+              run: npm run db:migrate
+
+            - name: 运行认证端到端测试（注册/登录/令牌/游客绑定）
+              run: npm test
 
             - name: 启动服务并验证 /api/health
               run: |
