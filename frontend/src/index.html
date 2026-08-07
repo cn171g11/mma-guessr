@@ -3,7 +3,18 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>🌍 MmaGuessr v1.17.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+        <meta
+            name="description"
+            content="MmaGuessr 街景猜位置：观察全球街景线索，在地图上标记你的答案，与全球玩家同台竞技。"
+        />
+        <meta name="theme-color" content="#0a1428" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="manifest" href="manifest.webmanifest" />
+        <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+        <title>🌍 MmaGuessr v1.18.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
         <!-- CSP：纯静态托管无响应头可加，故用 meta 声明。
              script-src 的 unsafe-inline 用于存量内联 onclick 处理器，属兼容性取舍；
@@ -82,6 +93,12 @@
                     <h3>每日挑战</h3>
                     <p>每天一组全球 10 题，注册用户每天限一次，与全球玩家同题竞技一较高下。</p>
                     <div class="best" id="best-daily">需登录 · 每日一次</div>
+                </div>
+                <div class="mode-card" onclick="chooseMode('landmark')">
+                    <div class="icon">🗼</div>
+                    <h3>地标模式</h3>
+                    <p>聚焦全球最著名地标（难度 1-2），5 轮速刷，新手入门与高分冲刺两相宜。</p>
+                    <div class="best" id="best-landmark">历史最佳：--</div>
                 </div>
             </div>
             <div class="home-footer">
@@ -263,6 +280,7 @@
                     <div class="acc-name" id="account-profile-name"></div>
                     <div class="acc-email" id="account-profile-email"></div>
                     <div class="acc-stats" id="account-profile-stats"></div>
+                    <div id="account-achievements"></div>
                 </div>
                 <div id="account-login-form">
                     <h3>登录</h3>
@@ -374,5 +392,6 @@
         <script src="js/lb.js"></script>
         <script src="js/daily.js"></script>
         <script src="js/mp.js"></script>
+        <script src="js/sw-register.js"></script>
     </body>
 </html>

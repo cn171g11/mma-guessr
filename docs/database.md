@@ -57,7 +57,7 @@
 | `id` | `BIGSERIAL` | 主键 |
 | `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
 | `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
-| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless / daily / duel |
+| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless / daily / duel / landmark |
 | `region` | `VARCHAR(20)` | 仅区域模式非空 |
 | `total_score` | `INT` | 非空 |
 | `rounds` | `JSONB` | 回合明细（name / locationId / distanceKm / score / imageId / xp / difficulty / guessLat / guessLng / answerLat / answerLng） |
@@ -91,6 +91,20 @@
 
 当天首次访问时惰性抽题 `ON CONFLICT (date) DO UPDATE` 幂等写入；检测到题单失效（seed 重建致 ID 漂移）时自愈重抽。
 
+#### `achievements` / `user_achievements`（成就与称号，迁移 006）
+
+| 表 | 说明 |
+| --- | --- |
+| `achievements` | 成就静态定义：`code`（主键）/ `name` / `description` / `icon` / `has_title` / `title`（称号文本，可装备） |
+| `user_achievements` | 玩家解锁记录：`(user_id, achievement_code)` 联合主键；`user_id` 级联删除 |
+| `users.equipped_title` | 迁移在 `users` 表新增 `equipped_title` 列，存放当前装备称号 |
+
+成就解锁依据 `game_results` 聚合（局数 / 轮数 / 总分 / 最佳 / 满分轮 / 模式覆盖数 / 各模式局数 / 命中率），由 `GET /api/achievements` 与 `PUT /api/achievements/title` 读写；解锁码种子随迁移写入，`ON CONFLICT (code) DO NOTHING` 幂等。
+
+#### `locations.source`（数据源扩展，迁移 005）
+
+`locations` 表新增 `source VARCHAR(20) NOT NULL DEFAULT 'mapillary'`，标记题目图来源；Redis 抽题池键升级为 `locations:pool:<source>:<region>:<difficulty>`，不同来源独立成池。
+
 ## Redis
 
 连接串来自环境变量 `REDIS_URL`（开发默认 `redis://:mma@localhost:6379`，与 compose 的 `requirepass` 对应；生产必须设置强随机密码）。
@@ -106,16 +120,20 @@
 | `guest:<guest_id>` | hash | 30 天 | 游客档案（username / createdAt） |
 | `guest_progress:<guest_id>` | hash | 30 天 | 游客游戏进度快照 |
 | `user_progress:<user_id>` | hash | 30 天 | 注册用户游戏进度快照 |
-| `locations:pool:<region\|all>:<difficulty\|all>` | set | 1 小时 | 题库随机抽题 ID 池（空池 60s），miss 时从 PG 重建 |
+| `locations:pool:<source\|all>:<region\|all>:<difficulty\|all>` | set | 1 小时 | 题库随机抽题 ID 池（空池 60s），miss 时从 PG 重建 |
 | `locations:stats` | string | 5 分钟 | 题库总量 / 各洲计数统计 |
 | `mly:search:<bbox>:<limit>` | string | 24 小时 | Mapillary 图片搜索代理结果缓存 |
 | `mly:media:<image_id>` | string | 24 小时 | Mapillary 单图元数据（缩略图 URL）缓存 |
 | `mly:img:<image_id>:<width>` | bytes | 24 小时 | 代理返回的图片字节缓存 |
 | `rl:mapillary-search:<ip>` | zset | 60 秒 | 搜索代理滑动窗口限频计数 |
 | `rl:mapillary-image:<ip>` | zset | 60 秒 | 图片代理滑动窗口限频计数 |
+| `rl:imagery-search:<ip>` | zset | 60 秒 | 图源无关搜索代理限频计数（/api/proxy/imagery/:source/search） |
+| `rl:imagery-image:<ip>` | zset | 60 秒 | 图源无关图片代理限频计数 |
 | `rl:games-submit:<role>:<id>` | zset | 60 秒 | 成绩提交滑动窗口限频计数 |
 | `lb:overall:<mode>` | zset | 永续 | 各模式总榜（成员 = 玩家 ID，分数 = 最高分） |
 | `lb:daily:<mode>:<yyyymmdd>` | zset | 7 天 | 各模式日榜（当日最高分，过期键由夜间重建任务清理） |
+| `lb:rebuild-lock` | string | 60 秒 | 排行榜惰性重建 Redis 锁（NX 抢占），防止公开接口并发触发全表重建 |
+| `rl:leaderboard:<ip>` | zset | 60 秒 | 排行榜公开接口按 IP 限频计数 |
 | `user_daily:<player_id>:<date>` | string | 至次日 UTC 零点 | 每日挑战已提交标记（SET NX 抢占，冲突返回 409） |
 | `profile:stats:<role>:<id>` | string | 5 分钟 | 个人统计聚合缓存，成绩落库后立即失效 |
 | `mp:queue` | list | 永续 | 对战匹配队列（RPopLPush 出队匹配） |
@@ -124,7 +142,7 @@
 ### 数据流说明
 
 - 游客绑定注册：校验 guest 令牌 → 建号 → 把 `guest_progress` 合并（累加场次/得分、取最高分）到 `user_progress` → 清理游客键
-- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取；同时校验该成绩是否为某模式新最佳，是则写入 `scores` 并更新排行榜 zset（`ZADD GT`，仅提升不降低），并使个人统计缓存失效
+- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取；同时校验该成绩是否为某模式新最佳，是则写入 `scores` 并更新排行榜 zset（`ZADD GT`，仅提升不降低），并使个人统计缓存失效；注册用户成绩落库后再触发成就判定（旁路，失败不影响上报）
 - 令牌旋转：refresh 以哈希形式仅存 Redis，换取时与提交值做恒时比较（`timingSafeEqual`），不匹配即整体吊销
 - 随机抽题：`GET /api/locations/random` 先从 Redis 池 `SRANDMEMBER` 取 ID（池 miss 时才按区域/难度查 PG 重建），只对抽中的 ID 回源查全量记录，避免每次抽题压数据库
 - Mapillary 代理：`/api/proxy/mapillary/*` 服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 Redis（搜索/媒体 URL/图片字节，TTL 24h）；每次上游调用前经滑动窗口限频（按 IP 计数）

@@ -5,16 +5,30 @@
 // ==========================================================
 // 【后端 API 地址】
 // ==========================================================
-// 开发阶段指向本地后端；后端不可达时前端自动降级为纯本地模式，不影响游玩。
-// 正式部署后改为后端域名（例如 https://api.mma-guessr.com）。
-const API_BASE = 'http://localhost:3000';
+// 同源部署（Nginx 反向代理 /api 与 /socket.io）时留空，自动请求当前域名；
+// 前端与后端分离部署（如 GitHub Pages + https://api.xxx.com）时改为后端 https 域名。
+// 开发环境（file:// 或 localhost 访问）回退到本地后端。
+const isFileProtocol = window.location.protocol === 'file:';
+const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_BASE = isFileProtocol || isLocalHost ? 'http://localhost:3000' : '';
 
 // ==========================================================
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v1.17.0';
+const VERSION = 'v1.18.0';
 const CHANGELOG = [
+    {
+        version: 'v1.18.0',
+        date: '2026-08-07 12:00:00',
+        changes: [
+            '🏆 成就与称号系统：首次游玩 / 百局老兵 / 满分 / 全能选手 / 神射手等 14 项成就自动解锁，可装备称号展示。',
+            '🗼 新增「地标模式」：从世界最著名地标（难度 1-2）起步的 5 轮挑战，兼顾教学与速刷。',
+            '📱 PWA 支持：可安装为应用、离线缓存核心资源，移动端体验更接近原生。',
+            '📊 数据源抽象与可观测性：后端题库引入来源字段、图源代理支持多源；新增 Prometheus 指标端点与慢 SQL 日志。',
+            '版本号递增至 v1.18.0。',
+        ],
+    },
     {
         version: 'v1.17.0',
         date: '2026-08-06 14:00:00',
@@ -247,6 +261,7 @@ const MODES = {
     china: { label: '🇨🇳 中国模式', rounds: 5, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
     endless: { label: '♾️ 无限模式', rounds: Infinity, timer: 0, scale: 2000, diffPool: null },
     daily: { label: '📅 每日挑战', rounds: 10, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
+    landmark: { label: '🗼 地标模式', rounds: 5, timer: 0, scale: 2000, diffPool: [1, 2] },
 };
 const REGION_NAMES = {
     asia: '亚洲',
@@ -297,7 +312,7 @@ const CHINA_CENTER = [35, 104];
 // · 公式：score = MAX_SCORE × e^(-10 × max(d, dMin/1000) / (D × α))
 // ==========================================================
 const SCORE_CONFIG = {
-    global: { D: 2000, α: 2.3, dMin: 30 }, // 经典 / 挑战 / 无限
+    global: { D: 2000, α: 2.3, dMin: 30 }, // 经典 / 挑战 / 无限 / 地标
     china: { D: 2000, α: 1.8, dMin: 15 }, // 中国模式：紧凑地理 + 严判分
     region: {
         asia: { D: 1200, α: 2.0, dMin: 25 },

@@ -1,13 +1,14 @@
 // MmaGuessr · 排行榜面板
 // 依赖 src/js/config.js、src/js/api.js、src/js/game.js（HTML 中按该顺序加载）。
 
-const LB_MODES = ['classic', 'challenge', 'region', 'china', 'daily'];
+const LB_MODES = ['classic', 'challenge', 'region', 'china', 'daily', 'landmark'];
 const LB_MODE_LABELS = {
     classic: '🎯 经典',
     challenge: '⚡ 挑战',
     region: '🗺️ 区域',
     china: '🇨🇳 中国',
     daily: '📅 每日',
+    landmark: '🗼 地标',
 };
 let lbState = { mode: 'classic', period: 'overall' };
 

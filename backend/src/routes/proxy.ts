@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { APP_CONSTANTS } from '../config/env.js';
+import { getImageryProvider } from '../services/imagery/index.js';
 import { BBOX_PATTERN, fetchMapillaryImage, searchMapillaryImages } from '../services/mapillary.js';
 import { badRequest } from '../utils/httpError.js';
 import { slidingWindowRateLimit } from '../utils/slidingWindowRateLimit.js';
@@ -55,6 +56,50 @@ proxyRouter.get(
         }
         const { width } = parseQuery(imageQuerySchema, req.query);
         const { buffer, contentType } = await fetchMapillaryImage(imageId, width);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', `public, max-age=${APP_CONSTANTS.MAPILLARY_IMAGE_TTL_SECONDS}`);
+        res.send(buffer);
+    }
+);
+
+// ============================================================
+// 【图源无关的通用代理】/api/proxy/imagery/:source/*（当前 source ∈ {mapillary}）
+// 与上方 /mapillary/* 功能等价，按来源名路由到对应 provider，供未来多图源接入。
+// 搜索沿用 ImageID 校验与限频，避免新增攻击面。
+// ============================================================
+proxyRouter.get(
+    '/imagery/:source/search',
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:imagery-search:',
+        windowMs: APP_CONSTANTS.MAPILLARY_RATE_WINDOW_MS,
+        maxRequests: APP_CONSTANTS.MAPILLARY_RATE_SEARCH_MAX,
+    }),
+    async (req, res) => {
+        const rawSource = req.params.source;
+        const provider = getImageryProvider(typeof rawSource === 'string' ? rawSource : '');
+        const { bbox, limit } = parseQuery(searchQuerySchema, req.query);
+        const result = await provider.searchImages(bbox, limit);
+        res.json(result);
+    }
+);
+
+proxyRouter.get(
+    '/imagery/:source/image/:imageId',
+    slidingWindowRateLimit({
+        windowMs: APP_CONSTANTS.MAPILLARY_RATE_WINDOW_MS,
+        maxRequests: APP_CONSTANTS.MAPILLARY_RATE_IMAGE_MAX,
+        keyPrefix: 'rl:imagery-image:',
+    }),
+    async (req, res) => {
+        const rawSource = req.params.source;
+        const provider = getImageryProvider(typeof rawSource === 'string' ? rawSource : '');
+        const rawImageId = req.params.imageId;
+        const imageId = typeof rawImageId === 'string' ? rawImageId : undefined;
+        if (imageId === undefined || !IMAGE_ID_PATTERN.test(imageId)) {
+            throw badRequest('imageId 不合法');
+        }
+        const { width } = parseQuery(imageQuerySchema, req.query);
+        const { buffer, contentType } = await provider.fetchImage(imageId, width);
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', `public, max-age=${APP_CONSTANTS.MAPILLARY_IMAGE_TTL_SECONDS}`);
         res.send(buffer);

@@ -1,0 +1,84 @@
+# =============================================================
+# MmaGuessr 生产环境 Compose（正式部署使用）
+# ⚠️ 严禁直接复用仓库根目录 backend/docker-compose.yml（仅本地开发）！
+#
+# 安全要点（对应 docs/deploy.md 生产部署清单）：
+#   1) PostgreSQL / Redis 不映射任何宿主机端口，仅后端容器内网可达 → 公网零暴露
+#   2) 所有密钥 / 密码由 deploy/.env 注入，模板见 .env.prod.example（生成强随机值，勿留默认）
+#   3) Nginx 反向代理对外只暴露 80 / 443，终结 HTTPS（证书挂 /etc/letsencrypt）
+#   4) 数据持久化：pgdata / redisdata 命名卷；Redis 开启 AOF + RDB 双重持久化
+#   5) PostgreSQL 定时备份由 scripts/backup-postgres.sh（宿主 cron）负责
+# =============================================================
+
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: mma-guessr-postgres
+        restart: unless-stopped
+        env_file: .env
+        environment:
+            TZ: Asia/Shanghai
+        # 无 ports 段：容器仅在内网网络中被 backend 访问
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
+    redis:
+        image: redis:7-alpine
+        container_name: mma-guessr-redis
+        restart: unless-stopped
+        env_file: .env
+        # AOF + RDB 双重持久化 + requirepass（密码来自 .env）
+        command:
+            - 'sh'
+            - '-c'
+            - redis-server --appendonly yes --save 900 1 --save 300 10 --save 60 10000 --requirepass "$$REDIS_PASSWORD"
+        volumes:
+            - redisdata:/data
+        healthcheck:
+            test: ['CMD-SHELL', 'redis-cli -a $$REDIS_PASSWORD ping | grep PONG']
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
+    backend:
+        image: ghcr.io/cn171g11/mma-guessr-backend:latest
+        container_name: mma-guessr-backend
+        restart: unless-stopped
+        env_file: .env
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        # 无 ports 段：仅内网暴露 3000 给 Nginx
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+
+    nginx:
+        image: nginx:1.27-alpine
+        container_name: mma-guessr-nginx
+        restart: unless-stopped
+        # 对外只暴露 80（自动跳转 HTTPS）与 443
+        ports:
+            - '80:80'
+            - '443:443'
+        volumes:
+            - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+            # 服务器证书（Let's Encrypt），由宿主机或 certbot 容器写入
+            - /etc/letsencrypt:/etc/letsencrypt:ro
+            - ./frontend:/usr/share/nginx/html:ro
+        depends_on:
+            - backend
+
+volumes:
+    pgdata:
+    redisdata:

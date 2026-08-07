@@ -27,9 +27,12 @@ async function refreshAccountPanel() {
         $('account-profile-name').textContent = '👤 ' + identity.user.username;
         $('account-profile-email').textContent = identity.user.email;
         $('account-profile-stats').textContent = await loadProfileStats();
+        loadAchievements();
     } else {
         $('account-profile-name').textContent =
             MmaApi.isOnline() && identity ? '🎭 ' + identity.profile.username : '🎭 离线模式';
+        const achBox = $('account-achievements');
+        if (achBox) achBox.style.display = 'none';
     }
 }
 
@@ -42,6 +45,7 @@ const PROFILE_MODE_LABELS = {
     endless: '无限',
     daily: '每日',
     duel: '对战',
+    landmark: '地标',
 };
 async function loadProfileStats() {
     try {
@@ -56,6 +60,70 @@ async function loadProfileStats() {
         );
     } catch (e) {
         return '暂无游戏数据';
+    }
+}
+
+// 成就与称号：已解锁成就图标墙 + 称号装备按钮（仅注册用户展示）
+async function loadAchievements() {
+    const box = $('account-achievements');
+    if (!box) return;
+    try {
+        const payload = await MmaApi.getAchievements();
+        const unlocked = payload.achievements.filter((entry) => entry.unlockedAt);
+        const equipped = payload.equippedTitle;
+        const titles = payload.achievements.filter((entry) => entry.hasTitle);
+        box.innerHTML =
+            '<div class="acc-stats">🏅 成就 ' +
+            unlocked.length +
+            '/' +
+            payload.achievements.length +
+            (equipped ? ' · 称号：' + escapeHtml(equipped) : '') +
+            '</div>' +
+            (unlocked.length
+                ? '<div class="ach-grid">' +
+                  unlocked
+                      .map(
+                          (entry) =>
+                              '<span class="ach-item" title="' +
+                              escapeHtml(entry.description) +
+                              '">' +
+                              entry.icon +
+                              '</span>'
+                      )
+                      .join('') +
+                  '</div>'
+                : '<div class="acc-stats">完成游戏即可解锁成就</div>') +
+            (titles.length
+                ? '<div class="ach-titles">' +
+                  titles
+                      .map(
+                          (entry) =>
+                              '<button class="ach-title-btn' +
+                              (entry.unlockedAt ? '' : ' disabled') +
+                              '" data-title="' +
+                              escapeHtml(entry.title) +
+                              '">' +
+                              escapeHtml(entry.title) +
+                              '</button>'
+                      )
+                      .join('') +
+                  '</div>'
+                : '');
+        box.querySelectorAll('.ach-title-btn:not(.disabled)').forEach((btn) => {
+            btn.addEventListener('click', () => equipTitle(btn.dataset.title));
+        });
+    } catch (e) {
+        box.style.display = 'none';
+    }
+}
+
+async function equipTitle(title) {
+    try {
+        const result = await MmaApi.equipTitle(title || null);
+        showToast(result.equippedTitle ? '✅ 已装备称号：' + result.equippedTitle : '称号已卸下');
+        await loadAchievements();
+    } catch (e) {
+        showToast('❌ ' + (e.message || '装备失败'));
     }
 }
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { APP_CONSTANTS } from '../config/env.js';
 import { getLocationStats, getRandomLocations } from '../locations/service.js';
-import { LOCATION_REGIONS } from '../locations/types.js';
+import { LOCATION_REGIONS, LOCATION_SOURCES } from '../locations/types.js';
 import { parseQuery } from '../utils/validate.js';
 
 export const locationsRouter = Router();
@@ -11,6 +11,7 @@ export const locationsRouter = Router();
 const randomQuerySchema = z.object({
     region: z.enum(LOCATION_REGIONS).optional(),
     difficulty: z.coerce.number().int().min(1).max(5).optional(),
+    source: z.enum(LOCATION_SOURCES).optional(),
     count: z.coerce.number().int().min(1).max(APP_CONSTANTS.LOCATION_RANDOM_MAX_COUNT).default(1),
 });
 

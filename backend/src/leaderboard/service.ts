@@ -26,12 +26,24 @@ export async function recordScore(userId: string, mode: GameMode, score: number)
 }
 
 export async function getRankings(query: LeaderboardQuery): Promise<LeaderboardEntry[]> {
-    const dateKey =
-        query.date === undefined ? cache.utcDateKey(new Date()) : cache.utcDateKey(new Date(`${query.date}T00:00:00Z`));
-    const key = query.period === 'daily' ? cache.dailyKeyFor(query.mode, dateKey) : cache.overallKeyFor(query.mode);
+    const todayKey = cache.utcDateKey(new Date());
+    const dateKey = query.date === undefined ? todayKey : cache.utcDateKey(new Date(`${query.date}T00:00:00Z`));
+    const isOverall = query.period === 'overall';
+    const key = isOverall ? cache.overallKeyFor(query.mode) : cache.dailyKeyFor(query.mode, dateKey);
 
     if (!(await cache.keyExists(key))) {
-        await rebuildRankings();
+        // 惰性重建只覆盖总榜与“今天”的日榜；历史日榜数据已按保留期清理，
+        // 缺键直接返回空榜，防止任意旧日期被用作全表扫描放大器。
+        // 重建以 Redis NX 锁限频（60s 一次），避免公开接口并发触发重复重建。
+        if (isOverall || dateKey === todayKey) {
+            if (await cache.tryAcquireRebuildLock()) {
+                try {
+                    await rebuildRankings();
+                } finally {
+                    await cache.releaseRebuildLock();
+                }
+            }
+        }
     }
 
     const scores = await cache.fetchTopScores(key, query.limit);

@@ -107,6 +107,8 @@ function renderLocalBests() {
     $('best-region').textContent = r ? `历史最佳：${r.score} 分（${REGION_NAMES[r.region] || ''}）` : '历史最佳：--';
     const e = getBest('endless');
     $('best-endless').textContent = e ? `历史最佳：Lv.${e.level} · ${e.totalXp} 经验` : '历史最佳：--';
+    const l = getBest('landmark');
+    $('best-landmark').textContent = l ? `历史最佳：${l.score} 分` : '历史最佳：--';
 }
 
 const BEST_ELEMENTS = {
@@ -115,6 +117,7 @@ const BEST_ELEMENTS = {
     china: 'best-china',
     region: 'best-region',
     endless: 'best-endless',
+    landmark: 'best-landmark',
 };
 
 function fillBestText(mode, best) {
@@ -140,9 +143,9 @@ function renderBests() {
         renderLocalBests();
         return;
     }
-    Promise.all(['classic', 'challenge', 'china', 'region', 'endless'].map((mode) => MmaApi.getBest(mode)))
+    Promise.all(['classic', 'challenge', 'china', 'region', 'endless', 'landmark'].map((mode) => MmaApi.getBest(mode)))
         .then((bests) => {
-            ['classic', 'challenge', 'china', 'region', 'endless'].forEach((mode, index) => {
+            ['classic', 'challenge', 'china', 'region', 'endless', 'landmark'].forEach((mode, index) => {
                 fillBestText(mode, bests[index].best);
             });
         })

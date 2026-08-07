@@ -550,6 +550,53 @@ button {
     background: rgba(255, 77, 77, 0.3);
 }
 
+/* ============ 成就与称号（账号面板） ============ */
+#account-achievements {
+    margin-top: 12px;
+}
+.ach-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.ach-item {
+    font-size: 20px;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid rgba(255, 215, 0, 0.35);
+    border-radius: 10px;
+    cursor: default;
+}
+.ach-titles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.ach-title-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    background: rgba(64, 158, 255, 0.12);
+    border: 1px solid rgba(64, 158, 255, 0.4);
+    border-radius: 999px;
+    color: #9ecbff;
+    cursor: pointer;
+}
+.ach-title-btn:hover {
+    background: rgba(64, 158, 255, 0.28);
+}
+.ach-title-btn.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: rgba(125, 133, 144, 0.3);
+    color: #7d8590;
+}
+
 /* ============ 区域选择 ============ */
 #region-screen {
     position: fixed;

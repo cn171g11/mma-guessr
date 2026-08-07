@@ -68,9 +68,13 @@ npm run db:up && npm run db:migrate && npm test
 - `REDIS_URL`：Redis 连接串（compose 已开启 `requirepass`，连接串需带密码）
 - `POSTGRES_PASSWORD` / `REDIS_PASSWORD`：供 `docker-compose.yml` 注入容器密码（开发默认见 `.env.example`；生产必须改为强随机值）
 - `MAPILLARY_TOKEN`：Mapillary API 密钥（仅服务端持有）
+- `METRICS_TOKEN`：`GET /api/metrics` 的 Bearer 访问令牌；为空时指标接口禁用
+- `SLOW_QUERY_THRESHOLD_MS`：SQL 慢查询告警阈值（毫秒），默认 `500`，超出记 warn 日志
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`：JWT 签名密钥（生产必须改为强随机值）
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`：邮箱验证码 SMTP 配置
 - `CORS_ALLOWED_ORIGINS`：前端来源白名单（逗号分隔）。为空时仅放行 `localhost`/`127.0.0.1`（开发默认）；**生产必须配置为前端实际域名**，SOCKET.IO 与 REST 同源校验共用该白名单，否则浏览器请求会被拒绝
+- `TRUST_PROXY`：反向代理跳数（如 `1`）。仅在可信反代之后显式设置，启用后按真实客户端 IP 计算 `req.ip` 与限频；未设置则按直连处理，防止伪造 `X-Forwarded-For` 绕过限频
+- `METRICS_TOKEN`：`GET /api/metrics` 的 Bearer 访问令牌；为空时指标接口开放（开发），生产建议必设
 
 ## 目录结构
 
@@ -80,18 +84,20 @@ backend/
 │   ├── auth/              # 认证领域：密码哈希、JWT、邮箱验证码、游客、账号 service
 │   ├── games/             # 游戏成绩域：类型、仓储、提交/查询/删除 service
 │   ├── leaderboard/       # 排行榜域：scores 落库、zset 缓存、夜间重建
+│   ├── achievements/      # 成就与称号域：定义、解锁判定、装备
+│   ├── metrics/           # Prometheus 指标注册表（文本输出，无外部依赖）
 │   ├── daily/             # 每日挑战域：惰性抽题、每日一次校验
 │   ├── profile/           # 个人统计域：多维聚合 + 缓存失效
 │   ├── multiplayer/       # 对战域：匹配队列、房间状态、回合结算（socket.io）
 │   ├── locations/         # 题库域：随机抽题池、统计缓存
-│   ├── services/          # 外部服务（Mapillary 代理）
+│   ├── services/          # 外部服务（imagery 图源抽象：Mapillary 代理）
 │   ├── config/env.ts      # 环境变量加载与校验
 │   ├── db/pool.ts         # PostgreSQL 连接池
 │   ├── db/redis.ts        # Redis 客户端
 │   ├── db/migrate.ts      # 迁移执行器（npm run db:migrate）
 │   ├── db/migrations/     # SQL 迁移文件
 │   ├── logger/index.ts    # 统一日志模块（级别控制 + 生产 JSON 输出）
-│   ├── middleware/        # 请求日志、404、全局错误处理与认证中间件
+│   ├── middleware/        # 请求日志、404、全局错误处理与认证中间件、指标采集
 │   ├── routes/            # API 路由
 │   ├── socket.ts          # Socket.IO 挂载 / 关闭（对战长连接）
 │   ├── types/             # 全局类型声明（Express Request 扩展）

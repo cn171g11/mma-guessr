@@ -5,7 +5,11 @@ import { APP_CONSTANTS } from '../config/env.js';
 import { GAME_MODES } from '../games/types.js';
 import { getRankings } from '../leaderboard/service.js';
 import { LEADERBOARD_PERIODS } from '../leaderboard/types.js';
+import { slidingWindowRateLimit } from '../utils/slidingWindowRateLimit.js';
 import { parseQuery } from '../utils/validate.js';
+
+const LEADERBOARD_RATE_WINDOW_MS = 60 * 1000;
+const LEADERBOARD_RATE_MAX = 120;
 
 const leaderboardQuerySchema = z.object({
     mode: z.enum(GAME_MODES).default('classic'),
@@ -25,13 +29,21 @@ const leaderboardQuerySchema = z.object({
 
 export const leaderboardRouter = Router();
 
-leaderboardRouter.get('/', async (req, res) => {
-    const query = parseQuery(leaderboardQuerySchema, req.query);
-    const entries = await getRankings({
-        period: query.period,
-        mode: query.mode,
-        limit: query.limit,
-        date: query.date,
-    });
-    res.json({ period: query.period, mode: query.mode, date: query.date ?? null, entries });
-});
+leaderboardRouter.get(
+    '/',
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:leaderboard:',
+        windowMs: LEADERBOARD_RATE_WINDOW_MS,
+        maxRequests: LEADERBOARD_RATE_MAX,
+    }),
+    async (req, res) => {
+        const query = parseQuery(leaderboardQuerySchema, req.query);
+        const entries = await getRankings({
+            period: query.period,
+            mode: query.mode,
+            limit: query.limit,
+            date: query.date,
+        });
+        res.json({ period: query.period, mode: query.mode, date: query.date ?? null, entries });
+    }
+);

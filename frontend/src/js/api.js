@@ -137,6 +137,8 @@ const MmaApi = (() => {
         submitGame: (payload) => request('/api/games', { method: 'POST', body: payload }),
         deleteGame: (id) => request('/api/games/' + id, { method: 'DELETE' }),
         getProfile: () => request('/api/profile'),
+        getAchievements: () => request('/api/achievements'),
+        equipTitle: (title) => request('/api/achievements/title', { method: 'PUT', body: { title } }),
         getDaily: () => request('/api/daily/today'),
         getLeaderboard: (mode, period, limit, date) => {
             const params = new URLSearchParams({ mode, period, limit: String(limit || 20) });

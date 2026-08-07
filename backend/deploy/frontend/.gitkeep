@@ -1,0 +1,4 @@
+# 生产环境前端静态文件目录
+# 将 GitHub Pages release 产物（mma-guessr-frontend-<version>.zip）解压后的
+# src/ 内容复制到本目录，Nginx 将作为站点根目录对外服务。
+# 例如：从这里拷贝 index.html / css / js 到此目录。

@@ -2,6 +2,10 @@ const DEFAULT_PORT = 3000;
 
 // 应用级常量（业务配置，独立于环境变量）
 export const APP_CONSTANTS = {
+    // 服务版本（与前端 config.js VERSION 同步）
+    SERVICE_VERSION: '1.18.0',
+    // 慢查询阈值：超过该毫秒数的 SQL 记录 warn 日志
+    SLOW_QUERY_THRESHOLD_MS: 500,
     // 加解密与令牌
     BCRYPT_ROUNDS: 10,
     ACCESS_TTL_SECONDS: 15 * 60,
@@ -80,6 +84,21 @@ function optionalNumber(name: string, fallback: number): number {
     return parsed;
 }
 
+// 反向代理跳数：仅当部署在可信反代（nginx/caddy 等）之后时显式设置（如 1）。
+// 启用后 Express 信任 X-Forwarded-For 计算 req.ip，按 IP 限频（登录/验证码/代理）才能按真实客户端隔离；
+// 未设置（默认）时按回环/直连场景处理，防止端口直连时伪造 XFF 头绕过限频
+function optionalTrustProxyHops(name: string): number | undefined {
+    const value = process.env[name];
+    if (value === undefined || value === '') {
+        return undefined;
+    }
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+        throw new Error(`环境变量 ${name} 必须为正整数（反向代理跳数）`);
+    }
+    return parsed;
+}
+
 export const env = {
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     PORT: Number(process.env.PORT ?? DEFAULT_PORT),
@@ -108,4 +127,10 @@ export const env = {
     // 刷新令牌 Cookie 的 SameSite 策略。前端与 API 同站（如 app.example.com 与 api.example.com）
     // 使用默认 lax；跨站部署（不同顶级域）须在 HTTPS 上设为 none
     COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? 'lax',
+
+    // 指标端点认证令牌：设置后 /api/metrics 需携带 Bearer 令牌；生产环境建议必设
+    METRICS_TOKEN: process.env.METRICS_TOKEN ?? '',
+
+    // Express trust proxy 跳数：仅在可信反向代理之后显式设置（如 1），详见 optionalTrustProxyHops
+    TRUST_PROXY: optionalTrustProxyHops('TRUST_PROXY'),
 } as const;

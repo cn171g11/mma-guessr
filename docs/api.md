@@ -203,8 +203,8 @@
 | `date` | 否 | `daily` 期需 YYYY-MM-DD；缺省取当天（UTC） |
 
 - 记为各玩家在 `scores` 表中的最高分（每人每个模式仅记一次最佳）
-- 读 Redis 有序集合（`lb:overall:<mode>` / `lb:daily:<mode>:<日期>`），key 缺失时自动按数据库重建，夜间 UTC 零点例行重建
-- 日榜/总榜均取个人最高分，故 `overall` 为累积性排名
+- 读 Redis 有序集合（`lb:overall:<mode>` / `lb:daily:<mode>:<日期>`），key 缺失时自动按数据库重建（重建带 60s Redis 锁限频，且仅对总榜 / 当天日榜触发；历史日榜缺键直接返回空榜），夜间 UTC 零点例行重建
+- 日榜/总榜均取个人最高分，故 `overall` 为累积性排名；公开接口已按 IP 限频（120 次/分钟）
 
 ```json
 { "period": "overall", "mode": "classic", "date": null,
@@ -248,6 +248,7 @@
 | `region` | 否 | 大洲：`asia` / `europe` / `northamerica` / `southamerica` / `africa` / `oceania` |
 | `difficulty` | 否 | 1-5 |
 | `count` | 否 | 1-20，默认 1 |
+| `source` | 否 | 图源：`mapillary`，默认 `mapillary` |
 
 ```json
 { "locations": [ { "id": 1001, "name": "日本东京·东京塔", "lat": 35.6586, "lng": 139.7454,
@@ -286,6 +287,42 @@
 | `width` | 否 | 1-2048，默认 1024；内部选择不小于该值的一档缩略图（256/1024/2048） |
 
 限频超限返回 `429`；未配置 `MAPILLARY_TOKEN` 或上游异常返回 `503`/`502`。
+
+限频超限返回 `429`；未配置 `MAPILLARY_TOKEN` 或上游异常返回 `503`/`502`。
+
+## 图源代理（`/api/proxy/imagery`）
+
+图源无关代理，按上游实例化（当前仅 `mapillary`），鉴权/限频/缓存行为与 `/mapillary/*` 等价。
+
+### `GET /api/proxy/imagery/:source/search`
+
+按 bbox 搜索街景图片，结构同 `{ data: [...] }`。查询参数：`bbox`（必填，格式非法返回 `400`）、`limit`（1-50，默认 20）。未知 `source` 返回 `400`。
+
+### `GET /api/proxy/imagery/:source/image/:imageId`
+
+返回图片字节流（`Content-Type: image/jpeg`）。查询参数 `width` 同 `/mapillary/image/`。
+
+## 成就（`/api/achievements`）
+
+### `GET /api/achievements`
+
+需 Bearer 认证。返回全部成就定义与当前用户解锁/装备状态，统计基于 `game_results` 聚合实时计算：
+
+```json
+{ "user": { "id": "uuid", "equippedTitle": "大师" },
+  "achievements": [ { "code": "first_game", "name": "初出茅庐", "description": "...",
+    "icon": "🏅", "hasTitle": true, "title": "新手", "unlocked": true } ] }
+```
+
+### `PUT /api/achievements/title` · `DELETE /api/achievements/title`
+
+需 Bearer、仅注册用户。`PUT` 请求体 `{ "code": "mode_master" }`，仅可装备已解锁且声明称号的成就，否则 `400`；`DELETE` 清除装备。响应 `{ "equippedTitle": "..." }`。
+
+## 指标（`/api/metrics`）
+
+### `GET /api/metrics`
+
+Prometheus 文本暴露格式；请求需带 `Authorization: Bearer <METRICS_TOKEN>`（未配置该变量时接口整体返回 `503`）。指标含请求计数/延迟桶、`games_submitted`、`rest_host_up`（DB 探针）等。
 
 ## 令牌约定
 

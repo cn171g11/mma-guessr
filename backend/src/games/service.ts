@@ -1,4 +1,5 @@
 import { getProgress, upsertProgress } from '../auth/guest.js';
+import * as achievementsService from '../achievements/service.js';
 import * as dailyService from '../daily/service.js';
 import * as leaderboardService from '../leaderboard/service.js';
 import * as profileService from '../profile/service.js';
@@ -167,6 +168,8 @@ export async function submitGame(player: PlayerRef, input: SubmitGameInput): Pro
     await profileService.invalidateStatsCache(player);
     if (player.role === 'user') {
         await leaderboardService.recordScore(player.id, input.mode, verifiedTotal);
+        // 成就判定为旁路流程：内部已捕获异常，失败不影响成绩上报
+        await achievementsService.evaluateAndUnlock(player.id);
     }
     log.info(`游戏成绩已记录 player=${player.role}:${player.id} mode=${input.mode} score=${verifiedTotal}`);
     return game;

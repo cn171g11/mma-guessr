@@ -1,0 +1,5 @@
+# 生产环境密钥与数据：严禁入库
+.env
+backups/
+frontend/*
+!frontend/.gitkeep

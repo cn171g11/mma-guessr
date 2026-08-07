@@ -185,9 +185,8 @@ function mpStartRound(data) {
     if (location && location.mapillaryId) {
         showPanorama(location.mapillaryId);
     } else if (location && location.panoramaUrl) {
-        // 无街景 ID 时退化为直接展示全景图 URL
-        $('panorama-loading').style.display = 'none';
-        $('panorama-view').innerHTML = '<img src="' + location.panoramaUrl + '" alt="街景">';
+        // 无街景 ID 时退化为直接展示全景图 URL；走 DOM 构建而非 innerHTML，防止 URL 被注入为标签
+        showPanoramaUrl(location.panoramaUrl);
     } else {
         $('panorama-loading').style.display = 'none';
         $('panorama-fallback').style.display = 'flex';
@@ -281,9 +280,9 @@ function mpShowRoundEnd(data) {
     const sum = $('round-summary');
     sum.innerHTML =
         '<div class="row"><span>对手：' +
-        mpState.opponentUsername +
+        escapeHtml(mpState.opponentUsername) +
         '</span><span>' +
-        (opponent ? fmtMpResult(opponent.distanceKm, opponent.score) : '--') +
+        escapeHtml(opponent ? fmtMpResult(opponent.distanceKm, opponent.score) : '--') +
         '</span></div>';
     sum.style.display = 'block';
     $('next-btn').textContent = '下一轮 ▶';

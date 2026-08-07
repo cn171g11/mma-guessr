@@ -19,7 +19,9 @@ async function openDailyPanel() {
         renderDailyPanel(content, challenge);
     } catch (e) {
         content.innerHTML =
-            '<div class="lb-empty">❌ 获取每日挑战失败' + (e.message ? '：' + e.message : '') + '，请稍后重试。</div>';
+            '<div class="lb-empty">❌ 获取每日挑战失败' +
+            (e.message ? '：' + escapeHtml(e.message) : '') +
+            '，请稍后重试。</div>';
     }
 }
 
@@ -33,13 +35,13 @@ function renderDailyPanel(content, challenge) {
     const diffText = diffs.map((d) => '★'.repeat(d)).join(' ');
     content.innerHTML =
         '<div class="acc-stats">📅 ' +
-        challenge.date +
+        escapeHtml(challenge.date) +
         ' · 全球同题 ' +
         challenge.locations.length +
         ' 题 · 难度 ' +
         (diffText || '未知') +
         '</div>' +
-        (best ? '<div class="lb-best">🏅 历史最佳：' + best.score + ' 分</div>' : '') +
+        (best ? '<div class="lb-best">🏅 历史最佳：' + Number(best.score) + ' 分</div>' : '') +
         (challenge.played
             ? '<div class="lb-played">✅ 今日挑战已完成，明天再来！</div>'
             : '<button class="lb-start" onclick="startDailyGame()">🚀 开始今日挑战</button>');

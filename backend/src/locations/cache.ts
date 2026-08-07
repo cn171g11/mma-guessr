@@ -2,10 +2,12 @@ import { redis } from '../db/redis.js';
 
 const POOL_KEY_PREFIX = 'locations:pool:';
 
-// 未指定区域/难度时使用该占位符，保证 key 结构统一：locations:pool:<region|all>:<difficulty|all>
+// 未指定区域/难度/来源时使用该占位符，保证 key 结构统一：
+// locations:pool:<source|all>:<region|all>:<difficulty|all>
 export const POOL_ALL = 'all';
 
-export const poolKeyFor = (region: string, difficulty: string): string => `${POOL_KEY_PREFIX}${region}:${difficulty}`;
+export const poolKeyFor = (source: string, region: string, difficulty: string): string =>
+    `${POOL_KEY_PREFIX}${source}:${region}:${difficulty}`;
 
 export async function poolExists(key: string): Promise<boolean> {
     return (await redis.exists(key)) === 1;

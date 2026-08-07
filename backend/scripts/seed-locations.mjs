@@ -98,18 +98,19 @@ function validateEntry(entry) {
 
 async function upsertChunk(client, rows) {
     const placeholders = rows.map((_, index) => {
-        const base = index * 5;
-        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5})`;
+        const base = index * 6;
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6})`;
     });
-    const values = rows.flatMap((row) => [row.name, row.lat, row.lng, row.region, row.difficulty]);
+    const values = rows.flatMap((row) => [row.name, row.lat, row.lng, row.region, row.difficulty, row.source]);
     const sql = `
-        INSERT INTO locations (name, lat, lng, region, difficulty)
+        INSERT INTO locations (name, lat, lng, region, difficulty, source)
         VALUES ${placeholders.join(',')}
         ON CONFLICT (name) DO UPDATE SET
             lat = EXCLUDED.lat,
             lng = EXCLUDED.lng,
             region = EXCLUDED.region,
             difficulty = EXCLUDED.difficulty,
+            source = EXCLUDED.source,
             updated_at = now()
     `;
     const result = await client.query(sql, values);
@@ -142,6 +143,7 @@ async function main() {
             lng: entry.lng,
             region: entry.region,
             difficulty: entry.difficulty,
+            source: 'mapillary',
         });
     }
 

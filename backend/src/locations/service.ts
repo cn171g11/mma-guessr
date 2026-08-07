@@ -3,7 +3,7 @@ import { redis } from '../db/redis.js';
 import { createLogger } from '../logger/index.js';
 import * as cache from './cache.js';
 import * as repository from './repository.js';
-import type { LocationRecord, LocationRegion, LocationStats } from './types.js';
+import type { LocationRecord, LocationRegion, LocationSource, LocationStats } from './types.js';
 
 const log = createLogger('locations');
 
@@ -12,16 +12,23 @@ const STATS_KEY = 'locations:stats';
 export interface RandomLocationsQuery {
     region?: LocationRegion;
     difficulty?: number;
+    source?: LocationSource;
     count: number;
 }
 
 // 命中 Redis 中的题目 ID 池，未命中则从数据库重建并设置 TTL；
-// 池中仅存 ID，全量记录只有抽中的少数几条才回源查询，降低数据库压力
-async function ensurePool(key: string, region?: LocationRegion, difficulty?: number): Promise<void> {
+// 池中仅存 ID，全量记录只有抽中的少数几条才回源查询，降低数据库压力。
+// source 参与池 key 与过滤条件，保证不同图源独立成池互不混合。
+async function ensurePool(
+    key: string,
+    region?: LocationRegion,
+    difficulty?: number,
+    source?: LocationSource
+): Promise<void> {
     if (await cache.poolExists(key)) {
         return;
     }
-    const ids = await repository.fetchPoolIds(region, difficulty);
+    const ids = await repository.fetchPoolIds(region, difficulty, source);
     const ttl =
         ids.length > 0 ? APP_CONSTANTS.LOCATION_POOL_TTL_SECONDS : APP_CONSTANTS.LOCATION_POOL_EMPTY_TTL_SECONDS;
     await cache.warmPool(key, ids, ttl);
@@ -31,16 +38,17 @@ async function ensurePool(key: string, region?: LocationRegion, difficulty?: num
 export async function getRandomLocations(query: RandomLocationsQuery): Promise<LocationRecord[]> {
     const region = query.region ?? cache.POOL_ALL;
     const difficulty = query.difficulty !== undefined ? String(query.difficulty) : cache.POOL_ALL;
-    const key = cache.poolKeyFor(region, difficulty);
+    const source = query.source ?? cache.POOL_ALL;
+    const key = cache.poolKeyFor(source, region, difficulty);
 
-    await ensurePool(key, query.region, query.difficulty);
+    await ensurePool(key, query.region, query.difficulty, query.source);
 
     let ids = await cache.randomFromPool(key, query.count);
     // 池中数量不足请求量通常意味着池过期或题库重建（题目 ID 变化/数量减少）后残留的残缺池：
     // 丢弃后按当前题库重建再抽一次，避免长期命中残缺数据
     if (ids.length > 0 && ids.length < query.count) {
         await cache.dropPool(key);
-        await ensurePool(key, query.region, query.difficulty);
+        await ensurePool(key, query.region, query.difficulty, query.source);
         ids = await cache.randomFromPool(key, query.count);
     }
     if (ids.length === 0) {

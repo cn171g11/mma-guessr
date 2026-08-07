@@ -1,7 +1,7 @@
 import type { QueryResultRow } from 'pg';
 
 import { pool } from '../db/pool.js';
-import type { LocationRecord, LocationRegion } from './types.js';
+import type { LocationRecord, LocationRegion, LocationSource } from './types.js';
 
 interface LocationRow extends QueryResultRow {
     id: string;
@@ -14,6 +14,7 @@ interface LocationRow extends QueryResultRow {
     region: string;
     difficulty: number;
     panorama_url: string | null;
+    source: string;
 }
 
 function mapRow(row: LocationRow): LocationRecord {
@@ -28,10 +29,15 @@ function mapRow(row: LocationRow): LocationRecord {
         region: row.region as LocationRegion,
         difficulty: Number(row.difficulty),
         panoramaUrl: row.panorama_url,
+        source: row.source as LocationSource,
     };
 }
 
-function buildFilters(region?: LocationRegion, difficulty?: number): { whereClause: string; params: unknown[] } {
+function buildFilters(
+    region?: LocationRegion,
+    difficulty?: number,
+    source?: LocationSource
+): { whereClause: string; params: unknown[] } {
     const conditions: string[] = [];
     const params: unknown[] = [];
     if (region !== undefined) {
@@ -42,12 +48,20 @@ function buildFilters(region?: LocationRegion, difficulty?: number): { whereClau
         params.push(difficulty);
         conditions.push(`difficulty = $${params.length}`);
     }
+    if (source !== undefined) {
+        params.push(source);
+        conditions.push(`source = $${params.length}`);
+    }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     return { whereClause, params };
 }
 
-export async function fetchPoolIds(region?: LocationRegion, difficulty?: number): Promise<string[]> {
-    const { whereClause, params } = buildFilters(region, difficulty);
+export async function fetchPoolIds(
+    region?: LocationRegion,
+    difficulty?: number,
+    source?: LocationSource
+): Promise<string[]> {
+    const { whereClause, params } = buildFilters(region, difficulty, source);
     const result = await pool.query<{ id: string }>(`SELECT id FROM locations ${whereClause}`, params);
     return result.rows.map((row) => row.id);
 }
