@@ -64,7 +64,13 @@ async function fetchTodayLocationsWithCoords(token: string): Promise<LocationWit
         'SELECT id, name, lat, lng, difficulty FROM locations WHERE id = ANY($1::int[])',
         [ids]
     );
-    return rows;
+    // PG numeric/bigint 列返回字符串，猜测坐标与题目 ID 必须转为数字再提交
+    return rows.map((row) => ({
+        ...row,
+        id: Number(row.id),
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+    }));
 }
 
 // 每日挑战客户端提交：只上报猜测点与题目 ID，距离/得分/答案坐标一律不带（服务端权威结算）

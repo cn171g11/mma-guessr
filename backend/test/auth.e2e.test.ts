@@ -79,6 +79,8 @@ describe('POST /api/auth/verification-code 邮箱验证码', () => {
             .send({ username: 'tester01', email, password: VALID_PASSWORD, code });
         expect(registerResponse.status).toBe(201);
 
+        // 清除 60s 重发锁后再次请求：已注册邮箱必须与未注册邮箱返回一致，不得暴露存量账号
+        await redis.del(`verify_code_resend:${email}`);
         const again = await request(getApp()).post('/api/auth/verification-code').send({ email });
         expect(again.status).toBe(200);
         expect(again.body.message).toBeTruthy();

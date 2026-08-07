@@ -128,7 +128,11 @@ async function playFullMatch(client: ClientSocket, near: boolean): Promise<{ ran
             'mp:answer',
             near
                 ? { guessLat: location.lat, guessLng: location.lng, roundIndex }
-                : { guessLat: -location.lat, guessLng: (location.lng >= 0 ? location.lng - 180 : location.lng + 180), roundIndex }
+                : {
+                      guessLat: -location.lat,
+                      guessLng: location.lng >= 0 ? location.lng - 180 : location.lng + 180,
+                      roundIndex,
+                  }
         );
         await roundEnds.next();
     }
@@ -172,10 +176,7 @@ describe('Socket.IO 多人对战', () => {
         clientA.emit('mp:join', { mode: 'classic' });
         clientB.emit('mp:join', { mode: 'classic' });
 
-        const [finishedA, finishedB] = await Promise.all([
-            playFullMatch(clientA, true),
-            playFullMatch(clientB, false),
-        ]);
+        const [finishedA, finishedB] = await Promise.all([playFullMatch(clientA, true), playFullMatch(clientB, false)]);
 
         const rankingsA = finishedA.rankings as Array<{ playerId: string; username: string; totalScore: number }>;
         const rankingsB = finishedB.rankings as Array<{ playerId: string; username: string; totalScore: number }>;

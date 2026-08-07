@@ -113,7 +113,11 @@ describe('POST /api/games 提交成绩', () => {
     it('游客提交成绩成功并写入回合明细', async () => {
         const token = await createGuestToken();
         const game = makeGame('challenge', null, 3, true);
-        const response = await submitGame(token, { mode: 'challenge', totalScore: game.totalScore, rounds: game.rounds });
+        const response = await submitGame(token, {
+            mode: 'challenge',
+            totalScore: game.totalScore,
+            rounds: game.rounds,
+        });
         expect(response.status).toBe(201);
         expect(response.body.game.id).toBeTruthy();
         expect(response.body.game.rounds).toHaveLength(4);
@@ -156,7 +160,11 @@ describe('POST /api/games 提交成绩', () => {
         const game = makeGame('classic', null, 1);
         const forgedDistance = 0.1;
         const forgedRounds = [
-            { ...game.rounds[0], distanceKm: forgedDistance, score: computeRoundScore('classic', null, forgedDistance) },
+            {
+                ...game.rounds[0],
+                distanceKm: forgedDistance,
+                score: computeRoundScore('classic', null, forgedDistance),
+            },
         ];
         const response = await submitGame(token, {
             mode: 'classic',

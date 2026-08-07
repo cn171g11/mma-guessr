@@ -125,7 +125,11 @@ authRouter.post('/guest/bind', async (req, res) => {
 
 authRouter.post(
     '/login',
-    slidingWindowRateLimit({ keyPrefix: 'rl:auth-login:', windowMs: LOGIN_RATE_WINDOW_MS, maxRequests: LOGIN_RATE_MAX }),
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-login:',
+        windowMs: LOGIN_RATE_WINDOW_MS,
+        maxRequests: LOGIN_RATE_MAX,
+    }),
     async (req, res) => {
         const { identifier, password } = parseBody(loginSchema, req.body);
         const session = await loginAccount(identifier, password, clientIp(req));
@@ -155,7 +159,11 @@ authRouter.post('/logout', requireAuth, async (req, res) => {
 
 authRouter.post(
     '/guest',
-    slidingWindowRateLimit({ keyPrefix: 'rl:auth-guest:', windowMs: GUEST_RATE_WINDOW_MS, maxRequests: GUEST_RATE_MAX }),
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-guest:',
+        windowMs: GUEST_RATE_WINDOW_MS,
+        maxRequests: GUEST_RATE_MAX,
+    }),
     async (_req, res) => {
         const guestSession = await createGuestSession();
         res.status(201).json(guestSession);
