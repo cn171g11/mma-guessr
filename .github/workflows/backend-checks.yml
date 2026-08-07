@@ -80,10 +80,13 @@ jobs:
                     --health-retries 10
             redis:
                 image: redis:7-alpine
+                # --requirepass 是 redis-server 的参数而非 docker run 参数；
+                # 官方镜像通过 REDIS_ARGS 环境变量追加到 redis-server 启动命令
+                env:
+                    REDIS_ARGS: --requirepass mma
                 ports:
                     - 6379:6379
                 options: >-
-                    --requirepass mma
                     --health-cmd "redis-cli -a mma ping"
                     --health-interval 5s
                     --health-timeout 5s
