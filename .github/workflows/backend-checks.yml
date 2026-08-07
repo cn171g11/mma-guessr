@@ -124,6 +124,7 @@ jobs:
                   fi
 
             - name: Run database migrations (users)
+              timeout-minutes: 5
               run: npm run db:migrate
 
             - name: Seed location database (1570 entries)

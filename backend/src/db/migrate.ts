@@ -47,10 +47,12 @@ async function applyMigration(fileName: string): Promise<void> {
 }
 
 export async function runMigrations(): Promise<void> {
+    log.info('开始执行数据库迁移...');
     await ensureTrackingTable();
     const applied = await findAppliedMigrations();
     const migrationFiles = await listMigrationFiles();
 
+    log.info(`发现 ${migrationFiles.length} 个迁移文件，已应用 ${applied.size} 个`);
     for (const fileName of migrationFiles) {
         if (applied.has(fileName)) {
             continue;
