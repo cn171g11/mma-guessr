@@ -20,28 +20,49 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    quality:
-        name: Quality gates + integration tests
-        uses: ./.github/workflows/backend-checks.yml
-        with:
-            runIntegration: ${{ inputs.includeIntegration }}
-
-    # 跨平台发布产物：前端为纯静态包（任意平台直接部署/本地打开），
-    # 后端为 Node 运行包（dist + package.json + lockfile + .env.example，任意平台 npm ci 后即可运行）
-    artifacts:
-        name: Build cross-platform artifacts
-        needs: quality
+    preflight:
+        name: Preflight (version + tag availability)
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
             - name: Validate version input
               run: |
                   if ! echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                      echo "::error::version 必须为语义化版本号（例如 1.0.0）"
+                      echo "::error::version must be a semantic version (e.g. 1.0.0)"
                       exit 1
                   fi
+
+            - name: Ensure tag is not already released
+              run: |
+                  if git tag -l "v${{ inputs.version }}" | grep -q .; then
+                      echo "::error::Tag v${{ inputs.version }} already exists. Pick a new version and re-run."
+                      exit 1
+                  fi
+                  echo "OK: v${{ inputs.version }} is available"
+
+    quality:
+        name: Quality gates + integration tests
+        needs: preflight
+        uses: ./.github/workflows/backend-checks.yml
+        with:
+            runIntegration: ${{ inputs.includeIntegration }}
+
+    # Cross-platform release artifacts: the frontend is a static package (deployable anywhere),
+    # while the backend is a Node runtime bundle (dist + package.json + lockfile + .env.example,
+    # runnable on any platform after `npm ci`)
+    artifacts:
+        name: Build cross-platform artifacts
+        needs: [preflight, quality]
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -82,12 +103,14 @@ jobs:
               with:
                   name: release-assets
                   path: release/*
+                  retention-days: 30
 
-    # 整体发布：release 同时把前端静态站部署到 GitHub Pages（与 deploy.yml 相同的官方发布流程）
+    # Release deploys the static frontend to GitHub Pages, mirroring the official flow in deploy.yml
     deploy-frontend:
         name: Deploy frontend to GitHub Pages
-        needs: quality
+        needs: [preflight, quality]
         runs-on: ubuntu-latest
+        timeout-minutes: 20
         permissions:
             contents: read
             pages: write
@@ -119,8 +142,9 @@ jobs:
 
     publish:
         name: Multi-arch image / tag / GitHub Release
-        needs: artifacts
+        needs: [preflight, artifacts, deploy-frontend]
         runs-on: ubuntu-latest
+        timeout-minutes: 60
         permissions:
             contents: write
             packages: write
@@ -128,6 +152,9 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  # Full history is needed to resolve the previous tag for the conventional-commit changelog
+                  fetch-depth: 0
 
             - name: Set up QEMU (cross-platform build)
               uses: docker/setup-qemu-action@v3
@@ -151,7 +178,7 @@ jobs:
                       type=raw,value=${{ inputs.version }}
                       type=raw,value=latest
 
-            - name: Build and push (linux/amd64 + linux/arm64)
+            - name: Build and push with SBOM + provenance attestations
               uses: docker/build-push-action@v6
               with:
                   context: backend
@@ -161,6 +188,8 @@ jobs:
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+                  sbom: true
+                  provenance: mode=max
 
             - name: Download release assets
               uses: actions/download-artifact@v4
@@ -168,32 +197,43 @@ jobs:
                   name: release-assets
                   path: release-assets
 
+            - name: Generate changelog from conventional commits
+              run: |
+                  PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+                  RANGE="${PREV_TAG:+$PREV_TAG..}HEAD"
+                  echo "Previous tag: ${PREV_TAG:-<none>}"
+                  bash .github/scripts/generate-changelog.sh "$RANGE" > changelog.md
+                  cat changelog.md
+
             - name: Create git tag and GitHub Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  cat > release-notes.md <<EOF
-                  ## 前端（GitHub Pages，已随本次 release 部署）
+                  cat > release-notes.md <<'EOF'
+                  ## Frontend (GitHub Pages, deployed with this release)
 
-                  - 静态站已发布到 Pages（见本页 Deployments / 仓库 Settings → Pages）
+                  - Static site published to Pages (see Deployments on this page / Settings → Pages)
 
-                  ## 后端镜像（多架构 linux/amd64 + linux/arm64）
+                  ## Backend image (multi-arch linux/amd64 + linux/arm64, with SBOM + SLSA provenance)
 
-                  \`\`\`
+                  ```
                   ghcr.io/${{ github.repository }}-backend:${{ inputs.version }}
                   ghcr.io/${{ github.repository }}-backend:latest
-                  \`\`\`
+                  ```
+                  - SBOM attestation: dependency manifest of the image
+                  - SLSA provenance (mode=max): build source, trigger, source repo and build commands
+                  - Verify with: `docker buildx imagetools inspect ghcr.io/${{ github.repository }}-backend:${{ inputs.version }} --format '{{json .Manifest.Digest}}'` and check the Attestations tab on the GHCR package page
 
-                  ## 跨平台产物
+                  ## Cross-platform artifacts
 
-                  - \`mma-guessr-frontend-${{ inputs.version }}.zip\`：前端静态包，任意平台解压后打开 \`src/index.html\` 或部署到任意静态服务器
-                  - \`mma-guessr-backend-${{ inputs.version }}.zip\`：后端 Node 运行包，任意平台执行 \`npm ci --omit=dev && node dist/index.js\`（需 Node.js 20+，环境变量见 \`.env.example\`）
-                  - \`SHA256SUMS.txt\`：产物校验和
+                  - `mma-guessr-frontend-${{ inputs.version }}.zip`: frontend static package, unzip on any platform and open `src/index.html` or serve it from any static server
+                  - `mma-guessr-backend-${{ inputs.version }}.zip`: backend Node runtime bundle, run `npm ci --omit=dev && node dist/index.js` on any platform (requires Node.js 20+, env vars in `.env.example`)
+                  - `SHA256SUMS.txt`: artifact checksums
 
-                  ## 变更
+                  ## Changelog
                   EOF
+                  cat changelog.md >> release-notes.md
                   gh release create "v${{ inputs.version }}" \
                     --title "Release v${{ inputs.version }}" \
                     --notes-file release-notes.md \
-                    --generate-notes \
                     release-assets/*

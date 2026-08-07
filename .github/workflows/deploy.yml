@@ -37,7 +37,7 @@ jobs:
               working-directory: ${{ github.workspace }}
               run: |
                   if grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git --exclude-dir=_site --exclude-dir=release 'MLY\|[0-9]{10,}\|[0-9A-Za-z]{20,}' .; then
-                      echo "::error::检测到硬编码的 Mapillary Token，禁止提交！请改用环境变量 MAPILLARY_TOKEN（仅服务端持有）。"
+                      echo "::error::Hardcoded Mapillary token detected. Rejecting commit. Use the environment variable MAPILLARY_TOKEN (server-side only) instead."
                       exit 1
                   fi
                   echo "no hardcoded Mapillary token found"
