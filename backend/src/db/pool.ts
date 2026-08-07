@@ -9,6 +9,12 @@ const log = createLogger('db:postgres');
 export const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 10,
+    // Fail fast on DB/Sql timeout instead of letting CI hang forever
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 60_000,
+    query_timeout: 30_000,
+    statement_timeout: 30_000,
+    allowExitOnIdle: true,
 });
 
 pool.on('error', (err) => {

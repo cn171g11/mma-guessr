@@ -57,6 +57,7 @@ jobs:
         name: "Integration test: full auth flow (PG + Redis)"
         if: inputs.runIntegration
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         defaults:
             run:
                 working-directory: backend
@@ -107,6 +108,20 @@ jobs:
 
             - name: Build
               run: npm run build
+
+            - name: Wait for Postgres and verify connectivity
+              run: |
+                  for i in $(seq 1 30); do
+                      if pg_isready -h localhost -p 5432 -U mma -d mma_guessr; then
+                          echo "Postgres is ready"
+                          break
+                      fi
+                      sleep 2
+                  done
+                  if ! pg_isready -h localhost -p 5432 -U mma -d mma_guessr; then
+                      echo "::error::Postgres did not become ready within 60s"
+                      exit 1
+                  fi
 
             - name: Run database migrations (users)
               run: npm run db:migrate

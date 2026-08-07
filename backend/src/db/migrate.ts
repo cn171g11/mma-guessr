@@ -64,12 +64,16 @@ export async function runMigrations(): Promise<void> {
 const isMainModule: boolean = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
+    // Force-exit so CI never hangs on lingering pool connections (tsx can mis-detect main module)
     runMigrations()
-        .then(async () => {
-            await pool.end();
-        })
-        .catch((err: unknown) => {
+        .then(() => pool.end())
+        .then(() => process.exit(0))
+        .catch(async (err: unknown) => {
             log.error('数据库迁移失败', err);
-            process.exit(1);
+            try {
+                await pool.end();
+            } finally {
+                process.exit(1);
+            }
         });
 }
