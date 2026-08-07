@@ -12,10 +12,12 @@ export function createApp(): express.Express {
     const app = express();
 
     app.disable('x-powered-by');
-    // 来源白名单：仅放行配置的前端域名（开发默认 localhost）；拒绝时不下发 CORS 头，浏览器侧拦截
+    // 来源白名单：仅放行配置的前端域名（开发默认 localhost）；拒绝时不下发 CORS 头，浏览器侧拦截。
+    // credentials 开启以支持刷新令牌 HttpOnly Cookie 随请求回传
     app.use(
         cors({
             origin: (origin, callback) => callback(null, isOriginAllowed(origin)),
+            credentials: true,
         })
     );
     app.use(securityHeaders);

@@ -71,7 +71,7 @@ async function refreshLeaderboard() {
                 (e, i) =>
                     `<div class="lb-row${e.username === me ? ' me' : ''}">
                         <span class="lb-rank">${i + 1}</span>
-                        <span class="lb-name">${e.username}</span>
+                        <span class="lb-name">${escapeHtml(e.username)}</span>
                         <span class="lb-score">${e.score} 分</span>
                     </div>`
             )

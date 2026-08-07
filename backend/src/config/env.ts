@@ -104,4 +104,8 @@ export const env = {
     // CORS 白名单（逗号分隔）。未配置时（开发默认）仅放行 localhost/127.0.0.1；
     // 生产环境必须显式配置为前端域名，否则同源校验会拒绝浏览器请求
     CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? '',
+
+    // 刷新令牌 Cookie 的 SameSite 策略。前端与 API 同站（如 app.example.com 与 api.example.com）
+    // 使用默认 lax；跨站部署（不同顶级域）须在 HTTPS 上设为 none
+    COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE ?? 'lax',
 } as const;

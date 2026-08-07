@@ -16,6 +16,22 @@ const VALID_PASSWORD = 'secret123';
 const VERIFY_CODE_KEY_PREFIX = 'verify_code:';
 const VERIFY_CODE_TTL_SECONDS = 600;
 
+// 从 Set-Cookie 提取指定名称的 Cookie 值（刷新令牌只在 HttpOnly Cookie 中下发）
+function cookieValueOf(res: request.Response, name: string): string | null {
+    const header = res.headers['set-cookie'];
+    if (header === undefined) {
+        return null;
+    }
+    const cookieLines = Array.isArray(header) ? header : [header];
+    for (const line of cookieLines) {
+        const match = new RegExp(`(?:^|;)\\s*${name}=([^;]*)`).exec(line);
+        if (match !== null) {
+            return match[1] as string;
+        }
+    }
+    return null;
+}
+
 async function primeVerificationCode(email: string): Promise<string> {
     const verificationCode = '123456';
     const codeHash = crypto.createHash('sha256').update(verificationCode).digest('hex');
@@ -55,7 +71,7 @@ describe('POST /api/auth/verification-code 邮箱验证码', () => {
         expect(response.status).toBe(400);
     });
 
-    it('已注册邮箱返回 409', async () => {
+    it('已注册邮箱与未注册邮箱返回一致（防账号枚举）', async () => {
         const email = makeRandomEmail('code');
         const code = await obtainVerificationCode(email);
         const registerResponse = await request(getApp())
@@ -64,7 +80,8 @@ describe('POST /api/auth/verification-code 邮箱验证码', () => {
         expect(registerResponse.status).toBe(201);
 
         const again = await request(getApp()).post('/api/auth/verification-code').send({ email });
-        expect(again.status).toBe(409);
+        expect(again.status).toBe(200);
+        expect(again.body.message).toBeTruthy();
     });
 });
 
@@ -78,7 +95,9 @@ describe('POST /api/auth/register 注册', () => {
         expect(response.status).toBe(201);
         expect(response.body.user).toMatchObject({ username: 'tester01', email });
         expect(response.body.tokenPair.accessToken).toBeTruthy();
-        expect(response.body.tokenPair.refreshToken).toBeTruthy();
+        // H1/M2 回归断言：刷新令牌只经 HttpOnly Cookie 下发，绝不进入响应体
+        expect(response.body.tokenPair.refreshToken).toBeUndefined();
+        expect(cookieValueOf(response, 'mma_refresh')).toBeTruthy();
 
         const meResponse = await request(getApp())
             .get('/api/auth/me')
@@ -190,20 +209,26 @@ describe('令牌生命周期（refresh / logout）', () => {
         const registerResponse = await request(getApp())
             .post('/api/auth/register')
             .send({ username: 'tester01', email, password: VALID_PASSWORD, code });
+        const refreshToken = cookieValueOf(registerResponse, 'mma_refresh');
+        if (refreshToken === null) {
+            throw new Error('注册响应未下发刷新令牌 Cookie');
+        }
         return {
             email,
             accessToken: registerResponse.body.tokenPair.accessToken,
-            refreshToken: registerResponse.body.tokenPair.refreshToken,
+            refreshToken,
         };
     }
 
-    it('refresh 返回新令牌对，旧 refresh 立即作废', async () => {
+    it('refresh 返回新访问令牌并轮换 Cookie，旧 refresh 立即作废', async () => {
         const session = await createSession();
         const refreshResponse = await request(getApp())
             .post('/api/auth/refresh')
             .send({ refreshToken: session.refreshToken });
         expect(refreshResponse.status).toBe(200);
-        expect(refreshResponse.body.accessToken).not.toBe(session.accessToken);
+        expect(refreshResponse.body.tokenPair.accessToken).not.toBe(session.accessToken);
+        expect(refreshResponse.body.tokenPair.refreshToken).toBeUndefined();
+        expect(cookieValueOf(refreshResponse, 'mma_refresh')).toBeTruthy();
 
         const reusedResponse = await request(getApp())
             .post('/api/auth/refresh')

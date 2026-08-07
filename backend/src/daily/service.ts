@@ -10,10 +10,31 @@ import * as repository from './repository.js';
 
 const log = createLogger('daily');
 
+// 前端可见的每日题目：仅披露游玩所需的展示字段，绝不携带答案坐标
+export interface PublicDailyLocation {
+    id: number;
+    name: string;
+    difficulty: number;
+    region: LocationRecord['region'];
+    mapillaryId: string | null;
+    panoramaUrl: string | null;
+}
+
 export interface DailyChallenge {
     date: string;
-    locations: LocationRecord[];
+    locations: PublicDailyLocation[];
     played: boolean;
+}
+
+function toPublicDailyLocation(location: LocationRecord): PublicDailyLocation {
+    return {
+        id: location.id,
+        name: location.name,
+        difficulty: location.difficulty,
+        region: location.region,
+        mapillaryId: location.mapillaryId,
+        panoramaUrl: location.panoramaUrl,
+    };
 }
 
 // 惰性抽题：当天首次访问时从题库抽取固定题数入库，全天保持不变
@@ -46,9 +67,9 @@ export async function getToday(player: PlayerRef): Promise<DailyChallenge> {
             redrawn.map((location) => location.id)
         );
         log.warn(`每日题单检测到失效条目 ${locations.length}/${ids.length}，已重新抽题 date=${date}`);
-        return { date, locations: redrawn, played };
+        return { date, locations: redrawn.map(toPublicDailyLocation), played };
     }
-    return { date, locations, played };
+    return { date, locations: locations.map(toPublicDailyLocation), played };
 }
 
 // 提交校验用：返回今天题单的完整题目记录，供 games 服务逐题核验

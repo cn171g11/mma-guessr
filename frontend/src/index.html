@@ -5,11 +5,39 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <title>🌍 MmaGuessr v1.17.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <!-- CSP：纯静态托管无响应头可加，故用 meta 声明。
+             script-src 的 unsafe-inline 用于存量内联 onclick 处理器，属兼容性取舍；
+             外部 CDN 脚本另以 SRI 锁定内容，防供应链接篡改。
+             connect-src 放行本地 API/Socket.IO（http://localhost:3000）与 https 直连。
+             注意：CSP 头本身对该页面（静态托管）不生效，本 meta 是页面级兜底。 -->
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.socket.io 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss: ws: http://localhost:3000 http://127.0.0.1:3000; object-src 'none'; base-uri 'self'; form-action 'self'"
+        />
 
-        <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
-        <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+        <!-- SRI：CDN 依赖锁定具体内容哈希，防供应链接篡改；crossorigin 使校验生效 -->
+        <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
+            crossorigin="anonymous"
+        />
+        <script
+            src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
+            crossorigin="anonymous"
+        ></script>
+
+        <script
+            src="https://unpkg.com/three@0.149.0/build/three.min.js"
+            integrity="sha384-RRHfJ6w1mTlKUBMYT/hvnRiOzEB/vyRV3DrQOseb6oYfvaZSfdd0byS4bHps0k2R"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://cdn.socket.io/4.8.1/socket.io.min.js"
+            integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
+            crossorigin="anonymous"
+        ></script>
 
         <link rel="stylesheet" href="css/style.css" />
     </head>

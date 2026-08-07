@@ -4,7 +4,6 @@
 
 const MmaApi = (() => {
     const ACCESS_KEY = 'mma_access_token';
-    const REFRESH_KEY = 'mma_refresh_token';
     const GUEST_KEY = 'mma_guest_token';
 
     let identity = null; // { role: 'guest'|'user', profile|user, progress }
@@ -14,15 +13,14 @@ const MmaApi = (() => {
         return localStorage.getItem(ACCESS_KEY) || localStorage.getItem(GUEST_KEY) || null;
     }
 
+    // 刷新令牌经 HttpOnly Cookie 由服务端下发，本地仅保留短期访问令牌
     function storeUserTokens(pair) {
         localStorage.setItem(ACCESS_KEY, pair.accessToken);
-        localStorage.setItem(REFRESH_KEY, pair.refreshToken);
         localStorage.removeItem(GUEST_KEY);
     }
 
     function clearTokens() {
         localStorage.removeItem(ACCESS_KEY);
-        localStorage.removeItem(REFRESH_KEY);
         localStorage.removeItem(GUEST_KEY);
     }
 
@@ -44,17 +42,19 @@ const MmaApi = (() => {
     }
 
     async function tryRefresh() {
-        const refreshToken = localStorage.getItem(REFRESH_KEY);
-        if (!refreshToken) return false;
+        // 刷新令牌随 HttpOnly Cookie 自动回传，无需本地读取
         try {
             const response = await fetch(API_BASE + '/api/auth/refresh', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refreshToken }),
+                body: '{}',
             });
             if (!response.ok) return false;
-            const pair = await response.json();
-            storeUserTokens(pair);
+            const payload = await response.json();
+            const accessToken = payload && payload.tokenPair && payload.tokenPair.accessToken;
+            if (!accessToken) return false;
+            localStorage.setItem(ACCESS_KEY, accessToken);
             return true;
         } catch (e) {
             return false;
@@ -72,13 +72,14 @@ const MmaApi = (() => {
                 method: options.method || 'GET',
                 headers,
                 body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+                credentials: 'include',
             });
         } catch (e) {
             setOffline();
             throw e;
         }
 
-        if (response.status === 401 && localStorage.getItem(REFRESH_KEY) && !options.retried) {
+        if (response.status === 401 && localStorage.getItem(ACCESS_KEY) && !options.retried) {
             if (await tryRefresh()) return request(path, { ...options, retried: true });
             clearTokens();
             identity = null;

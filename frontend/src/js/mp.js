@@ -230,8 +230,12 @@ function mpSubmitGuess() {
     $('submit-btn').disabled = true;
     $('submit-btn').textContent = '已提交，等待对方...';
     mpStopTimer();
-    const distanceKm = guessPoint.distanceTo(L.latLng(mpState.currentLocation.lat, mpState.currentLocation.lng)) / 1000;
-    mpState.socket.emit('mp:answer', { distanceKm, roundIndex: mpState.roundIndex });
+    // 答案坐标仅由服务端权威持有，本端只提交猜测点坐标，距离与得分由服务端计算
+    mpState.socket.emit('mp:answer', {
+        guessLat: guessPoint.lat,
+        guessLng: guessPoint.lng,
+        roundIndex: mpState.roundIndex,
+    });
 }
 
 function fmtMpDistance(distanceKm) {

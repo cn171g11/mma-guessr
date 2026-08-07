@@ -12,12 +12,15 @@ import { playerRefOf } from '../utils/playerRef.js';
 import { slidingWindowRateLimit } from '../utils/slidingWindowRateLimit.js';
 import { parseBody, parseQuery } from '../utils/validate.js';
 
+const IMAGE_ID_PATTERN = /^[0-9A-Za-z_-]{1,64}$/;
+
 const roundSchema = z.object({
     name: z.string().min(1, '地点名称不能为空').max(120, '地点名称过长'),
     locationId: z.number().int().positive().nullable().optional(),
     distanceKm: z.number().min(0).max(40075, '距离超出一周范围').nullable(),
     score: z.number().int().min(0).max(APP_CONSTANTS.MAX_ROUND_SCORE, '单轮得分超限'),
-    imageId: z.string().min(1).max(64).nullable().optional(),
+    // 与 /api/proxy 相同的严格字符集，避免历史记录渲染时被注入 href 属性
+    imageId: z.string().regex(IMAGE_ID_PATTERN, 'imageId 包含非法字符').nullable().optional(),
     xp: z.number().int().min(0).max(APP_CONSTANTS.MAX_ROUND_SCORE).optional(),
     difficulty: z.number().int().min(1).max(5).optional(),
     guessLat: z.number().min(-90).max(90).nullable().optional(),

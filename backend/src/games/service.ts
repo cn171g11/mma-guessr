@@ -13,8 +13,6 @@ const log = createLogger('games');
 // 距离重算与前端 Leaflet 结果允许的误差：绝对 50m 或相对 2%，取较大者
 const DISTANCE_ABSOLUTE_TOLERANCE_KM = 0.05;
 const DISTANCE_RELATIVE_TOLERANCE = 0.02;
-// 每日挑战允许的答案坐标偏移：街景搜索半径最大约 1.3km，放宽到 3km 仍可拦截张冠李戴
-const DAILY_ANSWER_RADIUS_KM = 3;
 
 interface RoundGeometry {
     guessLat: number;
@@ -80,26 +78,52 @@ function verifyRoundScore(input: SubmitGameInput, round: GameRoundInput): number
     return expectedScore;
 }
 
-// 每日挑战逐题核验：题目必须属于今日题单，且答案坐标与题目坐标足够接近
-async function verifyDailyRounds(input: SubmitGameInput): Promise<void> {
-    if (input.mode !== 'daily') {
-        return;
-    }
+// 每日挑战整局权威结算：游玩期间答案坐标完全不透出客户端，
+// 服务端依据今日题单真实坐标与提交的猜测点重算距离与得分，
+// 最终成绩记录中回传答案坐标仅用于整局结束后的结算展示
+async function verifyDailyRoundsAuthoritative(
+    input: SubmitGameInput
+): Promise<Array<{ round: GameRoundInput; score: number }>> {
     const todayLocations = await dailyService.getTodayLocationRecords();
     const locationById = new Map(todayLocations.map((location) => [location.id, location]));
-    for (const round of input.rounds) {
+    return input.rounds.map((round) => {
         const location = typeof round.locationId === 'number' ? locationById.get(round.locationId) : undefined;
         if (location === undefined) {
             throw badRequest('回合题目不属于今日挑战题单');
         }
-        if (round.answerLat === null || round.answerLat === undefined || round.answerLng === null || round.answerLng === undefined) {
-            throw badRequest('每日挑战必须携带答案坐标');
+        if (round.distanceKm !== null || round.answerLat !== null || round.answerLng !== null) {
+            throw badRequest('每日挑战由服务端权威结算，客户端不得携带距离或答案坐标');
         }
-        const offsetKm = haversineKm(location.lat, location.lng, round.answerLat, round.answerLng);
-        if (offsetKm > DAILY_ANSWER_RADIUS_KM) {
-            throw badRequest('回合答案坐标与题目不符');
+        const hasGuess =
+            round.guessLat !== null &&
+            round.guessLat !== undefined &&
+            round.guessLng !== null &&
+            round.guessLng !== undefined;
+        if (!hasGuess) {
+            return {
+                round: {
+                    ...round,
+                    distanceKm: null,
+                    score: 0,
+                    answerLat: location.lat,
+                    answerLng: location.lng,
+                },
+                score: 0,
+            };
         }
-    }
+        const distanceKm = haversineKm(round.guessLat!, round.guessLng!, location.lat, location.lng);
+        const score = computeRoundScore(input.mode, input.region, distanceKm);
+        return {
+            round: {
+                ...round,
+                distanceKm,
+                score,
+                answerLat: location.lat,
+                answerLng: location.lng,
+            },
+            score,
+        };
+    });
 }
 
 // 进度快照保存在 Redis Hash（guest_progress: / user_progress:），供 /me 与 summary 直接读取
@@ -119,16 +143,19 @@ async function accumulateProgress(player: PlayerRef, input: SubmitGameInput): Pr
 }
 
 export async function submitGame(player: PlayerRef, input: SubmitGameInput): Promise<GameRecord> {
-    const verified = input.rounds.map((round) => ({ round, score: verifyRoundScore(input, round) }));
-    const verifiedTotal = verified.reduce((total, entry) => total + entry.score, 0);
-    if (input.totalScore !== verifiedTotal) {
-        throw badRequest('总分与回合得分不符');
-    }
+    let verified: Array<{ round: GameRoundInput; score: number }>;
     if (input.mode === 'daily') {
-        // 先逐题核验再占位：非法提交不会消耗当天唯一一次机会
-        await verifyDailyRounds(input);
+        // 每日挑战：距离/得分/答案全部由服务端权威结算，客户端提交的总分不参与校验
+        verified = await verifyDailyRoundsAuthoritative(input);
         await dailyService.guardDailySubmission(player);
+    } else {
+        verified = input.rounds.map((round) => ({ round, score: verifyRoundScore(input, round) }));
+        const verifiedTotal = verified.reduce((total, entry) => total + entry.score, 0);
+        if (input.totalScore !== verifiedTotal) {
+            throw badRequest('总分与回合得分不符');
+        }
     }
+    const verifiedTotal = verified.reduce((total, entry) => total + entry.score, 0);
     const verifiedInput: SubmitGameInput = {
         ...input,
         totalScore: verifiedTotal,

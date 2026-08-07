@@ -6,11 +6,11 @@ import request from 'supertest';
 import { io as createClient, type Socket as ClientSocket } from 'socket.io-client';
 
 import { attachSocketServer, stopSocketServer } from '../src/socket.js';
+import { roomKeyFor } from '../src/multiplayer/cache.js';
+import { redis } from '../src/db/redis.js';
 import { closeInfra, getApp, prepareDatabase, resetAuthState } from './helpers.js';
 
 const TOTAL_ROUNDS = 5;
-const NEAR_DISTANCE_KM = 0.01;
-const FAR_DISTANCE_KM = 5000;
 
 let server: http.Server;
 let serverUrl: string;
@@ -96,17 +96,40 @@ async function createGuestToken(): Promise<string> {
     return response.body.guestToken as string;
 }
 
+// 服务端不再向客户端下发本回合答案坐标（mp:round 仅含渲染街景所需字段），
+// 测试需像权威计分那样从房间缓存取得真实坐标来构造"精确命中"与"远离"的猜测
+async function currentRoundLocation(roomId: string): Promise<{ lat: number; lng: number } | null> {
+    const raw = await redis.hget(roomKeyFor(roomId), 'location');
+    if (raw === undefined || raw === null || raw === '') {
+        return null;
+    }
+    return JSON.parse(raw) as { lat: number; lng: number };
+}
+
 // 与对局协议联动的完整 5 回合流程：等待 round -> 提交答案 -> 等待 roundEnd
-async function playFullMatch(client: ClientSocket, distanceKm: number): Promise<{ rankings: unknown }> {
+// near = true 的选手提交与答案完全相同的坐标（0km -> 满分），far 的选手提交对跖点（几乎 0 分）
+async function playFullMatch(client: ClientSocket, near: boolean): Promise<{ rankings: unknown }> {
     // 在等待 matched 之前就注册 round/roundEnd 缓冲，杜绝服务端先于监听器下发事件导致的丢事件
     const rounds = makeEventBuffer<{ roundIndex: number; location: Record<string, unknown> }>(client, 'mp:round');
     const roundEnds = makeEventBuffer<unknown>(client, 'mp:roundEnd');
-    await waitFor(client, 'mp:matched');
+    const matched = (await waitFor(client, 'mp:matched')) as { roomId: string };
     for (let roundIndex = 0; roundIndex < TOTAL_ROUNDS; roundIndex++) {
         const roundData = await rounds.next();
         expect(roundData.roundIndex).toBe(roundIndex);
         expect(roundData.location.name).toBeUndefined();
-        client.emit('mp:answer', { distanceKm, roundIndex });
+        // 安全回归断言：题目坐标绝不随 mp:round 下发
+        expect(roundData.location.lat).toBeUndefined();
+        expect(roundData.location.lng).toBeUndefined();
+        const location = await currentRoundLocation(matched.roomId);
+        if (location === null) {
+            throw new Error('无法读取本回合答案坐标');
+        }
+        client.emit(
+            'mp:answer',
+            near
+                ? { guessLat: location.lat, guessLng: location.lng, roundIndex }
+                : { guessLat: -location.lat, guessLng: (location.lng >= 0 ? location.lng - 180 : location.lng + 180), roundIndex }
+        );
         await roundEnds.next();
     }
     return (await waitFor(client, 'mp:finished')) as { rankings: unknown };
@@ -150,8 +173,8 @@ describe('Socket.IO 多人对战', () => {
         clientB.emit('mp:join', { mode: 'classic' });
 
         const [finishedA, finishedB] = await Promise.all([
-            playFullMatch(clientA, NEAR_DISTANCE_KM),
-            playFullMatch(clientB, FAR_DISTANCE_KM),
+            playFullMatch(clientA, true),
+            playFullMatch(clientB, false),
         ]);
 
         const rankingsA = finishedA.rankings as Array<{ playerId: string; username: string; totalScore: number }>;
@@ -175,7 +198,7 @@ describe('Socket.IO 多人对战', () => {
 
         clientA.emit('mp:join', { mode: 'classic' });
         clientB.emit('mp:join', { mode: 'classic' });
-        await Promise.all([playFullMatch(clientA, NEAR_DISTANCE_KM), playFullMatch(clientB, FAR_DISTANCE_KM)]);
+        await Promise.all([playFullMatch(clientA, true), playFullMatch(clientB, false)]);
         clientA.disconnect();
         clientB.disconnect();
 

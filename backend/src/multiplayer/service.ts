@@ -6,6 +6,7 @@ import { verifyAccessToken } from '../auth/tokens.js';
 import { APP_CONSTANTS } from '../config/env.js';
 import * as gamesService from '../games/service.js';
 import type { PlayerRef } from '../games/types.js';
+import { haversineKm } from '../games/scoring.js';
 import * as locationsService from '../locations/service.js';
 import { createLogger } from '../logger/index.js';
 import * as cache from './cache.js';
@@ -222,14 +223,13 @@ export class MultiplayerService {
         }
         await cache.saveRoom(room);
 
+        // 不向客户端下发答案坐标，仅下发渲染街景所需的字段；距离由服务端在 handleAnswer 权威计算
         this.io.to(roomId).emit('mp:round', {
             roundIndex: room.roundIndex,
             totalRounds: APP_CONSTANTS.MP_TOTAL_ROUNDS,
             timeLimitMs: APP_CONSTANTS.MP_ROUND_SECONDS * 1000,
             location: {
                 id: location.id,
-                lat: location.lat,
-                lng: location.lng,
                 panoramaUrl: location.panoramaUrl,
                 mapillaryId: location.mapillaryId,
             },
@@ -246,11 +246,6 @@ export class MultiplayerService {
             return;
         }
         const body = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-        const distanceKm = typeof body.distanceKm === 'number' ? body.distanceKm : Number.NaN;
-        if (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > 40075) {
-            socket.emit('mp:error', { message: '无效的距离提交' });
-            return;
-        }
 
         const room = await cache.loadRoom(roomId);
         if (room === null || room.status !== 'playing') {
@@ -261,10 +256,31 @@ export class MultiplayerService {
         if (claimedRound !== room.roundIndex) {
             return;
         }
+        if (room.location === null) {
+            socket.emit('mp:error', { message: '对局状态异常' });
+            return;
+        }
+
+        const guess = this.parseGuessCoordinates(body);
+        if (guess === null) {
+            socket.emit('mp:error', { message: '无效的坐标提交' });
+            return;
+        }
+        // 客户端只上报猜测坐标，答案距离由服务器依本房间题目权威计算，防止客户端刷分
+        const distanceKm = haversineKm(guess.lat, guess.lng, room.location.lat, room.location.lng);
         const answeredCount = await cache.applyAnswer(roomId, socket.id, distanceKm, computeScore(distanceKm));
         if (answeredCount === room.players.length) {
             await this.endRound(roomId);
         }
+    }
+
+    private parseGuessCoordinates(body: Record<string, unknown>): { lat: number; lng: number } | null {
+        const lat = typeof body.guessLat === 'number' ? body.guessLat : Number.NaN;
+        const lng = typeof body.guessLng === 'number' ? body.guessLng : Number.NaN;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return null;
+        }
+        return { lat, lng };
     }
 
     // 回合结束与结算：answer 触达与 60s 定时器可能并发触发，用 endingRooms 保证只结算一次
