@@ -72,6 +72,21 @@ const refreshKeyFor = (userId: string): string => `${REFRESH_KEY_PREFIX}${userId
 const rememberRefreshHash = (refreshToken: string): string =>
     crypto.createHash(HASH_ALGORITHM).update(refreshToken).digest('hex');
 
+// 原子换发：校验旧哈希并写入新哈希单次完成，杜绝并发刷新双双通过校验（TOCTOU）。
+// 返回 0=已吊销 1=哈希不匹配（拒绝但不删除，避免误伤并发换发后的新令牌） 2=换发成功
+const REFRESH_EXCHANGE_SCRIPT = `
+    local key = KEYS[1]
+    local stored = redis.call('GET', key)
+    if not stored then
+        return 0
+    end
+    if stored ~= ARGV[1] then
+        return 1
+    end
+    redis.call('SET', key, ARGV[2], 'EX', ARGV[3])
+    return 2
+`;
+
 export async function issueTokenPair(userId: string): Promise<TokenPair> {
     const accessToken = signAccessToken({ role: 'user', subject: userId });
     const refreshToken = signRefreshToken(userId);
@@ -133,19 +148,26 @@ export async function exchangeRefreshToken(refreshTokenInput: string, ipAddress:
         throw unauthorized('刷新令牌无效');
     }
 
-    const storedHash = await redis.get(refreshKeyFor(userId));
-    if (storedHash === null) {
+    const newRefreshToken = signRefreshToken(userId);
+    const result = await redis.eval(
+        REFRESH_EXCHANGE_SCRIPT,
+        1,
+        refreshKeyFor(userId),
+        rememberRefreshHash(refreshTokenInput),
+        rememberRefreshHash(newRefreshToken),
+        String(APP_CONSTANTS.REFRESH_TTL_SECONDS)
+    );
+    if (result === 0) {
         throw unauthorized('刷新令牌已被吊销');
     }
-    if (!tokensMatch(storedHash, rememberRefreshHash(refreshTokenInput))) {
-        // 多标签页并发刷新会携带同一旧令牌（前端已用跨标签页锁协调，此处仍保留强吊销语义）
-        await redis.del(refreshKeyFor(userId));
-        log.warn(`刷新令牌被复用或伪造，已吊销用户 ${userId} 的令牌`, { ip: ipAddress });
-        throw unauthorized('刷新令牌与存储不匹配');
+    if (result !== 2) {
+        // 仅拒绝不吊销：并发换发后存储的已是新哈希，此刻删除会误伤刚签发的令牌
+        log.warn(`刷新令牌不匹配，拒绝换发 user=${userId}`, { ip: ipAddress });
+        throw unauthorized('刷新令牌无效');
     }
 
     log.info(`用户 ${userId} 刷新令牌成功`, { ip: ipAddress });
-    return issueTokenPair(userId);
+    return { accessToken: signAccessToken({ role: 'user', subject: userId }), refreshToken: newRefreshToken };
 }
 
 export async function revokeTokens(userId: string, submittedRefreshToken?: string): Promise<void> {

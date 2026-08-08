@@ -1,5 +1,11 @@
 const DEFAULT_PORT = 3000;
 
+// 开发默认密钥仅供本地联调：生产环境与默认值相同的配置一律拒绝启动
+const DEV_ACCESS_SECRET = 'dev-access-secret-change-me-0123456789abcdef';
+const DEV_REFRESH_SECRET = 'dev-refresh-secret-change-me-0123456789abcdef';
+const DEV_VERIFY_CODE_SECRET = 'dev-verify-code-secret-not-for-production-0123456789';
+const MIN_SECRET_BYTES = 32;
+
 // 应用级常量（业务配置，独立于环境变量）
 export const APP_CONSTANTS = {
     // 服务版本（与前端 config.js VERSION 同步）
@@ -7,7 +13,7 @@ export const APP_CONSTANTS = {
     // 慢查询阈值：超过该毫秒数的 SQL 记录 warn 日志
     SLOW_QUERY_THRESHOLD_MS: 500,
     // 加解密与令牌
-    BCRYPT_ROUNDS: 10,
+    BCRYPT_ROUNDS: 12,
     ACCESS_TTL_SECONDS: 15 * 60,
     REFRESH_TTL_SECONDS: 7 * 24 * 60 * 60,
     // 邮箱验证码
@@ -75,6 +81,25 @@ function required(name: string, fallback: string): string {
     return fallback;
 }
 
+// 加密密钥强制强度校验：HS256 弱密钥可离线爆破，且任何环境都不得使用已知默认值签发令牌
+function requiredSecret(name: string, devFallback: string): string {
+    const value = process.env[name];
+    if (value === undefined || value === '') {
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error(`缺少环境变量：${name}`);
+        }
+        console.warn(`[env] 未设置 ${name}，使用开发默认值`);
+        return devFallback;
+    }
+    if (Buffer.byteLength(value, 'utf8') < MIN_SECRET_BYTES) {
+        throw new Error(`${name} 长度必须至少 ${MIN_SECRET_BYTES} 字节`);
+    }
+    if (process.env.NODE_ENV === 'production' && value === devFallback) {
+        throw new Error(`${name} 不能使用开发默认值`);
+    }
+    return value;
+}
+
 function optionalNumber(name: string, fallback: number): number {
     const value = process.env[name];
     if (value === undefined || value === '') {
@@ -113,8 +138,11 @@ export const env = {
     MAPILLARY_TOKEN: process.env.MAPILLARY_TOKEN ?? '',
 
     // 认证
-    JWT_ACCESS_SECRET: required('JWT_ACCESS_SECRET', 'dev-access-secret-change-me'),
-    JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET', 'dev-refresh-secret-change-me'),
+    JWT_ACCESS_SECRET: requiredSecret('JWT_ACCESS_SECRET', DEV_ACCESS_SECRET),
+    JWT_REFRESH_SECRET: requiredSecret('JWT_REFRESH_SECRET', DEV_REFRESH_SECRET),
+
+    // 验证码哈希密钥：与令牌密钥隔离，避免任一泄露波及其他凭据
+    VERIFY_CODE_SECRET: requiredSecret('VERIFY_CODE_SECRET', DEV_VERIFY_CODE_SECRET),
 
     // 邮件（SMTP）
     SMTP_HOST: process.env.SMTP_HOST ?? '',

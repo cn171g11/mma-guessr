@@ -1,4 +1,5 @@
 import { APP_CONSTANTS } from '../config/env.js';
+import bcrypt from 'bcryptjs';
 import { redis } from '../db/redis.js';
 import { createLogger } from '../logger/index.js';
 import { mergeGuestProgressIntoUser } from './guest.js';
@@ -36,6 +37,18 @@ export interface AccountSession {
 
 const loginLockKeyFor = (identifier: string): string => `${LOGIN_LOCK_KEY_PREFIX}${identifier.toLowerCase()}`;
 
+// 账号不存在时也执行一次成本相同的假校验，抹平"账号不存在/密码错误"的响应时间差，
+// 防止远程时序探测枚举已注册账号
+let dummyPasswordHash: string | null = null;
+async function verifyPasswordConstantTime(password: string, storedHash: string | null): Promise<boolean> {
+    if (storedHash === null) {
+        dummyPasswordHash ??= await bcrypt.hash('timing-equal-dummy-password', APP_CONSTANTS.BCRYPT_ROUNDS);
+        await verifyPassword(password, dummyPasswordHash);
+        return false;
+    }
+    return verifyPassword(password, storedHash);
+}
+
 export function assertValidAccountFields(username: string, email: string, password: string): void {
     if (!USERNAME_PATTERN.test(username)) {
         throw badRequest('用户名需为 3-20 位字母、数字或下划线');
@@ -45,6 +58,10 @@ export function assertValidAccountFields(username: string, email: string, passwo
     }
     if (password.length < 8 || password.length > 72) {
         throw badRequest('密码长度需为 8-72 位');
+    }
+    // bcrypt 仅取前 72 字节，按字符上限会静默截断多字节密码导致哈希碰撞,需按字节校验
+    if (Buffer.byteLength(password, 'utf8') > 72) {
+        throw badRequest('密码过长（UTF-8 编码后不得超过 72 字节）');
     }
 }
 
@@ -80,7 +97,8 @@ export async function loginAccount(identifier: string, password: string, ipAddre
     await assertLoginNotLocked(identifier);
 
     const userRecord = await findUserByIdentifier(identifier.toLowerCase());
-    if (userRecord === null || !(await verifyPassword(password, userRecord.password_hash))) {
+    const verified = await verifyPasswordConstantTime(password, userRecord?.password_hash ?? null);
+    if (userRecord === null || !verified) {
         await recordLoginFailure(identifier);
         throw unauthorized('账号或密码错误');
     }
@@ -101,7 +119,8 @@ async function assertLoginNotLocked(identifier: string): Promise<void> {
 async function recordLoginFailure(identifier: string): Promise<void> {
     const lockKey = loginLockKeyFor(identifier);
     const attempts = await redis.incr(lockKey);
-    if (attempts >= APP_CONSTANTS.LOGIN_MAX_ATTEMPTS) {
+    // 首次失败即设置 TTL：历史失败计数永不残留，避免低频率攻击者借助陈旧计数无限期累积锁定
+    if (attempts === 1) {
         await redis.expire(lockKey, APP_CONSTANTS.LOGIN_LOCK_SECONDS);
     }
 }

@@ -76,10 +76,21 @@ async function isNonceFresh(nonce: string): Promise<boolean> {
         const result = await redis.set(`${NONCE_USED_PREFIX}${nonce}`, '1', 'EX', NONCE_TTL_SECONDS, 'NX');
         return result === 'OK';
     } catch (err) {
-        // Redis 异常时放行防重放校验，避免签名校验故障断掉整个服务；时间戳窗口仍有效
-        log.warn('nonce 去重降级放行（Redis 异常）', err);
-        return true;
+        // Redis 异常时用进程内集合继续去重,绝不静默放行；多副本时不共享,但仍保底线
+        log.error('nonce 去重降级为进程内计数（Redis 异常）', err);
+        return isNonceFreshInMemory(nonce);
     }
+}
+
+// 进程内一次性 nonce：TTL 到期由定时器清理,防重放窗口与 Redis 版本一致
+const inMemoryNonces = new Set<string>();
+function isNonceFreshInMemory(nonce: string): boolean {
+    if (inMemoryNonces.has(nonce)) {
+        return false;
+    }
+    inMemoryNonces.add(nonce);
+    setTimeout(() => inMemoryNonces.delete(nonce), NONCE_TTL_SECONDS * 1000);
+    return true;
 }
 
 export const apiSignature: RequestHandler = async (req, _res, next) => {

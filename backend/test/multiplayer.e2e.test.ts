@@ -120,6 +120,8 @@ async function playFullMatch(client: ClientSocket, near: boolean): Promise<{ ran
         // 安全回归断言：题目坐标绝不随 mp:round 下发
         expect(roundData.location.lat).toBeUndefined();
         expect(roundData.location.lng).toBeUndefined();
+        // 安全回归断言：裸库 id 也不下发，杜绝经 /locations/random 建 id→坐标映射破解对局
+        expect((roundData.location as Record<string, unknown>).id).toBeUndefined();
         const location = await currentRoundLocation(matched.roomId);
         if (location === null) {
             throw new Error('无法读取本回合答案坐标');

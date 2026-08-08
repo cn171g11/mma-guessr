@@ -148,6 +148,13 @@ export async function submitGame(player: PlayerRef, input: SubmitGameInput): Pro
     if (input.mode === 'daily') {
         // 每日挑战：距离/得分/答案全部由服务端权威结算，客户端提交的总分不参与校验
         verified = await verifyDailyRoundsAuthoritative(input);
+        const hasAnyAnswer = verified.some(
+            (entry) => entry.round.guessLat !== null && entry.round.guessLat !== undefined
+        );
+        if (!hasAnyAnswer) {
+            // 全空回合视为"零游玩"，拒绝提交,防止空请求占位刷取每日成就
+            throw badRequest('每日挑战至少需作答一轮');
+        }
         await dailyService.guardDailySubmission(player);
     } else {
         verified = input.rounds.map((round) => ({ round, score: verifyRoundScore(input, round) }));

@@ -166,6 +166,19 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
     }
 }
 
+// 宽度归一化到三档（与上游缩略图档位一致）：防止任意 width 膨胀 Redis 缓存条目
+const ALLOWED_WIDTHS = [256, 1024, 2048] as const;
+// noUncheckedIndexedAccess 下元组索引含 undefined，兜底直接取最大档位字面量
+const LARGEST_ALLOWED_WIDTH = 2048;
+function normalizeWidth(width: number): number {
+    for (const candidate of ALLOWED_WIDTHS) {
+        if (candidate >= width) {
+            return candidate;
+        }
+    }
+    return LARGEST_ALLOWED_WIDTH;
+}
+
 export interface FetchedImage {
     buffer: Buffer;
     contentType: string;
@@ -173,10 +186,11 @@ export interface FetchedImage {
 
 export async function fetchMapillaryImage(imageId: string, width: number): Promise<FetchedImage> {
     assertTokenConfigured();
+    const normalizedWidth = normalizeWidth(width);
     const media = await resolveMedia(imageId);
-    const thumbUrl = pickThumbUrl(media, width);
+    const thumbUrl = pickThumbUrl(media, normalizedWidth);
 
-    const cacheKey = `${IMAGE_CACHE_PREFIX}${imageId}:${width}`;
+    const cacheKey = `${IMAGE_CACHE_PREFIX}${imageId}:${normalizedWidth}`;
     const cached = await redis.getBuffer(cacheKey);
     if (cached !== null) {
         return { buffer: cached, contentType: CACHE_CONTENT_TYPE };

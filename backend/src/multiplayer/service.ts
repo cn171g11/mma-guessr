@@ -59,6 +59,8 @@ export class MultiplayerService {
     private readonly io: Server;
     private readonly roomTimers = new Map<string, NodeJS.Timeout>();
     private readonly socketRooms = new Map<string, string>();
+    // 排队中的玩家：同一玩家双开 socket 会被拒绝入队,防止自配对刷对局
+    private readonly queuedPlayers = new Set<string>();
     private readonly endingRooms = new Set<string>();
     private readonly matchmakerTimer: NodeJS.Timeout;
     private readonly eventRateLimiter = new EventRateLimiter({
@@ -121,9 +123,11 @@ export class MultiplayerService {
         log.info(`对战连接建立 player=${identity.role}:${identity.id} (${identity.username})`);
     }
 
-    // 事件级限流：窗口内超过上限直接断开，防止单连接高频刷事件耗尽状态机资源
+    // 事件级限流：窗口内超过上限直接断开，防止单连接高频刷事件耗尽状态机资源。
+    // 键含来源 IP：游客可批量换身份,单凭身份键会被轻易绕过
     private enforceEventRate(socket: Socket, identity: PlayerIdentity): boolean {
-        if (this.eventRateLimiter.allow(selfIdentityKey(identity))) {
+        const address = typeof socket.handshake.address === 'string' ? socket.handshake.address : 'unknown';
+        if (this.eventRateLimiter.allow(`${address}:${selfIdentityKey(identity)}`)) {
             return true;
         }
         socket.emit('mp:error', { message: '操作过于频繁，请稍后再试' });
@@ -162,6 +166,10 @@ export class MultiplayerService {
             socket.emit('mp:error', { message: '你已在队列或对战中' });
             return;
         }
+        if (this.queuedPlayers.has(identity.id)) {
+            socket.emit('mp:error', { message: '同一账号已在排队中，请勿重复加入' });
+            return;
+        }
         const mode = typeof payload === 'object' && payload !== null ? (payload as { mode?: unknown }).mode : undefined;
         const entry: cache.QueueEntry = {
             socketId: socket.id,
@@ -171,6 +179,7 @@ export class MultiplayerService {
             mode: typeof mode === 'string' && mode.length > 0 ? mode : 'classic',
         };
         await cache.enqueue(entry);
+        this.queuedPlayers.add(identity.id);
         const position = await cache.queueLength();
         socket.emit('mp:queued', { position });
         log.info(`玩家 ${identity.username} 已进入匹配队列`);
@@ -182,6 +191,9 @@ export class MultiplayerService {
             return;
         }
         await cache.removeFromQueue(socket.id);
+        if (identity !== undefined) {
+            this.queuedPlayers.delete(identity.id);
+        }
         socket.emit('mp:leftQueue');
     }
 
@@ -223,6 +235,8 @@ export class MultiplayerService {
         socketB.join(roomId);
         this.socketRooms.set(entryA.socketId, roomId);
         this.socketRooms.set(entryB.socketId, roomId);
+        this.queuedPlayers.delete(entryA.playerId);
+        this.queuedPlayers.delete(entryB.playerId);
         socketA.emit('mp:matched', { roomId, mode: room.mode, opponentUsername: entryB.username });
         socketB.emit('mp:matched', { roomId, mode: room.mode, opponentUsername: entryA.username });
         log.info(`房间 ${roomId} 创建成功：${entryA.username} vs ${entryB.username}`);
@@ -250,13 +264,13 @@ export class MultiplayerService {
         }
         await cache.saveRoom(room);
 
-        // 不向客户端下发答案坐标，仅下发渲染街景所需的字段；距离由服务端在 handleAnswer 权威计算
+        // 不向客户端下发答案坐标与裸库 id（可经 /locations/random 建立 id→坐标映射破解对局），
+        // 仅下发渲染街景所需的字段；距离由服务端在 handleAnswer 权威计算
         this.io.to(roomId).emit('mp:round', {
             roundIndex: room.roundIndex,
             totalRounds: APP_CONSTANTS.MP_TOTAL_ROUNDS,
             timeLimitMs: APP_CONSTANTS.MP_ROUND_SECONDS * 1000,
             location: {
-                id: location.id,
                 panoramaUrl: location.panoramaUrl,
                 mapillaryId: location.mapillaryId,
             },
@@ -418,6 +432,7 @@ export class MultiplayerService {
         const identity = socket.data.identity as PlayerIdentity | undefined;
         if (identity !== undefined) {
             this.eventRateLimiter.reset(selfIdentityKey(identity));
+            this.queuedPlayers.delete(identity.id);
         }
         await cache.removeFromQueue(socket.id);
         const roomId = this.socketRooms.get(socket.id);

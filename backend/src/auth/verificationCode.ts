@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { APP_CONSTANTS } from '../config/env.js';
+import { APP_CONSTANTS, env } from '../config/env.js';
 import { redis } from '../db/redis.js';
 import { createLogger } from '../logger/index.js';
 import { badRequest } from '../utils/httpError.js';
@@ -17,7 +17,9 @@ const HASH_ALGORITHM = 'sha256';
 const codeKeyFor = (email: string): string => `${CODE_KEY_PREFIX}${email}`;
 const attemptsKeyFor = (email: string): string => `${ATTEMPTS_KEY_PREFIX}${email}`;
 const resendKeyFor = (email: string): string => `${RESEND_KEY_PREFIX}${email}`;
-const hashOfCode = (code: string): string => crypto.createHash(HASH_ALGORITHM).update(code).digest('hex');
+// HMAC 密钥仅存服务端：即使 Redis 被拖库也无法离线穷举 6 位验证码
+const hashOfCode = (code: string): string =>
+    crypto.createHmac(HASH_ALGORITHM, env.VERIFY_CODE_SECRET).update(code).digest('hex');
 
 function generateCode(): string {
     const randomValue = crypto.randomInt(0, 10 ** CODE_DIGITS);

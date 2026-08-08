@@ -3,6 +3,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { redis } from '../db/redis.js';
 import { createLogger } from '../logger/index.js';
+import { EventRateLimiter } from './eventRateLimit.js';
 import { tooManyRequests } from './httpError.js';
 
 const log = createLogger('rate-limit');
@@ -34,6 +35,8 @@ export interface SlidingWindowOptions {
 export function slidingWindowRateLimit(options: SlidingWindowOptions): RequestHandler {
     const { keyPrefix, windowMs, maxRequests, identityFor } = options;
     const resolveIdentity = identityFor ?? ((req: Request) => req.ip ?? 'unknown');
+    // Redis 故障时的进程内兜底：单实例生效,多副本时不共享（仅防静默全量放行）
+    const inMemoryFallback = new EventRateLimiter({ windowMs, maxEvents: maxRequests });
 
     return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
         const key = `${keyPrefix}${resolveIdentity(req)}`;
@@ -44,10 +47,9 @@ export function slidingWindowRateLimit(options: SlidingWindowOptions): RequestHa
             const result = await redis.eval(RATE_LIMIT_SCRIPT, 1, key, Date.now(), windowMs, maxRequests, member);
             allowed = result === 1;
         } catch (err) {
-            // Redis 异常时放行，避免限频器故障断掉整个代理服务；额度由上游限速兜底
-            log.warn('限频器降级放行（Redis 异常）', err);
-            next();
-            return;
+            // Redis 异常时切换到内存滑动窗口继续限频,绝不降级放行
+            log.error('限频器降级为进程内计数（Redis 异常）', err);
+            allowed = inMemoryFallback.allow(key);
         }
 
         if (!allowed) {

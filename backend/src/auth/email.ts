@@ -44,8 +44,8 @@ function maskEmail(email: string): string {
 export async function sendVerificationEmail(email: string, verificationCode: string): Promise<void> {
     const mailer = getTransport();
     if (mailer === null) {
-        // 验证码仅在非生产环境输出到日志（开发联调）；生产缺 SMTP 时绝不落日志
-        if (env.NODE_ENV !== 'production') {
+        // 验证码明文仅限开发（含测试）环境输出到日志；其余环境缺 SMTP 时绝不落码
+        if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
             log.warn(`SMTP 未配置，验证码将以日志形式输出（开发模式）`);
             log.info(`[验证码] 收件人=${maskEmail(email)} code=${verificationCode}`);
         } else {

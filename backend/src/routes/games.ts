@@ -74,7 +74,8 @@ gamesRouter.post(
         keyPrefix: 'rl:games-submit:',
         windowMs: APP_CONSTANTS.GAMES_RATE_WINDOW_MS,
         maxRequests: APP_CONSTANTS.GAMES_RATE_SUBMIT_MAX,
-        identityFor: (req: Request) => `${req.auth?.role ?? 'anon'}:${req.auth?.subject ?? req.ip}`,
+        // IP + 身份双维：游客可批量换号,单凭身份键会被轻易绕过
+        identityFor: (req: Request) => `${req.ip}:${req.auth?.role ?? 'anon'}:${req.auth?.subject ?? ''}`,
     }),
     async (req, res) => {
         const { mode, region, totalScore, rounds: submittedRounds } = parseBody(submitSchema, req.body);
