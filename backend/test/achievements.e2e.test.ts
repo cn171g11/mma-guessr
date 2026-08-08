@@ -117,7 +117,13 @@ describe('POST /api/games 触发成就解锁', () => {
         // 7 种单人模式各一局（含 landmark 与 duel）
         for (const { mode, region } of MODE_COVERAGE) {
             const round = makeRound(mode, region);
-            const game = { mode, totalScore: round.score as number, rounds: [round] };
+            // 区域模式的提交必须携带 region,其余模式一律不得携带
+            const game = {
+                mode,
+                ...(region !== null ? { region } : {}),
+                totalScore: round.score as number,
+                rounds: [round],
+            };
             const response = await submitGame(accessToken, game);
             expect(response.status).toBe(201);
         }

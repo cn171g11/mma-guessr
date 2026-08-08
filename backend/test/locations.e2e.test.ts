@@ -98,7 +98,8 @@ describe('GET /api/locations/random', () => {
 
     it('题目 ID 池写入 Redis 并带 TTL（热数据缓存）', async () => {
         await request(getApp()).get('/api/locations/random?count=2');
-        const key = 'locations:pool:all:all';
+        // 池 key 结构：locations:pool:<source|all>:<region|all>:<difficulty|all>
+        const key = 'locations:pool:all:all:all';
         const members = await redis.smembers(key);
         expect(members).toHaveLength(3);
         expect(await redis.ttl(key)).toBeGreaterThan(0);
@@ -106,7 +107,7 @@ describe('GET /api/locations/random', () => {
 
     it('按区域维度建池：region=europe 时池中仅含欧洲 ID', async () => {
         await request(getApp()).get('/api/locations/random?region=europe');
-        const members = await redis.smembers('locations:pool:europe:all');
+        const members = await redis.smembers('locations:pool:all:europe:all');
         expect(members).toHaveLength(1);
     });
 });

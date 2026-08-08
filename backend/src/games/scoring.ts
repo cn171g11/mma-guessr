@@ -54,6 +54,8 @@ export function haversineKm(latA: number, lngA: number, latB: number, lngB: numb
     const sinLat = Math.sin(dLat / 2);
     const sinLng = Math.sin(dLng / 2);
     const a = sinLat * sinLat + Math.cos(latARad) * Math.cos(latBRad) * sinLng * sinLng;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    // 浮点误差可能使 a 略超 [0,1]，对跖点附近 sqrt(1 - a) 将产生 NaN，需收敛到有效区间
+    const clamped = Math.max(0, Math.min(1, a));
+    const c = 2 * Math.atan2(Math.sqrt(clamped), Math.sqrt(1 - clamped));
     return EARTH_RADIUS_KM * c;
 }

@@ -39,6 +39,10 @@ export function createApp(): express.Express {
         })
     );
     app.use(requestLogger);
+    // 指标中间件须在业务路由之前挂载：命中路由的请求在路由内即结束响应,
+    // 若挂在路由之后将永远收不到 finish 事件,导致计数全部丢失。
+    // 计数/耗时在 res 的 finish 事件中上报,此时 req.route 已由路由匹配填充,标签不受挂载位置影响
+    app.use(metricsMiddleware);
 
     app.get('/', (_req, res) => {
         res.json({ name: 'mma-guessr-backend', status: 'ok' });
@@ -47,8 +51,6 @@ export function createApp(): express.Express {
     // 请求签名校验先于业务路由：配置 API_SIGNING_SECRET 后强制校验签名与 nonce
     app.use('/api', apiSignature);
     app.use('/api', apiRouter);
-    app.use(metricsMiddleware);
-
     app.use(notFound);
     app.use(errorHandler);
 
