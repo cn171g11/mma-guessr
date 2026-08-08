@@ -8,9 +8,9 @@ on:
                 required: true
                 type: string
             includeIntegration:
-                description: Run integration tests (PG + Redis full flow) before publishing (optional; off by default)
+                description: Run integration tests (PG + Redis full flow) before publishing
                 type: boolean
-                default: false
+                default: true
 
 permissions:
     contents: read

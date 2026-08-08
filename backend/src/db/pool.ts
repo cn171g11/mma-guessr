@@ -1,8 +1,8 @@
 import { Pool } from 'pg';
-import type { QueryResult, QueryResultRow } from 'pg';
 
-import { APP_CONSTANTS, env } from '../config/env.js';
+import { env } from '../config/env.js';
 import { createLogger } from '../logger/index.js';
+import { installQueryMonitor, type MonitoredClient } from './queryMonitor.js';
 
 const log = createLogger('db:postgres');
 
@@ -21,21 +21,8 @@ pool.on('error', (err) => {
     log.error('PostgreSQL 连接异常', err);
 });
 
-// 慢 SQL 监控：拦截客户端 query，超阈值记录 warn（含耗时与参数化 SQL 前缀）。
-// 仅影响日志，不修改查询行为，避免引入额外依赖。
+// 慢 SQL 监控挂载到每个新连接上：pg-pool 以 callback 形式分发 pool.query()，
+// 拦截器（queryMonitor.ts）会原样转发 callback，因此不会破坏查询流程
 pool.on('connect', (client) => {
-    const originalQuery = client.query.bind(client) as unknown as (
-        text: string,
-        values?: unknown[]
-    ) => Promise<QueryResult<QueryResultRow>>;
-    client.query = ((text: string, values?: unknown[]) => {
-        const startedAt = process.hrtime.bigint();
-        return Promise.resolve(originalQuery(text, values)).finally(() => {
-            const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-            if (elapsedMs >= APP_CONSTANTS.SLOW_QUERY_THRESHOLD_MS) {
-                const firstLine = text.split('\n', 1)[0]?.trim() ?? '';
-                log.warn(`慢 SQL ${elapsedMs.toFixed(1)}ms: ${firstLine}`);
-            }
-        });
-    }) as typeof client.query;
+    installQueryMonitor(client as unknown as MonitoredClient);
 });
