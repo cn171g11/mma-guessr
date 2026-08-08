@@ -6,6 +6,7 @@ import { metricsMiddleware } from './middleware/metrics.js';
 import { notFound } from './middleware/notFound.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
+import { apiSignature } from './middleware/apiSignature.js';
 import { apiRouter } from './routes/index.js';
 import { env } from './config/env.js';
 import { isOriginAllowed } from './utils/cors.js';
@@ -28,13 +29,23 @@ export function createApp(): express.Express {
         })
     );
     app.use(securityHeaders);
-    app.use(express.json({ limit: '1mb' }));
+    // verify 回调捕获 JSON 解析前的原始字节，供请求签名中间件计算 bodyHash
+    app.use(
+        express.json({
+            limit: '1mb',
+            verify: (req, _res, buffer) => {
+                (req as express.Request).rawBody = buffer.toString('utf8');
+            },
+        })
+    );
     app.use(requestLogger);
 
     app.get('/', (_req, res) => {
         res.json({ name: 'mma-guessr-backend', status: 'ok' });
     });
 
+    // 请求签名校验先于业务路由：配置 API_SIGNING_SECRET 后强制校验签名与 nonce
+    app.use('/api', apiSignature);
     app.use('/api', apiRouter);
     app.use(metricsMiddleware);
 

@@ -23,10 +23,20 @@ function closeLeaderboard() {
     $('leaderboard-overlay').classList.remove('show');
 }
 
+let lbModesDelegationReady = false;
+
 function renderLbModeTabs() {
-    $('lb-modes').innerHTML = LB_MODES.map(
+    const container = $('lb-modes');
+    if (!lbModesDelegationReady) {
+        lbModesDelegationReady = true;
+        container.addEventListener('click', (event) => {
+            const tab = event.target.closest('.lb-tab');
+            if (tab && tab.dataset.mode) switchLbMode(tab.dataset.mode);
+        });
+    }
+    container.innerHTML = LB_MODES.map(
         (m) =>
-            `<button class="lb-tab${lbState.mode === m ? ' active' : ''}" onclick="switchLbMode('${m}')">${LB_MODE_LABELS[m]}</button>`
+            `<button class="lb-tab${lbState.mode === m ? ' active' : ''}" data-mode="${m}">${LB_MODE_LABELS[m]}</button>`
     ).join('');
 }
 
@@ -73,7 +83,7 @@ async function refreshLeaderboard() {
                     `<div class="lb-row${e.username === me ? ' me' : ''}">
                         <span class="lb-rank">${i + 1}</span>
                         <span class="lb-name">${escapeHtml(e.username)}</span>
-                        <span class="lb-score">${e.score} 分</span>
+                        <span class="lb-score">${escapeHtml(Number.isFinite(Number(e.score)) ? String(e.score) : '--')} 分</span>
                     </div>`
             )
             .join('');

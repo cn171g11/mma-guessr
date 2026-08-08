@@ -29,7 +29,15 @@ function closeDailyPanel() {
     $('daily-overlay').classList.remove('show');
 }
 
+let dailyStartDelegationReady = false;
+
 function renderDailyPanel(content, challenge) {
+    if (!dailyStartDelegationReady) {
+        dailyStartDelegationReady = true;
+        content.addEventListener('click', (event) => {
+            if (event.target.closest('.lb-start')) startDailyGame();
+        });
+    }
     const best = getBest('daily');
     const diffs = [...new Set(challenge.locations.map((l) => l.difficulty))].sort();
     const diffText = diffs.map((d) => '★'.repeat(d)).join(' ');
@@ -44,7 +52,7 @@ function renderDailyPanel(content, challenge) {
         (best ? '<div class="lb-best">🏅 历史最佳：' + Number(best.score) + ' 分</div>' : '') +
         (challenge.played
             ? '<div class="lb-played">✅ 今日挑战已完成，明天再来！</div>'
-            : '<button class="lb-start" onclick="startDailyGame()">🚀 开始今日挑战</button>');
+            : '<button class="lb-start">🚀 开始今日挑战</button>');
 }
 
 function startDailyGame() {

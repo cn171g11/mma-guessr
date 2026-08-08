@@ -80,6 +80,22 @@ function networkFirst(event) {
     );
 }
 
+// 允许被缓存（缓存优先）的跨域静态资源主机白名单：
+// 仅限代码中引用的 CDN、地图瓦片与图标；其余跨域请求一律直连不入缓存，防止缓存污染
+const CROSS_ORIGIN_CACHE_HOSTS = [
+    'unpkg.com',
+    'cdn.socket.io',
+    'cdnjs.cloudflare.com',
+    'raw.githubusercontent.com',
+    'a.tile.openstreetmap.org',
+    'b.tile.openstreetmap.org',
+    'c.tile.openstreetmap.org',
+];
+
+function isAllowlistedCrossOrigin(url) {
+    return CROSS_ORIGIN_CACHE_HOSTS.includes(url.hostname);
+}
+
 self.addEventListener('fetch', (event) => {
     const request = event.request;
     if (request.method !== 'GET') {
@@ -101,8 +117,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // 跨域静态资源（Leaflet CDN / 街景缩略 / OSM 瓦片）：缓存优先
-    if (url.protocol === 'https:') {
+    // 仅缓存白名单内的跨域静态资源（Leaflet CDN / OSM 瓦片 / 标记图标）
+    if (url.protocol === 'https:' && isAllowlistedCrossOrigin(url)) {
         cacheFirst(event);
     }
 });

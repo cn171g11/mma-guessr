@@ -13,6 +13,15 @@ const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname
 const API_BASE = isFileProtocol || isLocalHost ? 'http://localhost:3000' : '';
 
 // ==========================================================
+// 【请求签名密钥】须与后端 API_SIGNING_SECRET 保持一致（生产填同一随机值）
+// 用于对 [timestamp, nonce, method, path, bodyHash] 做 HMAC-SHA256 签名，
+// 服务端校验 ±5 分钟时间窗并用 nonce 去重（防篡改 / 防重放）。
+// 前端为静态站点，该密钥最终公开：签名仅作基础完整性校验，不承担身份认证。
+// 留空则关闭签名（需同时保持后端 API_SIGNING_SECRET 为空）。
+// ==========================================================
+const API_SIGNING_SECRET = 'dev-signing-secret-change-me';
+
+// ==========================================================
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================

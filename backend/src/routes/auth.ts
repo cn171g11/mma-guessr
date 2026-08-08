@@ -22,6 +22,10 @@ const GUEST_RATE_WINDOW_MS = 5 * 60 * 1000;
 const GUEST_RATE_MAX = 60;
 const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RATE_MAX = 30;
+const REGISTER_RATE_WINDOW_MS = 15 * 60 * 1000;
+const REGISTER_RATE_MAX = 30;
+const REFRESH_RATE_WINDOW_MS = 10 * 60 * 1000;
+const REFRESH_RATE_MAX = 120;
 
 const emailSchema = z.object({
     email: z.string().email('邮箱格式不正确'),
@@ -92,21 +96,29 @@ authRouter.post(
     }
 );
 
-authRouter.post('/register', async (req, res) => {
-    const { username, email, password, code, guestToken } = parseBody(registerSchema, req.body);
-    const normalizedEmail = normalizeEmail(email);
-    // 注册本身仍要拒绝已占用邮箱；未注册邮箱的枚举风险已在 verification-code 接口消除
-    await assertEmailNotRegistered(normalizedEmail);
-    const session = await registerAccount({
-        username,
-        email: normalizedEmail,
-        password,
-        verificationCode: code,
-        guestId: guestToken === undefined ? undefined : resolveGuestKey(guestToken),
-        ipAddress: clientIp(req),
-    });
-    res.status(201).json({ ...session, tokenPair: attachSession(res, session.tokenPair) });
-});
+authRouter.post(
+    '/register',
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-register:',
+        windowMs: REGISTER_RATE_WINDOW_MS,
+        maxRequests: REGISTER_RATE_MAX,
+    }),
+    async (req, res) => {
+        const { username, email, password, code, guestToken } = parseBody(registerSchema, req.body);
+        const normalizedEmail = normalizeEmail(email);
+        // 注册本身仍要拒绝已占用邮箱；未注册邮箱的枚举风险已在 verification-code 接口消除
+        await assertEmailNotRegistered(normalizedEmail);
+        const session = await registerAccount({
+            username,
+            email: normalizedEmail,
+            password,
+            verificationCode: code,
+            guestId: guestToken === undefined ? undefined : resolveGuestKey(guestToken),
+            ipAddress: clientIp(req),
+        });
+        res.status(201).json({ ...session, tokenPair: attachSession(res, session.tokenPair) });
+    }
+);
 
 authRouter.post('/guest/bind', async (req, res) => {
     const { username, email, password, code, guestToken } = parseBody(bindSchema, req.body);
@@ -137,15 +149,23 @@ authRouter.post(
     }
 );
 
-authRouter.post('/refresh', async (req, res) => {
-    const { refreshToken } = parseBody(refreshSchema, req.body);
-    const submitted = refreshTokenFromCookie(req) ?? refreshToken;
-    if (submitted === undefined) {
-        throw badRequest('缺少刷新令牌');
+authRouter.post(
+    '/refresh',
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-refresh:',
+        windowMs: REFRESH_RATE_WINDOW_MS,
+        maxRequests: REFRESH_RATE_MAX,
+    }),
+    async (req, res) => {
+        const { refreshToken } = parseBody(refreshSchema, req.body);
+        const submitted = refreshTokenFromCookie(req) ?? refreshToken;
+        if (submitted === undefined) {
+            throw badRequest('缺少刷新令牌');
+        }
+        const tokenPair = await exchangeRefreshToken(submitted, clientIp(req));
+        res.json({ tokenPair: attachSession(res, tokenPair) });
     }
-    const tokenPair = await exchangeRefreshToken(submitted, clientIp(req));
-    res.json({ tokenPair: attachSession(res, tokenPair) });
-});
+);
 
 authRouter.post('/logout', requireAuth, async (req, res) => {
     const { refreshToken } = parseBody(logoutSchema, req.body);

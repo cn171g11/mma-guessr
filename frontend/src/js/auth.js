@@ -87,7 +87,7 @@ async function loadAchievements() {
                               '<span class="ach-item" title="' +
                               escapeHtml(entry.description) +
                               '">' +
-                              entry.icon +
+                              escapeHtml(entry.icon) +
                               '</span>'
                       )
                       .join('') +

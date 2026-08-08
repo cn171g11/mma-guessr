@@ -136,7 +136,26 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
         if (!response.ok) {
             throw serviceUnavailable(`Mapillary 图片加载失败（HTTP ${response.status}）`);
         }
-        return Buffer.from(await response.arrayBuffer());
+        // 单次最大缓存上限同时作为硬性拉取上限：避免上游异常时流式灌入超大内存
+        const reader = response.body?.getReader();
+        if (reader === undefined) {
+            throw serviceUnavailable('Mapillary 图片响应缺少内容体');
+        }
+        const chunks: Uint8Array[] = [];
+        let totalBytes = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+            totalBytes += value.byteLength;
+            if (totalBytes > APP_CONSTANTS.MAPILLARY_MAX_IMAGE_BYTES) {
+                void reader.cancel().catch(() => undefined);
+                throw serviceUnavailable('Mapillary 图片超过大小限制');
+            }
+            chunks.push(value);
+        }
+        return Buffer.concat(chunks);
     } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
             throw serviceUnavailable('Mapillary 图片加载超时');

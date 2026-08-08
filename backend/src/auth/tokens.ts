@@ -15,6 +15,8 @@ const REFRESH_TOKEN_TYPE = 'refresh';
 
 const REFRESH_KEY_PREFIX = 'refresh:';
 const HASH_ALGORITHM = 'sha256';
+// 显式固定签名算法，避免 jsonwebtoken 默认算法协商引入混淆攻击面
+const TOKEN_ALGORITHMS = ['HS256'] as const;
 
 export type TokenSubjectRole = 'user' | 'guest';
 
@@ -86,7 +88,9 @@ export function signGuestToken(guestId: string): string {
 
 export function verifyAccessToken(token: string): TokenSubject {
     try {
-        const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
+        const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+            algorithms: [...TOKEN_ALGORITHMS],
+        }) as JwtPayload;
         if (
             payload.type !== ACCESS_TOKEN_TYPE ||
             typeof payload.sub !== 'string' ||
@@ -112,7 +116,9 @@ export function verifyAccessToken(token: string): TokenSubject {
 export async function exchangeRefreshToken(refreshTokenInput: string, ipAddress: string): Promise<TokenPair> {
     let userId: string;
     try {
-        const payload = jwt.verify(refreshTokenInput, env.JWT_REFRESH_SECRET) as JwtPayload;
+        const payload = jwt.verify(refreshTokenInput, env.JWT_REFRESH_SECRET, {
+            algorithms: [...TOKEN_ALGORITHMS],
+        }) as JwtPayload;
         if (payload.type !== REFRESH_TOKEN_TYPE || typeof payload.sub !== 'string' || typeof payload.jti !== 'string') {
             throw unauthorized('刷新令牌类型不合法');
         }
@@ -132,6 +138,7 @@ export async function exchangeRefreshToken(refreshTokenInput: string, ipAddress:
         throw unauthorized('刷新令牌已被吊销');
     }
     if (!tokensMatch(storedHash, rememberRefreshHash(refreshTokenInput))) {
+        // 多标签页并发刷新会携带同一旧令牌（前端已用跨标签页锁协调，此处仍保留强吊销语义）
         await redis.del(refreshKeyFor(userId));
         log.warn(`刷新令牌被复用或伪造，已吊销用户 ${userId} 的令牌`, { ip: ipAddress });
         throw unauthorized('刷新令牌与存储不匹配');

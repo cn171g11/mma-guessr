@@ -257,6 +257,7 @@ function closeHistory() {
 
 function renderHistoryList(all, isRemote) {
     const list = $('history-list');
+    ensureHistoryDeleteDelegation(list);
     if (all.length === 0) {
         list.innerHTML =
             '<div class="hist-empty">📭 暂无游戏记录<br><span style="font-size:12px">开始一局游戏后会自动记录</span></div>';
@@ -286,6 +287,7 @@ function renderHistoryList(all, isRemote) {
                         </div>`;
                 })
                 .join('');
+            // 删除记录经事件委托调用（dataset 传参避免拼入内联 onclick 的属性注入面）
             const deleteKey = isRemote ? g.id : gi;
             return `<div class="hist-game">
                     <div class="hg-head">
@@ -295,11 +297,26 @@ function renderHistoryList(all, isRemote) {
                     <span class="hg-score">${scoreStr}</span>
                     <div class="hist-rounds">${roundsHTML}</div>
                     <div style="text-align:right;margin-top:6px">
-                        <button class="hist-delete" onclick="deleteHistory(${deleteKey}, ${isRemote});event.stopPropagation()">🗑 删除</button>
+                        <button class="hist-delete" data-key="${escapeHtml(String(deleteKey))}" data-remote="${isRemote ? '1' : '0'}">🗑 删除</button>
                     </div>
                 </div>`;
         })
         .join('');
+}
+
+let historyDelegationReady = false;
+
+// 删除按钮事件委托：innerHTML 每次重建，仅需绑定一次容器监听
+function ensureHistoryDelegation(list) {
+    if (historyDelegationReady) return;
+    historyDelegationReady = true;
+    list.addEventListener('click', (event) => {
+        const button = event.target.closest('.hist-delete');
+        if (!button) return;
+        const key = button.dataset.key;
+        const remote = button.dataset.remote === '1';
+        deleteHistory(key, remote);
+    });
 }
 
 async function deleteHistory(key, isRemote) {
@@ -314,7 +331,9 @@ async function deleteHistory(key, isRemote) {
         return;
     }
     const all = loadHistory();
-    all.splice(key, 1);
+    const localIndex = Number(key);
+    if (!Number.isInteger(localIndex) || localIndex < 0 || localIndex >= all.length) return;
+    all.splice(localIndex, 1);
     saveHistory(all);
     openHistory(); // 刷新面板
 }

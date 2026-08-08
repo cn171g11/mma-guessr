@@ -18,9 +18,13 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 // 指标端点：设置 METRICS_TOKEN 后必须携带 Bearer 令牌（Prometheus scrape 支持）。
-// 未配置令牌时开放访问，便于开发环境直接查看。
+// 开发环境未配置令牌时开放访问；生产环境未配置令牌直接拒绝，避免连接池指标泄露
 router.get('/', (_req, res) => {
     const expectedToken = process.env.METRICS_TOKEN ?? '';
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (expectedToken === '' && !isDevelopment) {
+        throw unauthorized('指标端点未启用（需配置 METRICS_TOKEN）');
+    }
     if (expectedToken !== '') {
         const header = _req.headers.authorization ?? '';
         const bearerToken = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';

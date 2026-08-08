@@ -17,13 +17,13 @@
         <title>🌍 MmaGuessr v1.18.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
         <!-- CSP：纯静态托管无响应头可加，故用 meta 声明。
-             script-src 的 unsafe-inline 用于存量内联 onclick 处理器，属兼容性取舍；
+             内联 onclick 已全部迁移至 js/events.js（addEventListener），故 script-src 无需 unsafe-inline；
              外部 CDN 脚本另以 SRI 锁定内容，防供应链接篡改。
-             connect-src 放行本地 API/Socket.IO（http://localhost:3000）与 https 直连。
-             注意：CSP 头本身对该页面（静态托管）不生效，本 meta 是页面级兜底。 -->
+             connect-src 放行本地 API/Socket.IO（http://localhost:3000，仅开发环境可达）与 https 直连。
+             注意：CSP 头本身对该页面（静态托管）不生效，本 meta 是页面级兜底；生产另由 Nginx 下发同规则头。 -->
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.socket.io 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss: ws: http://localhost:3000 http://127.0.0.1:3000; object-src 'none'; base-uri 'self'; form-action 'self'"
+            content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss: ws: http://localhost:3000 http://127.0.0.1:3000; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
 
         <!-- SRI：CDN 依赖锁定具体内容哈希，防供应链接篡改；crossorigin 使校验生效 -->
@@ -58,43 +58,43 @@
             <h1>🌍 MmaGuessr</h1>
             <div class="subtitle">观察街景线索，在地图上标记你认为的位置 · 数据源 Mapillary</div>
             <div class="mode-grid">
-                <div class="mode-card" onclick="chooseMode('classic')">
+                <div class="mode-card" data-mode="classic">
                     <div class="icon">🎯</div>
                     <h3>经典模式</h3>
                     <p>单轮游戏，距离越近得分越高，满分 5000。</p>
                     <div class="best" id="best-classic">历史最佳：--</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('challenge')">
+                <div class="mode-card" data-mode="challenge">
                     <div class="icon">⚡</div>
                     <h3>挑战模式</h3>
                     <p>连续 5 轮限时 2 分钟，时间压力下累积高分，结束后获称号排名！</p>
                     <div class="best" id="best-challenge">历史最佳：--</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('region')">
+                <div class="mode-card" data-mode="region">
                     <div class="icon">🗺️</div>
                     <h3>区域限定</h3>
                     <p>限定某个大洲范围内出题，范围更小、判分更严格。</p>
                     <div class="best" id="best-region">历史最佳：--</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('china')">
+                <div class="mode-card" data-mode="china">
                     <div class="icon">🇨🇳</div>
                     <h3>中国模式</h3>
                     <p>限中国境内街景（含港澳台），167 个精选点位覆盖全中国，与你脚下的土地斗智斗勇。</p>
                     <div class="best" id="best-china">历史最佳：--</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('endless')">
+                <div class="mode-card" data-mode="endless">
                     <div class="icon">♾️</div>
                     <h3>无限模式</h3>
                     <p>从最简单的地标起步，凭得分赚经验、升等级。等级越高题目越难，难题经验也越多！</p>
                     <div class="best" id="best-endless">历史最佳：--</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('daily')">
+                <div class="mode-card" data-mode="daily">
                     <div class="icon">📅</div>
                     <h3>每日挑战</h3>
                     <p>每天一组全球 10 题，注册用户每天限一次，与全球玩家同题竞技一较高下。</p>
                     <div class="best" id="best-daily">需登录 · 每日一次</div>
                 </div>
-                <div class="mode-card" onclick="chooseMode('landmark')">
+                <div class="mode-card" data-mode="landmark">
                     <div class="icon">🗼</div>
                     <h3>地标模式</h3>
                     <p>聚焦全球最著名地标（难度 1-2），5 轮速刷，新手入门与高分冲刺两相宜。</p>
@@ -104,7 +104,7 @@
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
                 <span class="ver-badge" id="home-version">版本 v1.16.0</span>
-                <button class="changelog-btn" onclick="openChangelog()">📋 更新记录</button>
+                <button class="changelog-btn" id="btn-changelog">📋 更新记录</button>
                 <a
                     class="notion-btn"
                     href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f"
@@ -113,11 +113,11 @@
                 >
                     📔 游戏文档
                 </a>
-                <button class="changelog-btn" onclick="openLeaderboard()">🏆 排行榜</button>
-                <button class="changelog-btn" onclick="openDailyPanel()">📅 每日挑战</button>
-                <button class="changelog-btn" onclick="openMpPanel()">⚔️ 对战</button>
-                <button class="changelog-btn" onclick="openHistory()">📜 历史记录</button>
-                <button class="changelog-btn" onclick="openAccount()">👤 账号</button>
+                <button class="changelog-btn" id="btn-leaderboard">🏆 排行榜</button>
+                <button class="changelog-btn" id="btn-daily-panel">📅 每日挑战</button>
+                <button class="changelog-btn" id="btn-mp-panel">⚔️ 对战</button>
+                <button class="changelog-btn" id="btn-history">📜 历史记录</button>
+                <button class="changelog-btn" id="btn-account">👤 账号</button>
             </div>
         </div>
 
@@ -125,38 +125,38 @@
         <div id="region-screen">
             <h2>🗺️ 选择限定区域</h2>
             <div class="region-grid">
-                <div class="region-card" onclick="startGame('region', 'asia')">
+                <div class="region-card" data-region="asia">
                     <div class="icon">🏯</div>
                     亚洲
                     <div class="rcount" id="rc-asia"></div>
                 </div>
-                <div class="region-card" onclick="startGame('region', 'europe')">
+                <div class="region-card" data-region="europe">
                     <div class="icon">🏰</div>
                     欧洲
                     <div class="rcount" id="rc-europe"></div>
                 </div>
-                <div class="region-card" onclick="startGame('region', 'northamerica')">
+                <div class="region-card" data-region="northamerica">
                     <div class="icon">🗽</div>
                     北美洲
                     <div class="rcount" id="rc-northamerica"></div>
                 </div>
-                <div class="region-card" onclick="startGame('region', 'southamerica')">
+                <div class="region-card" data-region="southamerica">
                     <div class="icon">🌴</div>
                     南美洲
                     <div class="rcount" id="rc-southamerica"></div>
                 </div>
-                <div class="region-card" onclick="startGame('region', 'africa')">
+                <div class="region-card" data-region="africa">
                     <div class="icon">🦁</div>
                     非洲
                     <div class="rcount" id="rc-africa"></div>
                 </div>
-                <div class="region-card" onclick="startGame('region', 'oceania')">
+                <div class="region-card" data-region="oceania">
                     <div class="icon">🦘</div>
                     大洋洲
                     <div class="rcount" id="rc-oceania"></div>
                 </div>
             </div>
-            <button class="back-btn" onclick="hideRegionScreen()">← 返回</button>
+            <button class="back-btn" id="back-btn">← 返回</button>
         </div>
 
         <!-- ============ 游戏界面 ============ -->
@@ -194,7 +194,7 @@
             <span id="timer-num">60</span>
             s
         </div>
-        <button id="quit-btn" onclick="routeQuit()">✕ 退出</button>
+        <button id="quit-btn">✕ 退出</button>
 
         <div id="game-container">
             <div id="panorama-area">
@@ -206,19 +206,19 @@
                 <div id="panorama-fallback">
                     <h2>⚠️ 街景加载失败</h2>
                     <p>该地点街景暂时无法加载，可能是网络或覆盖问题。</p>
-                    <button onclick="skipLocation()">🔄 换一个地点</button>
-                    <button class="err-export-btn" onclick="exportStreetViewError()">📄 导出错误报告</button>
+                    <button id="skip-location-btn">🔄 换一个地点</button>
+                    <button class="err-export-btn" id="streetview-error-btn">📄 导出错误报告</button>
                 </div>
             </div>
         </div>
 
         <div id="minimap-container">
-            <button id="map-toggle-btn" onclick="toggleMapSize()">⛶</button>
+            <button id="map-toggle-btn">⛶</button>
             <div id="guess-map"></div>
         </div>
 
-        <button id="submit-btn" onclick="routeSubmit()" disabled>🎯 提交选择</button>
-        <button id="mobile-map-btn" onclick="toggleMobileMap()">🗺️ 地图</button>
+        <button id="submit-btn" disabled>🎯 提交选择</button>
+        <button id="mobile-map-btn">🗺️ 地图</button>
 
         <!-- ============ 结果弹窗 ============ -->
         <div id="result-overlay">
@@ -232,9 +232,9 @@
                 <div id="score-bar-bg"><div id="score-bar-fill"></div></div>
                 <div id="round-summary"></div>
                 <div class="result-btns">
-                    <button id="next-btn" onclick="nextRound()">下一轮 ▶</button>
-                    <button id="share-btn" onclick="shareResult()">📤 分享成绩</button>
-                    <button id="home-btn2" onclick="backHome()">🏠 主菜单</button>
+                    <button id="next-btn">下一轮 ▶</button>
+                    <button id="share-btn">📤 分享成绩</button>
+                    <button id="home-btn2">🏠 主菜单</button>
                 </div>
             </div>
         </div>
@@ -247,22 +247,22 @@
         <div id="toast"></div>
 
         <!-- ============ 更新记录弹窗 ============ -->
-        <div id="changelog-overlay" onclick="if (event.target === this) closeChangelog();">
+        <div id="changelog-overlay">
             <div id="changelog-box">
                 <h2>
                     📋 更新记录
-                    <button class="clog-close" onclick="closeChangelog()">✕ 关闭</button>
+                    <button class="clog-close" id="changelog-close-btn">✕ 关闭</button>
                 </h2>
                 <div id="changelog-list"></div>
             </div>
         </div>
 
         <!-- ============ 历史记录弹窗 ============ -->
-        <div id="history-overlay" onclick="if (event.target === this) closeHistory();">
+        <div id="history-overlay">
             <div id="history-box">
                 <h2>
                     📜 历史记录
-                    <button class="hist-close" onclick="closeHistory()">✕ 关闭</button>
+                    <button class="hist-close" id="history-close-btn">✕ 关闭</button>
                 </h2>
                 <div class="h-sub">最近 20 局 · 点击 🗺️ 可在 Mapillary 官网查看原街景 · 可删除单条记录</div>
                 <div id="history-list"></div>
@@ -270,11 +270,11 @@
         </div>
 
         <!-- ============ 账号面板弹窗 ============ -->
-        <div id="account-overlay" onclick="if (event.target === this) closeAccount();">
+        <div id="account-overlay">
             <div id="account-box">
                 <h2>
                     👤 账号
-                    <button class="clog-close" onclick="closeAccount()">✕ 关闭</button>
+                    <button class="clog-close" id="account-close-btn">✕ 关闭</button>
                 </h2>
                 <div id="account-profile" style="display: none">
                     <div class="acc-name" id="account-profile-name"></div>
@@ -286,7 +286,7 @@
                     <h3>登录</h3>
                     <input id="login-identifier" placeholder="用户名 / 邮箱" autocomplete="username" />
                     <input id="login-password" type="password" placeholder="密码" autocomplete="current-password" />
-                    <button class="acc-submit" onclick="doLogin()">登录</button>
+                    <button class="acc-submit" id="login-submit-btn">登录</button>
                 </div>
                 <div id="account-register-form">
                     <h3>注册</h3>
@@ -312,28 +312,26 @@
                             inputmode="numeric"
                             autocomplete="one-time-code"
                         />
-                        <button class="acc-code-btn" onclick="sendCode()">发送验证码</button>
+                        <button class="acc-code-btn" id="send-code-btn">发送验证码</button>
                     </div>
-                    <button class="acc-submit" onclick="doRegister()">注册</button>
+                    <button class="acc-submit" id="register-submit-btn">注册</button>
                 </div>
-                <button id="account-logout-btn" class="acc-logout" onclick="doLogout()" style="display: none">
+                <button id="account-logout-btn" class="acc-logout" style="display: none">
                     退出登录
                 </button>
             </div>
         </div>
 
         <!-- ============ 排行榜弹窗 ============ -->
-        <div id="leaderboard-overlay" onclick="if (event.target === this) closeLeaderboard();">
+        <div id="leaderboard-overlay">
             <div id="leaderboard-box">
                 <h2>
                     🏆 排行榜
-                    <button class="clog-close" onclick="closeLeaderboard()">✕ 关闭</button>
+                    <button class="clog-close" id="leaderboard-close-btn">✕ 关闭</button>
                 </h2>
                 <div class="lb-tabs">
-                    <button class="lb-tab active" id="lb-period-overall" onclick="switchLbPeriod('overall')">
-                        总榜
-                    </button>
-                    <button class="lb-tab" id="lb-period-daily" onclick="switchLbPeriod('daily')">今日榜</button>
+                    <button class="lb-tab active" id="lb-period-overall">总榜</button>
+                    <button class="lb-tab" id="lb-period-daily">今日榜</button>
                 </div>
                 <div class="lb-modes" id="lb-modes"></div>
                 <div class="lb-sub" id="lb-sub"></div>
@@ -342,43 +340,41 @@
         </div>
 
         <!-- ============ 每日挑战弹窗 ============ -->
-        <div id="daily-overlay" onclick="if (event.target === this) closeDailyPanel();">
+        <div id="daily-overlay">
             <div id="daily-box">
                 <h2>
                     📅 每日挑战
-                    <button class="clog-close" onclick="closeDailyPanel()">✕ 关闭</button>
+                    <button class="clog-close" id="daily-close-btn">✕ 关闭</button>
                 </h2>
                 <div id="daily-content"></div>
             </div>
         </div>
 
         <!-- ============ 多人对战弹窗 ============ -->
-        <div id="mp-overlay" onclick="if (event.target === this) mpCloseLobby();">
+        <div id="mp-overlay">
             <div id="mp-box">
                 <h2>
                     ⚔️ 多人对战
-                    <button class="clog-close" onclick="mpCloseLobby()">✕ 关闭</button>
+                    <button class="clog-close" id="mp-close-btn">✕ 关闭</button>
                 </h2>
                 <div class="acc-stats">实时匹配 1v1 · 共 5 题 · 每题 60 秒 · 取总分分胜负</div>
                 <div class="mp-status" id="mp-status">尚未连接</div>
                 <div class="mp-btns">
-                    <button class="acc-submit" id="mp-find-btn" onclick="mpFindMatch()">🔍 开始匹配</button>
-                    <button class="acc-logout" id="mp-cancel-btn" onclick="mpCancelMatch()" style="display: none">
-                        取消匹配
-                    </button>
+                    <button class="acc-submit" id="mp-find-btn">🔍 开始匹配</button>
+                    <button class="acc-logout" id="mp-cancel-btn" style="display: none">取消匹配</button>
                 </div>
             </div>
         </div>
 
         <!-- ============ 街景错误报告弹窗 ============ -->
-        <div id="err-overlay" onclick="if (event.target === this) closeErrReport();">
+        <div id="err-overlay">
             <div id="err-box">
                 <h3>📄 街景加载错误报告</h3>
                 <textarea id="err-report-content" readonly></textarea>
                 <div class="err-actions">
-                    <button class="btn-download" onclick="downloadErrReport()">⬇️ 下载 .txt</button>
-                    <button class="btn-copy" onclick="copyErrReport()">📋 复制内容</button>
-                    <button class="btn-close" onclick="closeErrReport()">✕ 关闭</button>
+                    <button class="btn-download" id="err-download-btn">⬇️ 下载 .txt</button>
+                    <button class="btn-copy" id="err-copy-btn">📋 复制内容</button>
+                    <button class="btn-close" id="err-close-btn">✕ 关闭</button>
                 </div>
             </div>
         </div>
@@ -392,6 +388,7 @@
         <script src="js/lb.js"></script>
         <script src="js/daily.js"></script>
         <script src="js/mp.js"></script>
+        <script src="js/events.js"></script>
         <script src="js/sw-register.js"></script>
     </body>
 </html>

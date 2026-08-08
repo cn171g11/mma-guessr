@@ -58,8 +58,14 @@ function mpCloseLobby() {
     if (!mpState.inMatch) mpSetLobby(false);
 }
 
-function createMpSocket() {
-    const token = MmaApi.getAccessToken() || MmaApi.getGuestToken();
+async function createMpSocket() {
+    let token = MmaApi.getAccessToken() || MmaApi.getGuestToken();
+    if (!token) {
+        // 页面刷新后用户访问令牌仅存内存：先经 HttpOnly 刷新令牌恢复
+        mpSetStatus('⏳ 正在恢复登录状态...');
+        const restored = await MmaApi.ensureUserToken();
+        token = restored || MmaApi.getGuestToken();
+    }
     if (!token) {
         mpSetStatus('❌ 未取得身份令牌，请刷新页面重试');
         return;

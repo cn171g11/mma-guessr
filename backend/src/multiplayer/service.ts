@@ -9,6 +9,7 @@ import type { PlayerRef } from '../games/types.js';
 import { haversineKm } from '../games/scoring.js';
 import * as locationsService from '../locations/service.js';
 import { createLogger } from '../logger/index.js';
+import { EventRateLimiter } from '../utils/eventRateLimit.js';
 import * as cache from './cache.js';
 import type { MPPlayerState, MPRoomState, MPRoundHistory } from './types.js';
 
@@ -38,6 +39,10 @@ interface PlayerIdentity extends PlayerRef {
     username: string;
 }
 
+function selfIdentityKey(identity: PlayerIdentity): string {
+    return `${identity.role}:${identity.id}`;
+}
+
 function toRoundHistory(room: MPRoomState): MPRoundHistory {
     return {
         locationId: room.location?.id ?? 0,
@@ -56,6 +61,10 @@ export class MultiplayerService {
     private readonly socketRooms = new Map<string, string>();
     private readonly endingRooms = new Set<string>();
     private readonly matchmakerTimer: NodeJS.Timeout;
+    private readonly eventRateLimiter = new EventRateLimiter({
+        windowMs: APP_CONSTANTS.MP_EVENT_RATE_WINDOW_MS,
+        maxEvents: APP_CONSTANTS.MP_EVENT_RATE_MAX,
+    });
 
     constructor(io: Server) {
         this.io = io;
@@ -112,6 +121,17 @@ export class MultiplayerService {
         log.info(`对战连接建立 player=${identity.role}:${identity.id} (${identity.username})`);
     }
 
+    // 事件级限流：窗口内超过上限直接断开，防止单连接高频刷事件耗尽状态机资源
+    private enforceEventRate(socket: Socket, identity: PlayerIdentity): boolean {
+        if (this.eventRateLimiter.allow(selfIdentityKey(identity))) {
+            return true;
+        }
+        socket.emit('mp:error', { message: '操作过于频繁，请稍后再试' });
+        socket.disconnect(true);
+        log.warn(`对战事件超频断开 player=${identity.role}:${identity.id}`);
+        return false;
+    }
+
     private async resolveIdentity(player: PlayerRef): Promise<PlayerIdentity> {
         if (player.role === 'user') {
             const profile = await getUserProfile(player.id);
@@ -135,6 +155,9 @@ export class MultiplayerService {
     }
 
     private async handleJoin(socket: Socket, identity: PlayerIdentity, payload: unknown): Promise<void> {
+        if (!this.enforceEventRate(socket, identity)) {
+            return;
+        }
         if (this.socketRooms.has(socket.id)) {
             socket.emit('mp:error', { message: '你已在队列或对战中' });
             return;
@@ -154,6 +177,10 @@ export class MultiplayerService {
     }
 
     private async handleLeave(socket: Socket): Promise<void> {
+        const identity = socket.data.identity as PlayerIdentity | undefined;
+        if (identity !== undefined && !this.enforceEventRate(socket, identity)) {
+            return;
+        }
         await cache.removeFromQueue(socket.id);
         socket.emit('mp:leftQueue');
     }
@@ -240,6 +267,10 @@ export class MultiplayerService {
     }
 
     private async handleAnswer(socket: Socket, payload: unknown): Promise<void> {
+        const identity = socket.data.identity as PlayerIdentity | undefined;
+        if (identity !== undefined && !this.enforceEventRate(socket, identity)) {
+            return;
+        }
         const roomId = this.socketRooms.get(socket.id);
         if (roomId === undefined) {
             socket.emit('mp:error', { message: '你不在对局中' });
@@ -384,6 +415,10 @@ export class MultiplayerService {
     }
 
     private async handleDisconnect(socket: Socket): Promise<void> {
+        const identity = socket.data.identity as PlayerIdentity | undefined;
+        if (identity !== undefined) {
+            this.eventRateLimiter.reset(selfIdentityKey(identity));
+        }
         await cache.removeFromQueue(socket.id);
         const roomId = this.socketRooms.get(socket.id);
         this.socketRooms.delete(socket.id);

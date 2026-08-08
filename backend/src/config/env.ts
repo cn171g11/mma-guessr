@@ -58,6 +58,9 @@ export const APP_CONSTANTS = {
     MP_ROUND_SECONDS: 60,
     MP_MATCHMAKER_TICK_MS: 1500,
     MP_ROOM_TTL_SECONDS: 2 * 60 * 60,
+    // 对战事件限流（内存滑动窗口，按玩家身份）：防恶意客户端高频刷事件
+    MP_EVENT_RATE_WINDOW_MS: 10 * 1000,
+    MP_EVENT_RATE_MAX: 20,
 } as const;
 
 function required(name: string, fallback: string): string {
@@ -130,6 +133,10 @@ export const env = {
 
     // 指标端点认证令牌：设置后 /api/metrics 需携带 Bearer 令牌；生产环境建议必设
     METRICS_TOKEN: process.env.METRICS_TOKEN ?? '',
+
+    // 请求签名密钥：设置后所有 /api 请求（除探活/指标/代理）需携带 HMAC-SHA256 签名与
+    // 一次性 nonce（防篡改/防重放）；前端为静态站点，该密钥最终公开，仅作完整性校验而非认证
+    API_SIGNING_SECRET: process.env.API_SIGNING_SECRET ?? '',
 
     // Express trust proxy 跳数：仅在可信反向代理之后显式设置（如 1），详见 optionalTrustProxyHops
     TRUST_PROXY: optionalTrustProxyHops('TRUST_PROXY'),

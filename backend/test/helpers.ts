@@ -41,6 +41,7 @@ const APP_REDIS_PREFIXES = [
     'mly:',
     'rl:',
     'test:rl:',
+    'sig:',
 ] as const;
 
 export async function resetAppRedis(): Promise<void> {
