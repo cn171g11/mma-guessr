@@ -1,8 +1,10 @@
 # MmaGuessr · 街景猜位置游戏
 
+[![GitHub Release](https://img.shields.io/github/release/cn171g11/mma-guessr?logo=github&color=blue)](https://github.com/cn171g11/mma-guessr/releases)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/cn171g11/mma-guessr/ci.yml?logo=githubactions&label=CI)](https://github.com/cn171g11/mma-guessr/actions)
+[![License](https://img.shields.io/badge/Apache%202.0-blue?logo=apache)](https://github.com/cn171g11/mma-guessr/blob/main/LICENSE)
+[![GitHub last commit](https://img.shields.io/github/last-commit/cn171g11/mma-guessr?logo=git)](https://github.com/cn171g11/mma-guessr/commits/main)
 
-[![Release](https://github.com/cn171g11/mma-guessr/actions/workflows/release.yml/badge.svg)](https://github.com/cn171g11/mma-guessr/actions/workflows/release.yml)
-[![CI](https://github.com/cn171g11/mma-guessr/actions/workflows/ci.yml/badge.svg)](https://github.com/cn171g11/mma-guessr/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%3E%3D5.0.0-blue)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-%3E%3D15.0-blue)](https://www.postgresql.org/)
