@@ -24,6 +24,8 @@ const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RATE_MAX = 30;
 const REGISTER_RATE_WINDOW_MS = 15 * 60 * 1000;
 const REGISTER_RATE_MAX = 30;
+const LOGOUT_RATE_WINDOW_MS = 15 * 60 * 1000;
+const LOGOUT_RATE_MAX = 60;
 const REFRESH_RATE_WINDOW_MS = 10 * 60 * 1000;
 const REFRESH_RATE_MAX = 120;
 
@@ -120,20 +122,28 @@ authRouter.post(
     }
 );
 
-authRouter.post('/guest/bind', async (req, res) => {
-    const { username, email, password, code, guestToken } = parseBody(bindSchema, req.body);
-    const normalizedEmail = normalizeEmail(email);
-    await assertEmailNotRegistered(normalizedEmail);
-    const session = await registerAccount({
-        username,
-        email: normalizedEmail,
-        password,
-        verificationCode: code,
-        guestId: resolveGuestKey(guestToken),
-        ipAddress: clientIp(req),
-    });
-    res.status(201).json({ ...session, tokenPair: attachSession(res, session.tokenPair) });
-});
+authRouter.post(
+    '/guest/bind',
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-bind:',
+        windowMs: REGISTER_RATE_WINDOW_MS,
+        maxRequests: REGISTER_RATE_MAX,
+    }),
+    async (req, res) => {
+        const { username, email, password, code, guestToken } = parseBody(bindSchema, req.body);
+        const normalizedEmail = normalizeEmail(email);
+        await assertEmailNotRegistered(normalizedEmail);
+        const session = await registerAccount({
+            username,
+            email: normalizedEmail,
+            password,
+            verificationCode: code,
+            guestId: resolveGuestKey(guestToken),
+            ipAddress: clientIp(req),
+        });
+        res.status(201).json({ ...session, tokenPair: attachSession(res, session.tokenPair) });
+    }
+);
 
 authRouter.post(
     '/login',
@@ -167,15 +177,24 @@ authRouter.post(
     }
 );
 
-authRouter.post('/logout', requireAuth, async (req, res) => {
-    const { refreshToken } = parseBody(logoutSchema, req.body);
-    if (req.auth === undefined) {
-        throw badRequest('缺少身份信息');
+authRouter.post(
+    '/logout',
+    requireAuth,
+    slidingWindowRateLimit({
+        keyPrefix: 'rl:auth-logout:',
+        windowMs: LOGOUT_RATE_WINDOW_MS,
+        maxRequests: LOGOUT_RATE_MAX,
+    }),
+    async (req, res) => {
+        const { refreshToken } = parseBody(logoutSchema, req.body);
+        if (req.auth === undefined) {
+            throw badRequest('缺少身份信息');
+        }
+        await revokeTokens(req.auth.subject, refreshTokenFromCookie(req) ?? refreshToken);
+        clearRefreshCookie(res);
+        res.json({ message: '已注销' });
     }
-    await revokeTokens(req.auth.subject, refreshTokenFromCookie(req) ?? refreshToken);
-    clearRefreshCookie(res);
-    res.json({ message: '已注销' });
-});
+);
 
 authRouter.post(
     '/guest',

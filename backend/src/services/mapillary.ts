@@ -125,11 +125,51 @@ function pickThumbUrl(media: MediaRecord, width: number): string {
     return chosen.url;
 }
 
+// 上游返回的缩略图 URL 做基础 SSRF 防护：仅允许 HTTPS，并拒绝回环/内网/链路本地/云元数据地址。
+// 不做严格域名白名单，避免 Mapillary CDN 域名变动导致街景加载被误伤；此处聚焦阻断 SSRF 高危目标。
+function assertSafeImageUrl(rawUrl: string): string {
+    let parsed: URL;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        throw serviceUnavailable('图源返回了非法图片地址');
+    }
+    if (parsed.protocol !== 'https:') {
+        throw serviceUnavailable('图源图片地址必须使用 HTTPS');
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (host === '' || host === 'localhost' || host === '0.0.0.0' || host === '127.0.0.1' || host === '::1') {
+        throw serviceUnavailable('图源图片地址指向了受保护地址');
+    }
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (ipv4 !== null) {
+        const a = Number(ipv4[1]);
+        const b = Number(ipv4[2]);
+        const isPrivate =
+            a === 10 || // 10.0.0.0/8
+            a === 0 || // 0.0.0.0/8
+            a === 127 || // 127.0.0.0/8
+            (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
+            (a === 192 && b === 168) || // 192.168.0.0/16
+            (a === 169 && b === 254) || // 169.254.0.0/16（链路本地 / 云元数据）
+            (a === 100 && b >= 64 && b <= 127); // 100.64.0.0/10（CGNAT）
+        if (isPrivate) {
+            throw serviceUnavailable('图源图片地址指向了内网地址');
+        }
+    }
+    // IPv6：拒绝回环/未指定/链路本地/唯一本地地址
+    if (host === '::' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) {
+        throw serviceUnavailable('图源图片地址指向了内网地址');
+    }
+    return parsed.toString();
+}
+
 async function fetchImageBuffer(url: string): Promise<Buffer> {
+    const safeUrl = assertSafeImageUrl(url);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), APP_CONSTANTS.MAPILLARY_TIMEOUT_MS);
     try {
-        const response = await fetch(url, {
+        const response = await fetch(safeUrl, {
             signal: controller.signal,
             headers: { 'User-Agent': 'mma-guessr-backend' },
         });
