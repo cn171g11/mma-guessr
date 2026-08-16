@@ -16,13 +16,12 @@ on:
     workflow_dispatch:
         inputs:
             mode:
-                description: Manual scope (push only runs typecheck by default)
+                description: Manual scope (push runs the full Go suite by default)
                 required: true
                 type: choice
-                default: typecheck
+                default: test
                 options:
-                    - typecheck
-                    - integration
+                    - test
                     - image
 
 permissions:
@@ -36,8 +35,6 @@ jobs:
     quality:
         name: Quality (reusable)
         uses: ./.github/workflows/backend-checks.yml
-        with:
-            runIntegration: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'integration' }}
 
     docker:
         name: Build and push image (GHCR)

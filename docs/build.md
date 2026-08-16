@@ -15,37 +15,52 @@ npm run format:check     # 检查代码风格（CI 使用）
 
 ## 后端
 
+后端为 **Go + SQLite 单二进制**（纯标准库 + modernc sqlite，无 CGO）：
+
 ```bash
 cd backend
-npm run typecheck        # TypeScript 类型检查（tsc --noEmit）
-npm run lint             # ESLint
-npm run format:check     # Prettier 风格检查
-npm run build            # tsc 编译到 dist/
-npm run start            # 运行编译产物（node dist/index.js）
+go build ./...                    # 编译全部包
+go vet ./...                      # 静态检查
+go test ./...                     # 单元测试 + e2e（内存 SQLite，无外部依赖）
+go build -o mma-guessr ./cmd/server   # 生成可执行文件
+./mma-guessr                      # 启动（自动建表）
 ```
 
-也可用运维脚本一键执行：`npm run script:check` / `npm run script:build`，见 [scripts.md](scripts.md)。
+### 交叉编译（多平台产物）
+
+`CGO_ENABLED=0` 下可交叉编译任意平台（无 CGO 依赖）：
+
+```bash
+cd backend
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o mma-guessr-linux-amd64 ./cmd/server
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o mma-guessr-windows-amd64.exe ./cmd/server
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o mma-guessr-darwin-arm64 ./cmd/server
+```
 
 ## Docker 镜像
 
-`backend/Dockerfile` 为多阶段构建（`node:20-alpine`，构建产物后精简运行）：
+`backend/Dockerfile` 为多阶段构建（`golang:1.26-alpine` 编译 → `alpine:3.21` 精简运行，非 root 用户）：
 
 ```bash
-# 本地构建镜像
-npm run script:build -- --docker --tag mma-guessr-backend:v1.0
-
-# 推送 GHCR（需先 docker login ghcr.io）
-npm run script:deploy -- --push
-
-# 多架构构建（linux/amd64 + linux/arm64，需启用 buildx + QEMU）
-docker buildx build --platform linux/amd64,linux/arm64 --push -t ghcr.io/<owner>/<repo>-backend:v1.0 backend
+cd backend
+docker build --build-arg VERSION=v1.0.0 -t mma-guessr-backend:v1.0.0 .
 ```
 
-CI 中的镜像构建与推送见 [deploy.md](deploy.md)。
+运行：
+
+```bash
+docker run -d -p 3000:3000 \
+  -v mma-data:/app/data \
+  -e NODE_ENV=production \
+  -e JWT_ACCESS_SECRET="$(openssl rand -base64 64)" \
+  -e JWT_REFRESH_SECRET="$(openssl rand -base64 64)" \
+  -e VERIFY_CODE_SECRET="$(openssl rand -base64 64)" \
+  mma-guessr-backend:v1.0.0
+```
 
 ## 提交前检查
 
 ```bash
 cd frontend && npm run format:check
-cd backend  && npm run typecheck && npm run lint && npm run format:check
+cd backend  && go build ./... && go vet ./... && go test ./...
 ```

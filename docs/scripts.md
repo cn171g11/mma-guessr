@@ -1,44 +1,39 @@
-# Scripts 运维脚本
+# 运维命令（Go）
 
-基于 Node.js 编写的跨平台 CLI 脚本（Windows / macOS / Linux / CI 通用，无需 bash）。
+后端为 Go 单二进制，不再有 Node 脚本。全部命令在 `backend/` 目录下执行。
 
-> 默认在 `backend/` 目录下执行；每个脚本均有 `npm run script:xxx` 别名。
+## 命令一览
 
-## 脚本一览
-
-| 脚本         | npm 别名                | 说明                                                                                                                                     |
-| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `check.mjs`  | `npm run script:check`  | 检查：typecheck + ESLint + Prettier（`--skip-format` 跳过格式检查）                                                                      |
-| `build.mjs`  | `npm run script:build`  | 构建：清理 `dist/` → TypeScript 编译（`--docker [--tag <名称>]` 追加构建镜像）                                                           |
-| `test.mjs`   | `npm run script:test`   | 测试：自检 PG/Redis → 迁移 → Vitest（`--watch` 监听 / `--coverage` 覆盖率 / `--no-migrate` 跳过迁移）                                    |
-| `clean.mjs`  | `npm run script:clean`  | 清理缓存：`dist/`、`coverage/`、node_modules 缓存（`--all` 删除 node_modules；`--npm-cache` 清理全局 npm 缓存）                          |
-| `debug.mjs`  | `npm run script:debug`  | 调试：自检依赖 → 迁移 → `tsx watch` 启动，并开启 inspector（默认 9229，`--port <端口>` 修改，`--no-migrate` 跳过迁移）                   |
-| `deploy.mjs` | `npm run script:deploy` | 部署：默认构建本地镜像；`--local` 用 docker compose 启动 PG+Redis 开发依赖；`--push` 构建并推送 GHCR 镜像（需先 `docker login ghcr.io`） |
+| 命令 | 说明 |
+| --- | --- |
+| `go build ./...` | 编译全部包（快速发现编译错误） |
+| `go vet ./...` | 静态检查（unreachable、printf 格式、锁拷贝等） |
+| `go test ./...` | 单元测试 + 全量 e2e（httptest + 内存 SQLite，无外部服务） |
+| `go test -race -timeout 300s ./test/` | 竞态检测套件 |
+| `go run ./cmd/server` | 启动开发服务（自动建表） |
+| `go run ./cmd/seed -data <data.js>` | 题库导入（幂等 upsert，默认解析 `../frontend/src/js/data.js`） |
+| `gofmt -l .` | 列出未格式化文件 |
+| `gosec`（`go run github.com/securego/gosec/v2/cmd/gosec@latest ./...`） | 安全扫描（G101/G115/G124/G202/G404/G705 等规则） |
 
 ## 示例
 
 ```bash
-# 检查
-npm run script:check
+# 全量质量检查（与 CI 一致）
+go build ./... && go vet ./... && go test ./...
 
-# 构建（含 Docker 镜像）
-npm run script:build -- --docker --tag mma-guessr-backend:v1.0
+# 构建产物并启动
+go build -o mma-guessr ./cmd/server
+PORT=3000 SQLITE_PATH=mma_guessr.db ./mma-guessr
 
-# 测试 + 覆盖率
-npm run script:test -- --coverage
+# 导入题库
+go run ./cmd/seed -data ../frontend/src/js/data.js
 
-# 清理 dist 与测试缓存
-npm run script:clean
-
-# 调试（监听 9333 端口远程调试）
-npm run script:debug -- --port 9333
-
-# 部署：推送 GHCR
-npm run script:deploy -- --push
+# 冒烟验证
+curl -s http://localhost:3000/api/health
 ```
 
 ## 说明
 
-- `test.mjs` / `debug.mjs` 会先探测 PostgreSQL 与 Redis 是否可达；不可达时会提示先行启动（`docker compose up -d` 或本地服务）。
-- 首次运行会从 `.env.example` 自动生成 `.env`（若不存在），请按需修改其中的 JWT 密钥与 SMTP 配置。
-- 所有脚本失败时以非零退出码结束，可直接用于 CI。
+- 所有命令以非零退出码结束，可直接用于 CI
+- `cmd/seed` 解析 `frontend/src/js/data.js` 的 `LOCATIONS` 数组字面量（不执行 JS），按 `name` 幂等 upsert
+- 服务启动即执行幂等迁移（`CREATE TABLE IF NOT EXISTS` + 成就种子），无需单独 migrate 步骤

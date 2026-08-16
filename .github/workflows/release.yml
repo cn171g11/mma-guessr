@@ -8,7 +8,7 @@ on:
                 required: true
                 type: string
             includeIntegration:
-                description: Run integration tests (PG + Redis full flow) before publishing
+                description: Run the full Go e2e suite (incl. race detector) before publishing
                 type: boolean
                 default: true
 
@@ -53,8 +53,7 @@ jobs:
             runIntegration: ${{ inputs.includeIntegration }}
 
     # Cross-platform release artifacts: the frontend is a static package (deployable anywhere),
-    # while the backend is a Node runtime bundle (dist + package.json + lockfile + .env.example,
-    # runnable on any platform after `npm ci`)
+    # while the backend is a single Go binary built with CGO disabled (no runtime dependencies).
     artifacts:
         name: Build cross-platform artifacts
         needs: [preflight, quality]
@@ -64,18 +63,25 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Setup Go
+              uses: actions/setup-go@v5
               with:
-                  node-version: 20
-                  cache: npm
-                  cache-dependency-path: backend/package-lock.json
+                  go-version-file: backend/go.mod
+                  cache: true
 
-            - name: Build backend (tsc)
+            - name: Build backend binaries (linux/darwin/windows, amd64+arm64)
               working-directory: backend
               run: |
-                  npm ci
-                  npm run build
+                  mkdir -p release/bin
+                  for TARGET in "linux amd64" "linux arm64" "darwin amd64" "darwin arm64" "windows amd64" "windows arm64"; do
+                      set -- $TARGET
+                      OUT="release/bin/mma-guessr-$1-$2"
+                      if [ "$1" = "windows" ]; then OUT="$OUT.exe"; fi
+                      GOOS=$1 GOARCH=$2 CGO_ENABLED=0 \
+                        go build -trimpath -ldflags "-s -w -X main.version=${{ inputs.version }}" \
+                        -o "$OUT" ./cmd/server
+                  done
+                  ls -la release/bin/
 
             - name: Package frontend (static site)
               working-directory: frontend
@@ -84,11 +90,11 @@ jobs:
                   cp -r index.html MmaGuessr.html src .nojekyll release/frontend/
                   (cd release/frontend && zip -rq ../mma-guessr-frontend-${{ inputs.version }}.zip .)
 
-            - name: Package backend (Node runtime bundle)
+            - name: Package backend (Go binaries)
               working-directory: backend
               run: |
                   mkdir -p release/backend
-                  cp -r dist package.json package-lock.json .env.example release/backend/
+                  cp -r release/bin .env.example release/backend/
                   (cd release/backend && zip -rq ../mma-guessr-backend-${{ inputs.version }}.zip .)
 
             - name: Collect artifacts and generate checksums
@@ -227,7 +233,7 @@ jobs:
                   ## Cross-platform artifacts
 
                   - `mma-guessr-frontend-${{ inputs.version }}.zip`: frontend static package, unzip on any platform and open `src/index.html` or serve it from any static server
-                  - `mma-guessr-backend-${{ inputs.version }}.zip`: backend Node runtime bundle, run `npm ci --omit=dev && node dist/index.js` on any platform (requires Node.js 20+, env vars in `.env.example`)
+                  - `mma-guessr-backend-${{ inputs.version }}.zip`: backend Go single binaries for linux/darwin/windows × amd64/arm64 (inside `bin/`), no runtime dependencies, run `./mma-guessr-<os>-<arch>` with env vars from `.env.example`
                   - `SHA256SUMS.txt`: artifact checksums
 
                   ## Changelog

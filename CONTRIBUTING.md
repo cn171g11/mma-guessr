@@ -1,7 +1,7 @@
 # MmaGuessr 开发与贡献指南
 
 > 本文档覆盖：环境配置 → 本地运行 → 代码规范 → 构建 → 上线部署 → 后端开发 → 贡献流程。
-> 游戏说明与版本记录见 [frontend/README.md](frontend/README.md)，后端说明见 [backend/README.md](backend/README.md)。
+> 前端说明见 [docs/frontend.md](docs/frontend.md)，后端说明见 [docs/backend.md](docs/backend.md)，文档索引见 [docs/README.md](docs/README.md)。
 
 ---
 
@@ -22,15 +22,17 @@ mma-guessr/
 │   ├── archive/                  # 已归档的原型文件
 │   ├── tools/                    # 开发脚本（读写 src/js/data.js 题库）
 │   └── package.json              # 仅含 Prettier，无运行时依赖
-├── backend/                      # 后端服务（Node.js + Express + TypeScript）
-│   ├── src/                      # 后端源码（config / db / middleware / routes）
-│   ├── docker-compose.yml        # 开发环境：PostgreSQL + Redis
-│   └── Dockerfile                # 生产镜像（多阶段构建）
-├── .github/workflows/            # CI/CD 流水线（见 §6.5 / §8）
-└── docs/                         # 历史文档备份
+├── backend/                      # 后端服务（Go + SQLite 单二进制）
+│   ├── cmd/                      # 启动入口：server（HTTP + Engine.IO）/ seed（题库导入）
+│   ├── internal/                 # auth / games / leaderboard / achievements / daily / profile / multiplayer / locations / mapillary 等域
+│   ├── test/                     # e2e 测试（httptest + 内存 SQLite）
+│   ├── Dockerfile                # 生产镜像（多阶段构建，无 CGO）
+│   └── deploy/                   # 生产部署栈（compose + Nginx + SQLite 备份）
+├── .github/workflows/            # CI/CD 流水线（见 §6.5 / §7）
+└── docs/                         # 主题文档（frontend / backend / api / database / build / deploy / testing / locations / scripts）
 ```
 
-> 前端文件结构细节见 [frontend/README.md](frontend/README.md)。
+> 前端文件结构细节见 [docs/frontend.md](docs/frontend.md)，后端目录结构见 [docs/backend.md](docs/backend.md)。
 
 ---
 
@@ -38,12 +40,13 @@ mma-guessr/
 
 | 依赖    | 版本                                                                | 用途                                              |
 | ------- | ------------------------------------------------------------------- | ------------------------------------------------- |
-| Node.js | ≥ 20（前端 ≥18 即可）                                              | 运行前端 `tools/` 脚本 / Prettier / 后端           |
-| Docker  | ≥ 24（含 docker compose）                                           | 启动后端开发环境 PostgreSQL + Redis               |
+| Go      | ≥ 1.22（`go.mod` 指定）                                             | 编译/运行后端                                     |
+| Node.js | ≥ 18（仅前端开发工具链使用）                                        | 运行前端 `tools/` 脚本 / Prettier                 |
 | 浏览器  | Chrome / Edge / Firefox / Safari（最新版）                          | 运行游戏                                          |
 | 网络    | 可访问 `unpkg.com`、`tile.openstreetmap.org`、`graph.mapillary.com` | 加载 Leaflet / Mapillary / 街景数据                |
 
-> 游戏本体**无后端**，纯静态单页应用；后端仅在线玩法（排行榜 / 对战等）需要。
+> 后端为 Go 单二进制（纯标准库 + SQLite，无 CGO、无 PostgreSQL / Redis / Docker 依赖）；
+> 数据库文件即 `backend/mma_guessr.db`（自动建表，无需外部服务）。
 
 ---
 
@@ -68,12 +71,12 @@ npx serve .
 
 ```bash
 cd backend
-npm run db:up    # docker compose 一键启动 PostgreSQL + Redis
-npm install
-npm run dev      # http://localhost:3000/api/health
+go build ./...                              # 编译全部包
+go run ./cmd/seed -data ../frontend/src/js/data.js   # 导入题库（1570 条，幂等）
+go run ./cmd/server                         # 启动，http://localhost:3000/api/health
 ```
 
-后端启动前需复制 `.env.example` 为 `.env`（可选，默认值与 `docker-compose.yml` 一致）。更多见 [backend/README.md](backend/README.md)。
+后端启动前可复制 `backend/.env.example` 为 `backend/.env`（可选，不配置则使用开发默认值）。更多见 [docs/backend.md](docs/backend.md)。
 
 ### 3.3 配置 Mapillary Token（仅服务端）
 
@@ -89,7 +92,7 @@ npm run dev      # http://localhost:3000/api/health
 
 ## 4. 代码规范
 
-- **格式化工具**：Prettier（`frontend/.prettierrc.json` 与 `backend/.prettierrc.json`，缩进/引号/换行与 `.editorconfig` 一致）。
+- **前端格式化工具**：Prettier（`frontend/.prettierrc.json`，缩进/引号/换行与 `.editorconfig` 一致）。
 - **前端 JavaScript**：ES6+，`const`/`let`；全局常量在 `config.js`，题库在 `data.js`，逻辑在 `game.js`。
 - **前端文件加载顺序**（`frontend/src/index.html` 中不可颠倒）：
 
@@ -99,12 +102,12 @@ npm run dev      # http://localhost:3000/api/health
     <script src="js/game.js"></script>
     ```
 
-- **后端 TypeScript**：严格模式（`strict`），类型导入用 `type`，统一 logger（见 `backend/src/logger`），依赖注入通过 `src/config/env.ts` 读取环境变量。
+- **后端 Go**：标准库优先，`go fmt` 风格；包名单数小写（`internal/` 下按域分包）；错误处理用统一 `HttpError`，不泄露内部细节；日志用 `slog`。
 - **提交前必跑**：
 
     ```bash
     cd frontend && npm run format:check
-    cd backend  && npm run typecheck && npm run lint && npm run format:check
+    cd backend  && go build ./... && go vet ./... && go test ./...
     ```
 
 - 建议编辑器安装 Prettier 插件并开启「保存时格式化」。
@@ -122,11 +125,12 @@ npm run dev      # http://localhost:3000/api/health
 
 ```bash
 cd backend
-npm run build     # tsc 编译到 backend/dist/
-npm run start     # 运行编译产物
+go build -o mma-guessr ./cmd/server   # 编译为单二进制
+./mma-guessr                          # 运行编译产物（自动建表）
 ```
 
-Docker 镜像（多阶段构建）见 `backend/Dockerfile`，由 CI 自动构建推送 GHCR。
+Docker 镜像（多阶段构建，`CGO_ENABLED=0`）见 `backend/Dockerfile`，由 CI 自动构建推送 GHCR。
+完整构建与交叉编译指南见 [docs/build.md](docs/build.md)。
 
 ---
 
@@ -149,10 +153,11 @@ git push origin main
 
 > 已内置 `frontend/.nojekyll`；发布产物由工作流从 `frontend/` 显式打包（不含 `node_modules/`、`tools/`）。
 
-### 6.2 后端部署（未来规划）
+### 6.2 后端部署
 
-后端计划通过 Docker 部署到云服务器（`backend/Dockerfile` + docker-compose，见任务清单 P0-5）。
-当前 CI/CD 已具备：类型检查 / Lint / 构建、PostgreSQL + Redis 集成验证、GHCR 镜像推送。
+后端为单容器 Go 二进制 + SQLite，无外部服务依赖。生产栈见 `backend/deploy/docker-compose.prod.yml`（Nginx 反代 + SQLite 命名卷 + 定时备份），完整清单见 [docs/deploy.md](docs/deploy.md)。
+
+镜像通过 GitHub Actions 手动触发 `backend.yml`（`mode=image`）或 `release.yml` 构建推送 GHCR（多架构 linux/amd64 + arm64）。
 
 ### 6.3 自定义域名（可选）
 
@@ -168,6 +173,7 @@ git push origin main
 - [ ] 提交答案后红线、得分动画、结果弹窗正常
 - [ ] 手机端横竖屏各检查一次（小地图按钮化）
 - [ ] 历史记录、更新记录、分享按钮可用
+- [ ] 后端 `curl http://<host>:3000/api/health` 返回 `{"status":"ok"}`
 
 ---
 
@@ -177,7 +183,9 @@ git push origin main
 | ---------------- | ------------------------------------- | ------------------------------------------------------------- |
 | `ci.yml`         | `frontend/**` 推送 `main` / 任意 PR   | 前端代码风格、JS 语法、题库数据完整性校验                     |
 | `deploy.yml`     | `frontend/**` 推送 `main`（文档除外）/ 手动 | 校验通过后打包发布 GitHub Pages                              |
-| `backend.yml`    | `backend/**` 推送 `main` / 任意 PR     | 后端类型检查 / Lint / 构建；PG+Redis 集成验证健康检查；`main` 推送时构建推送 GHCR 镜像 |
+| `backend.yml`    | `backend/**` 推送 `main` / 任意 PR     | 后端 `go vet` / `go build` / 全量测试（含 race）；手动可选推送 GHCR 镜像 |
+| `backend-checks.yml` | 供其他工作流复用（`workflow_call`）| Go 检查 + e2e 测试（内存 SQLite，无外部依赖）                  |
+| `release.yml`    | 手动（`workflow_dispatch`，填版本号） | 质量门禁 → 跨平台二进制产物 → 推送 GHCR `:版本` 镜像 → 打 `v版本` 标签 → 创建 GitHub Release |
 | `streetview.yml` | 手动（`workflow_dispatch`）           | 用 `secrets.MAPILLARY_TOKEN` 跑街景覆盖验证，报告存 artifact  |
 
 > 前端校验内容（`ci.yml` / `deploy.yml` 一致，均在 `frontend/` 下执行）：
@@ -188,13 +196,13 @@ node --check src/js/*.js tools/*.js      # JS 语法
 node tools/validate-data.js              # 题库数据校验
 ```
 
-> 后端校验内容（`backend.yml`，在 `backend/` 下执行）：
+> 后端校验内容（`backend-checks.yml`，在 `backend/` 下执行）：
 
 ```bash
-npm run typecheck     # TypeScript 类型检查
-npm run lint          # ESLint
-npm run format:check  # Prettier 风格
-npm run build         # tsc 构建到 dist/
+go vet ./...                             # 静态检查
+go build ./...                           # 编译
+go test -count=1 ./...                   # 单元 + e2e 测试（内存 SQLite）
+go test -race -count=1 ./test/           # 竞态检测套件
 ```
 
 题库校验规则（`frontend/tools/validate-data.js`，纯本地无网络）：
@@ -204,8 +212,7 @@ npm run build         # tsc 构建到 dist/
 - `region` / `difficulty` / `lat` / `lng` 均在合法范围；
 - 派生题库 `WORLD_LOCATIONS` / `CHINA_LOCATIONS` 声明存在且计数一致。
 
-> **后端 CI 集成验证**：临时在 CI 中启动 PostgreSQL 与 Redis 容器，启动编译产物后
-> 请求 `/api/health`，`status` 为 `ok` 才算通过。
+> 后端测试全部运行在内存 SQLite 上，无需 PostgreSQL / Redis 容器或任何外部服务。
 
 > **首次使用需在仓库配置 Secret**：Settings → Secrets and variables → Actions → 新建 `MAPILLARY_TOKEN`（用于 `streetview.yml`；未配置时验证脚本会直接失败）。
 
@@ -257,20 +264,19 @@ git checkout -b fix/xxx      # 修复
 git checkout -b chore/xxx    # 维护（格式化、文档、依赖）
 ```
 
-提交信息风格（参照现有 `git log`）：`类型: 中文描述`，例如：
+提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/)，例如：
 
-- `feat: 新增 XX 模式`
+- `feat(backend): 新增 XX 接口`
 - `fix: 修复街景切换残留问题`
 - `chore: 更新 Prettier 配置`
-- `v1.15.0: 版本发布说明`
 
-### 9.3 发版流程（前端）
+### 9.3 发版流程
 
 1. 更新 `frontend/src/js/config.js`：
     - `VERSION` 递增（语义化版本 `v主版本.次版本.修订号`）；
     - `CHANGELOG` **顶部**插入新版本条目。
-2. 同步更新 `frontend/README.md` 的版本号与更新记录表。
-3. 提交并打 tag。
+2. 同步更新 `docs/frontend.md` 的版本号与更新记录表。
+3. 在 Actions 页手动触发 `release.yml`，填版本号即可完成质量门禁 → 跨平台产物 → GHCR 镜像 → GitHub Release。
 
 ### 9.4 提交前检查
 
@@ -283,7 +289,7 @@ node tools/validate-data.js          # 题库数据校验通过
 
 # 后端
 cd ../backend
-npm run typecheck && npm run lint && npm run format:check
+go build ./... && go vet ./... && go test ./...
 ```
 
 ```bash
@@ -300,7 +306,7 @@ git status   # 确认无密钥/临时文件入库（backend/.env 已被 git 忽�
 
 ### 9.6 开源协议
 
-本项目以 [Apache License 2.0](LICENSE) 开源（版权所有 © 2026 Dinnerb0ne2）。
+本项目以 [Apache License 2.0](LICENSE) 开源（版权所有 © 2026 yzuio, Dinnerb0ne）。
 
 - 按 Apache 2.0 第 5 条「Submission of Contributions」，你提交的 Issue / PR /
   任何有意提交的贡献，默认视为以 Apache 2.0 条款授权本项目使用；
@@ -320,4 +326,4 @@ A：改用静态服务器方式运行（见 §3.1），`file://` 下部分跨域
 A：`tools/` 脚本写入后未格式化，运行 `npm run format` 即可。
 
 **Q：后端 `/api/health` 返回 `degraded`？**
-A：用 `docker compose ps` 确认 PostgreSQL / Redis 容器状态；或确认 `.env` 连接串与 `docker-compose.yml` 一致后重启 `npm run dev`。
+A：检查 SQLite 数据库文件（`SQLITE_PATH`）是否可读写、磁盘是否满；确认 `.env` 配置无误后重启 `go run ./cmd/server`。

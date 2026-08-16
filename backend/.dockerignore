@@ -1,5 +1,23 @@
-node_modules
-dist
+# Local SQLite database (runtime data, never bake into the image)
+*.db
+*.db-shm
+*.db-wal
+
+# Env / secrets
 .env
-.npm
-npm-debug.log*
+.env.*
+
+# Build artifacts
+release/
+dist/
+out/
+
+# Tests (not needed at runtime)
+test/
+
+# Git / editor / OS
+.git
+.vscode
+.idea
+*.swp
+.DS_Store

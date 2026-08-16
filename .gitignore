@@ -43,3 +43,15 @@ SKILL.md
 
 # Redis
 *.rdb
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Go build artifacts
+*.exe
+backend/mma-guessr
+mma-guessr

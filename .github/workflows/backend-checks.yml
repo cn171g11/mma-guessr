@@ -4,7 +4,7 @@ on:
     workflow_call:
         inputs:
             runIntegration:
-                description: Whether to run integration tests (PG + Redis full flow)
+                description: Whether to run the full e2e suite (already Go-native, always runs)
                 type: boolean
                 default: false
 
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
     check:
-        name: Typecheck / Lint / Build
+        name: Format / Vet / Build / Test
         runs-on: ubuntu-latest
         defaults:
             run:
@@ -31,123 +31,20 @@ jobs:
                   fi
                   echo "no hardcoded Mapillary token found"
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Setup Go
+              uses: actions/setup-go@v5
               with:
-                  node-version: 20
-                  cache: npm
-                  cache-dependency-path: backend/package-lock.json
+                  go-version-file: backend/go.mod
+                  cache: true
 
-            - name: Install dependencies
-              run: npm ci
-
-            - name: Typecheck
-              run: npm run typecheck
-
-            - name: Lint
-              run: npm run lint
-
-            - name: Prettier
-              run: npm run format:check
+            - name: Vet
+              run: go vet ./...
 
             - name: Build
-              run: npm run build
+              run: go build ./...
 
-    integration:
-        name: "Integration test: full auth flow (PG + Redis)"
-        if: inputs.runIntegration
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        defaults:
-            run:
-                working-directory: backend
-        env:
-            NODE_ENV: development
-            DATABASE_URL: postgres://mma:mma@localhost:5432/mma_guessr
-            REDIS_URL: redis://:mma@localhost:6379
-        services:
-            postgres:
-                image: postgres:16-alpine
-                env:
-                    POSTGRES_USER: mma
-                    POSTGRES_PASSWORD: mma
-                    POSTGRES_DB: mma_guessr
-                ports:
-                    - 5432:5432
-                options: >-
-                    --health-cmd "pg_isready -U mma -d mma_guessr"
-                    --health-interval 5s
-                    --health-timeout 5s
-                    --health-retries 10
-            redis:
-                image: redis:7-alpine
-                # --requirepass is a redis-server flag, not a `docker run` flag;
-                # the official image appends REDIS_ARGS to the redis-server start command
-                env:
-                    REDIS_ARGS: --requirepass mma
-                ports:
-                    - 6379:6379
-                options: >-
-                    --health-cmd "redis-cli -a mma ping"
-                    --health-interval 5s
-                    --health-timeout 5s
-                    --health-retries 10
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+            - name: Unit + e2e tests
+              run: go test -count=1 ./...
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 20
-                  cache: npm
-                  cache-dependency-path: backend/package-lock.json
-
-            - name: Install dependencies
-              run: npm ci
-
-            - name: Build
-              run: npm run build
-
-            - name: Wait for Postgres and verify connectivity
-              run: |
-                  for i in $(seq 1 30); do
-                      if pg_isready -h localhost -p 5432 -U mma -d mma_guessr; then
-                          echo "Postgres is ready"
-                          break
-                      fi
-                      sleep 2
-                  done
-                  if ! pg_isready -h localhost -p 5432 -U mma -d mma_guessr; then
-                      echo "::error::Postgres did not become ready within 60s"
-                      exit 1
-                  fi
-
-            - name: Run database migrations (users)
-              timeout-minutes: 5
-              run: npm run db:migrate
-
-            - name: Seed location database (1570 entries)
-              run: npm run db:seed
-
-            - name: Run auth e2e tests (register/login/token/guest)
-              run: npm test
-
-            - name: Start server and verify /api/health
-              run: |
-                  node dist/index.js > server.log 2>&1 &
-                  SERVER_PID=$!
-                  HEALTH_RESP=""
-                  for i in $(seq 1 20); do
-                      sleep 1
-                      if HEALTH_RESP=$(curl -fsS http://localhost:3000/api/health 2>/dev/null); then
-                          break
-                      fi
-                  done
-                  kill "$SERVER_PID" 2>/dev/null || true
-                  echo "health response: ${HEALTH_RESP:-<no response>}"
-                  echo "$HEALTH_RESP" | grep -q '"status":"ok"' && echo "Integration check passed."
-                  if ! echo "$HEALTH_RESP" | grep -q '"status":"ok"'; then
-                      cat server.log
-                      exit 1
-                  fi
+            - name: Race detector suite
+              run: go test -race -count=1 -timeout 300s ./test/

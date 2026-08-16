@@ -1,161 +1,133 @@
-# 数据层：PostgreSQL 与 Redis
+# 数据层：SQLite
 
-后端数据层由 [backend.md](backend.md) 中的 `src/db/` 模块承载：`pool.ts`（连接池）、`redis.ts`（客户端）、`migrate.ts`（迁移执行器）。
+后端数据层由 `internal/db/` 承载：`db.go`（打开连接）+ `schema.go`（建表，幂等迁移）。
 
-## PostgreSQL
+## 连接与配置
 
-连接串由环境变量 `DATABASE_URL` 提供（开发默认 `postgres://mma:mma@localhost:5432/mma_guessr`）。
+- 连接串由环境变量 `SQLITE_PATH` 提供（默认 `mma_guessr.db`）
+- 打开时固定 `_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)`
+- 进程内 `SetMaxOpenConns(1)`（modernc 驱动单写者模式，串行化写入）
+- 启动时执行 `Migrate()`：全部 `CREATE TABLE IF NOT EXISTS`，幂等安全
 
-### 迁移
+## 表结构
 
-- 迁移文件位于 `backend/src/db/migrations/`（`*.sql`），按序号执行
-- 执行器：`npm run db:migrate`（`tsx src/db/migrate.ts`）
-- 迁移幂等：均使用 `IF NOT EXISTS`
-
-### 表结构
-
-#### `users`（账号体系核心）
+### `users`（账号体系核心）
 
 | 列 | 类型 | 约束 |
 | --- | --- | --- |
-| `id` | `UUID` | 主键，默认 `gen_random_uuid()` |
-| `username` | `VARCHAR(20)` | 非空，唯一索引 |
-| `email` | `VARCHAR(255)` | 非空，唯一索引 |
-| `password_hash` | `VARCHAR(60)` | 非空（bcrypt，成本因子 10） |
-| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
-| `updated_at` | `TIMESTAMPTZ` | 默认 `now()` |
+| `id` | `TEXT` | 主键（UUID） |
+| `username` | `TEXT` | 非空，唯一 |
+| `email` | `TEXT` | 非空，唯一 |
+| `password_hash` | `TEXT` | 非空（bcrypt，成本 12） |
+| `equipped_title` | `TEXT` | 可空（当前装备称号） |
+| `created_at` / `updated_at` | `TEXT` | 非空（RFC3339 UTC） |
 
-#### `locations`（题库主表）
+### `locations`（题库主表）
 
 | 列 | 类型 | 约束 |
 | --- | --- | --- |
-| `id` | `BIGSERIAL` | 主键 |
-| `name` | `VARCHAR(120)` | 非空，唯一索引（来自 data.js 的地点名） |
-| `mapillary_id` | `TEXT` | 可空（后续逐点绑定街景 ID） |
-| `lat` / `lng` | `DOUBLE PRECISION` | 非空，范围 CHECK |
-| `country` / `city` | `VARCHAR(120)` | 可空（后续数据丰富时填充） |
-| `region` | `VARCHAR(20)` | 非空（大洲） |
-| `difficulty` | `SMALLINT` | 非空，CHECK 1-5 |
+| `id` | `INTEGER` | 主键自增 |
+| `name` | `TEXT` | 非空，唯一（来自 data.js 的地点名） |
+| `mapillary_id` | `TEXT` | 可空（街景 ID） |
+| `lat` / `lng` | `REAL` | 非空 |
+| `country` / `city` | `TEXT` | 可空 |
+| `region` | `TEXT` | 非空（大洲） |
+| `difficulty` | `INTEGER` | 非空，1-5 |
 | `panorama_url` | `TEXT` | 可空 |
-| `created_at` / `updated_at` | `TIMESTAMPTZ` | 默认 `now()` |
+| `source` | `TEXT` | 非空，默认 `mapillary` |
+| `created_at` / `updated_at` | `TEXT` | 非空 |
 
-索引：`locations_name_key`（唯一）、`locations_region_difficulty_idx`。
-
-> **PostGIS（可选）**：迁移会检测 `postgis` 扩展是否已启用；若已启用，自动为表补充生成列
-> `location geography(POINT, 4326)`（由 `lng/lat` 生成）与 GIST 索引，可直接用 `ST_DWithin` 做
-> 「附近位置」查询。默认开发容器（`postgres:16-alpine`）不含 PostGIS，基础功能不受影响。
+索引：`idx_locations_region_difficulty`、`idx_locations_source_region_difficulty`（随机抽题按 region/difficulty/source 过滤）。
 
 #### 题库数据导入
 
-`npm run db:seed`（`scripts/seed-locations.mjs`）解析 `frontend/src/js/data.js` 的 `LOCATIONS`
-并批量 upsert（按 `name` 唯一键，幂等）。当前 1570 条（中国 332 / 世界 1238）已与前端逐条比对一致。
+`go run ./cmd/seed -data <frontend/src/js/data.js>` 解析 `LOCATIONS` 数组并批量 upsert
+（按 `name` 唯一键，幂等）。当前 1570 条已与前端逐条比对一致（脚本校验通过）。
 
-#### `game_results`（游戏成绩表）
-
-| 列 | 类型 | 约束 |
-| --- | --- | --- |
-| `id` | `BIGSERIAL` | 主键 |
-| `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
-| `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
-| `mode` | `VARCHAR(20)` | classic / challenge / region / china / endless / daily / duel / landmark |
-| `region` | `VARCHAR(20)` | 仅区域模式非空 |
-| `total_score` | `INT` | 非空 |
-| `rounds` | `JSONB` | 回合明细（name / locationId / distanceKm / score / imageId / xp / difficulty / guessLat / guessLng / answerLat / answerLng） |
-| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
-
-索引：`game_results_player_created_idx`（玩家 + 时间倒序，历史记录）、
-`game_results_player_mode_score_idx`（玩家 + 模式 + 分数，最佳成绩）。
-不建外键：游客记录随会话过期清理，注册用户删除无需级联。
-
-#### `scores`（排行榜计分表，迁移 004）
+### `game_results`（游戏成绩表）
 
 | 列 | 类型 | 约束 |
 | --- | --- | --- |
-| `id` | `BIGSERIAL` | 主键 |
-| `player_type` | `VARCHAR(5)` | CHECK `guest` / `user` |
-| `player_id` | `VARCHAR(64)` | 游客 UUID 或用户 UUID |
-| `mode` | `VARCHAR(20)` | 非空 |
-| `score` | `INT` | 非负，CHECK `>= 0` |
-| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
+| `id` | `INTEGER` | 主键自增 |
+| `player_type` | `TEXT` | CHECK `guest` / `user` |
+| `player_id` | `TEXT` | 游客 UUID 或用户 UUID |
+| `mode` | `TEXT` | classic / challenge / region / china / endless / daily / duel / landmark |
+| `region` | `TEXT` | 仅区域模式非空 |
+| `total_score` | `INTEGER` | 非空 |
+| `rounds` | `TEXT` | 回合明细 JSON（name / locationId / distanceKm / score / imageId / xp / difficulty / guessLat / guessLng / answerLat / answerLng） |
+| `created_at` | `TEXT` | 非空 |
 
-索引：`scores_user_created_idx`（玩家 + 时间）、`scores_mode_created_idx`（模式 + 时间）。
-仅记录“新最佳”：某玩家某模式的成绩高于历史最高时才插入，排行榜读取时按 `MAX(score)` 聚合，天然每人每模式只占一行。
+索引：`idx_game_results_player_created`（历史记录）、`idx_game_results_player_mode_score`（最佳成绩）、`idx_game_results_mode_created`（模式统计）。
 
-#### `daily_challenges`（每日挑战题单，迁移 004）
+### `scores`（排行榜计分表）
 
 | 列 | 类型 | 约束 |
 | --- | --- | --- |
-| `date` | `DATE` | 主键（UTC 日期） |
-| `location_ids` | `BIGINT[]` | 当天 10 题的地点 ID 数组 |
-| `created_at` | `TIMESTAMPTZ` | 默认 `now()` |
+| `id` | `INTEGER` | 主键自增 |
+| `player_type` | `TEXT` | CHECK `guest` / `user` |
+| `player_id` | `TEXT` | 游客 UUID 或用户 UUID |
+| `mode` | `TEXT` | 非空 |
+| `score` | `INTEGER` | 非负 CHECK |
+| `created_at` | `TEXT` | 非空 |
 
-当天首次访问时惰性抽题 `ON CONFLICT (date) DO UPDATE` 幂等写入；检测到题单失效（seed 重建致 ID 漂移）时自愈重抽。
+仅记录"新最佳"：某玩家某模式成绩高于历史最高时才插入；排行榜按 `MAX(score) GROUP BY player_id` 聚合。
 
-#### `achievements` / `user_achievements`（成就与称号，迁移 006）
+### `daily_challenges` / `daily_submissions`（每日挑战）
+
+- `daily_challenges`：`date`（主键，UTC 日期）→ `location_ids`（10 题 ID 数组，JSON 文本）
+- `daily_submissions`：`(player_id, date)` 联合主键 → 已提交的游戏 ID，实现"每人每天一次"
+
+当天首次访问惰性抽题 `INSERT ... ON CONFLICT(date) DO UPDATE` 幂等写入。
+
+### `achievements` / `user_achievements`（成就与称号）
 
 | 表 | 说明 |
 | --- | --- |
-| `achievements` | 成就静态定义：`code`（主键）/ `name` / `description` / `icon` / `has_title` / `title`（称号文本，可装备） |
-| `user_achievements` | 玩家解锁记录：`(user_id, achievement_code)` 联合主键；`user_id` 级联删除 |
-| `users.equipped_title` | 迁移在 `users` 表新增 `equipped_title` 列，存放当前装备称号 |
+| `achievements` | 14 条静态定义（`code` 主键 / name / description / icon / has_title / title），启动时 `INSERT OR IGNORE` 种子 |
+| `user_achievements` | 解锁记录 `(user_id, achievement_code)` 联合主键，级联删除 |
 
-成就解锁依据 `game_results` 聚合（局数 / 轮数 / 总分 / 最佳 / 满分轮 / 模式覆盖数 / 各模式局数 / 命中率），由 `GET /api/achievements` 与 `PUT /api/achievements/title` 读写；解锁码种子随迁移写入，`ON CONFLICT (code) DO NOTHING` 幂等。
+解锁依据 `game_results` 聚合（局数 / 轮数 / 总分 / 最佳 / 满分轮 / 模式覆盖 / 命中率），由 `/api/achievements` 读写。
 
-#### `locations.source`（数据源扩展，迁移 005）
+### 会话与令牌（替代原 Redis 键）
 
-`locations` 表新增 `source VARCHAR(20) NOT NULL DEFAULT 'mapillary'`，标记题目图来源；Redis 抽题池键升级为 `locations:pool:<source>:<region>:<difficulty>`，不同来源独立成池。
+| 表 | 说明 |
+| --- | --- |
+| `refresh_tokens` | `user_id` 主键 → `token_hash`（SHA-256，恒时比较）+ `expires_at`；旋转时事务原子作废 |
+| `verification_codes` | `email` 主键 → `code_hash`（HMAC-SHA256）+ `attempts`（最多 5 次）+ `last_sent_at`（60s 重发）+ `expires_at`（10 分钟） |
+| `guest_sessions` | 游客会话：`guest_id` 主键 + username + `expires_at`（30 天） |
+| `guest_progress` / `user_progress` | 游客 / 用户进度快照（total_rounds / total_score / best_score / correct_guesses），绑定注册时合并迁移 |
+| `nonces` | 请求签名防重放：`nonce` 主键 + `expires_at`（±5 分钟窗口内去重） |
 
-## Redis
+## 缓存层（`internal/kv`，替代 Redis）
 
-连接串来自环境变量 `REDIS_URL`（开发默认 `redis://:mma@localhost:6379`，与 compose 的 `requirepass` 对应；生产必须设置强随机密码）。
+统一 TTL 缓存表 `mapillary_cache`（key 主键 / value / expires_at），提供 `Get/GetBytes/Set/SetBytes/Del/SetNX/Sweep/TTL`：
 
-### 键设计
+| 用途 | 键格式 | TTL |
+| --- | --- | --- |
+| 题库随机抽题池 | `locations:pool:<source\|all>:<region\|all>:<difficulty\|all>` | 1 小时 |
+| 题库统计 | `locations:stats` | 5 分钟 |
+| Mapillary 搜索代理缓存 | `mly:search:<bbox>:<limit>` | 24 小时 |
+| Mapillary 单图元数据 | `mly:media:<image_id>` | 24 小时 |
+| Mapillary 图片字节 | `mly:img:<image_id>:<width>` | 24 小时 |
+| 个人统计聚合 | `profile:stats:<role>:<id>` | 5 分钟 |
+| 排行榜读缓存 | `lb:overall:<mode>` / `lb:daily:<mode>:<date>` | 永续 / 7 天 |
 
-| 键 | 类型 | TTL | 说明 |
-| --- | --- | --- | --- |
-| `refresh:<user_id>` | string | 7 天 | 当前有效 refresh 令牌的 SHA-256 哈希（旋转式令牌） |
-| `verify_code:<email>` | string | 10 分钟 | 邮箱验证码（最多 5 次校验） |
-| `verify_rate:<email>` | string | 60 秒 | 验证码重发限频 |
-| `login_lock:<identifier>` | counter | 15 分钟 | 登录失败计数，达到 5 次锁定 |
-| `guest:<guest_id>` | hash | 30 天 | 游客档案（username / createdAt） |
-| `guest_progress:<guest_id>` | hash | 30 天 | 游客游戏进度快照 |
-| `user_progress:<user_id>` | hash | 30 天 | 注册用户游戏进度快照 |
-| `locations:pool:<source\|all>:<region\|all>:<difficulty\|all>` | set | 1 小时 | 题库随机抽题 ID 池（空池 60s），miss 时从 PG 重建 |
-| `locations:stats` | string | 5 分钟 | 题库总量 / 各洲计数统计 |
-| `mly:search:<bbox>:<limit>` | string | 24 小时 | Mapillary 图片搜索代理结果缓存 |
-| `mly:media:<image_id>` | string | 24 小时 | Mapillary 单图元数据（缩略图 URL）缓存 |
-| `mly:img:<image_id>:<width>` | bytes | 24 小时 | 代理返回的图片字节缓存 |
-| `rl:mapillary-search:<ip>` | zset | 60 秒 | 搜索代理滑动窗口限频计数 |
-| `rl:mapillary-image:<ip>` | zset | 60 秒 | 图片代理滑动窗口限频计数 |
-| `rl:imagery-search:<ip>` | zset | 60 秒 | 图源无关搜索代理限频计数（/api/proxy/imagery/:source/search） |
-| `rl:imagery-image:<ip>` | zset | 60 秒 | 图源无关图片代理限频计数 |
-| `rl:games-submit:<role>:<id>` | zset | 60 秒 | 成绩提交滑动窗口限频计数 |
-| `lb:overall:<mode>` | zset | 永续 | 各模式总榜（成员 = 玩家 ID，分数 = 最高分） |
-| `lb:daily:<mode>:<yyyymmdd>` | zset | 7 天 | 各模式日榜（当日最高分，过期键由夜间重建任务清理） |
-| `lb:rebuild-lock` | string | 60 秒 | 排行榜惰性重建 Redis 锁（NX 抢占），防止公开接口并发触发全表重建 |
-| `rl:leaderboard:<ip>` | zset | 60 秒 | 排行榜公开接口按 IP 限频计数 |
-| `user_daily:<player_id>:<date>` | string | 至次日 UTC 零点 | 每日挑战已提交标记（SET NX 抢占，冲突返回 409） |
-| `profile:stats:<role>:<id>` | string | 5 分钟 | 个人统计聚合缓存，成绩落库后立即失效 |
-| `mp:queue` | list | 永续 | 对战匹配队列（RPopLPush 出队匹配） |
-| `mp:room:<room_id>` | hash | 2 小时 | 对局房间状态（模式/回合/双方状态/题目/历史） |
+> 限频（登录 5 次锁定、验证码重发、游戏提交 10/min、代理 30/60 per min、排行榜 120/min）全部在**进程内滑动窗口**（`internal/ratelimit`）实现，多实例部署时由反代按实例分流；多人队列/房间状态在进程内存（`internal/multiplayer`）。
 
-### 数据流说明
+## 数据流说明
 
-- 游客绑定注册：校验 guest 令牌 → 建号 → 把 `guest_progress` 合并（累加场次/得分、取最高分）到 `user_progress` → 清理游客键
-- 成绩上报：`POST /api/games` 先落库 `game_results`，再对当前身份（guest/user）的进度哈希增量累计（`HINCRBY` 场次/总分/猜中轮数、`HSET` 最佳），进度快照由 `/me` 与 `/api/games/summary` 直接读取；同时校验该成绩是否为某模式新最佳，是则写入 `scores` 并更新排行榜 zset（`ZADD GT`，仅提升不降低），并使个人统计缓存失效；注册用户成绩落库后再触发成就判定（旁路，失败不影响上报）
-- 令牌旋转：refresh 以哈希形式仅存 Redis，换取时与提交值做恒时比较（`timingSafeEqual`），不匹配即整体吊销
-- 随机抽题：`GET /api/locations/random` 先从 Redis 池 `SRANDMEMBER` 取 ID（池 miss 时才按区域/难度查 PG 重建），只对抽中的 ID 回源查全量记录，避免每次抽题压数据库
-- Mapillary 代理：`/api/proxy/mapillary/*` 服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 Redis（搜索/媒体 URL/图片字节，TTL 24h）；每次上游调用前经滑动窗口限频（按 IP 计数）
-- 排行榜：数据源是 `scores` 表（`MAX(score) GROUP BY player_id`）；zset 仅作读缓存，每日 UTC 零点重建 + 清理 7 天前的日榜键，key 丢失时按需懒重建
-- 每日挑战：`GET /api/daily/today` 惰性抽题写入 `daily_challenges`；提交成绩时以 `user_daily` 键 SET NX 抢占（TTL 至 UTC 零点），抢不到返回 409，实现“每人每天一次”
-- 对战：`mp:queue` 列表双出队配对 → `mp:room:<id>` 哈希保存房间状态（回合/双方答案/总分）→ 结束自动落库 `game_results`（mode=duel），房间 2 小时后过期
+- 游客绑定注册：校验 guest 令牌 → 建号 → `guest_progress` 合并到 `user_progress` → 清理游客会话
+- 成绩上报：`POST /api/games` 先做防伪校验（`distanceKm` 与得分重算一致；daily 服务端权威结算），落库 `game_results` → 增量更新进度 → 新最佳写 `scores` → 注册用户触发成就判定
+- 令牌旋转：refresh 仅存 SHA-256 哈希，换取时恒时比较，不匹配即整体吊销
+- 随机抽题：先从缓存池取 ID 再 shuffle（crypto/rand），只回源查抽中的记录
+- Mapillary 代理：服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 `mapillary_cache`；每次上游调用前限频；图片 URL 经 SSRF 防护（仅 HTTPS + 拒绝私网/云元数据）
+- 每日挑战：`GET /api/daily/today` 惰性抽题；提交时 `daily_submissions` 主键冲突返回 409
+- 对战：进程内存队列双出队配对 → 房间状态（内存）→ 结束后按 `mode=duel` 落库 `game_results`，房间 2 小时后过期
 
 ## 本地开发环境
 
 ```bash
 cd backend
-npm run db:up          # docker compose 启动 PostgreSQL + Redis
-npm run db:migrate     # 迁移建表
+go run ./cmd/seed -data ../frontend/src/js/data.js   # 首次初始化题库（可选，开发期）
+go run ./cmd/server                                   # 启动（自动建表）
 ```
-
-开发容器配置见 `backend/docker-compose.yml`（PostgreSQL 16 + Redis 7）。

@@ -1,6 +1,6 @@
 # API 参考（`/api`）
 
-后端服务（Express 5），开发环境基址 `http://localhost:3000/api`。
+后端服务（Go + SQLite，单二进制），开发环境基址 `http://localhost:3000/api`。
 
 ## 通用约定
 
@@ -13,13 +13,13 @@
 
 ### `GET /api/health`
 
-探测 PostgreSQL 与 Redis 连通性。
+探测 SQLite 连通性。
 
 ```json
-{ "status": "ok", "checks": { "postgres": "up", "redis": "up" }, "timestamp": "2026-08-06T00:00:00.000Z" }
+{ "status": "ok", "checks": { "sqlite": "up" }, "timestamp": "2026-08-06T00:00:00.000Z" }
 ```
 
-全部连通返回 `200`；任一异常返回 `503` 且 `status: "degraded"`。
+全部正常返回 `200`；任一异常返回 `503` 且 `status: "degraded"`。
 
 ## 认证（`/api/auth`）
 
@@ -40,9 +40,9 @@
 { "email": "player@example.com" }
 ```
 
-- 60 秒内同一邮箱不可重发（Redis 限频）
-- 验证码 6 位数字，10 分钟有效，最多 5 次校验
-- 邮箱已注册返回 `409`
+- 60 秒内同一邮箱不可重发（SQLite `verification_codes.last_sent_at`）
+- 验证码 6 位数字，10 分钟有效，最多 5 次校验（仅存 HMAC-SHA256 哈希）
+- 已注册与未注册邮箱均返回 `200`（防账号枚举）；注册阶段对已占用邮箱返回 `409`
 
 响应：`{ "message": "验证码已发送" }`。SMTP 未配置时验证码打印到服务日志（开发模式）。
 
@@ -59,7 +59,7 @@
 ```
 
 - `username`：3-20 位字母、数字或下划线
-- `password`：8-72 位（bcrypt 成本因子 10 存储）
+- `password`：8-72 位（bcrypt 成本因子 12 存储）
 - `code`：6 位数字验证码，校验后即作废
 - `guestToken`：调用后会校验其为游客令牌并**迁移游客游戏进度**到新账号
 
@@ -68,9 +68,11 @@
 ```json
 {
   "user": { "id": "uuid", "username": "player_01", "email": "player@example.com", "createdAt": "..." },
-  "tokenPair": { "accessToken": "...", "refreshToken": "..." }
+  "tokenPair": { "accessToken": "..." }
 }
 ```
+
+刷新令牌仅通过 HttpOnly Cookie `mma_refresh` 下发，绝不进入响应体。
 
 ### `POST /api/auth/login`
 
@@ -78,7 +80,7 @@
 { "identifier": "player@example.com", "password": "secret123" }
 ```
 
-`identifier` 支持邮箱或用户名。同一账号连错 5 次锁 15 分钟（Redis 计数）。
+`identifier` 支持邮箱或用户名。同一账号连错 5 次锁 15 分钟（进程内计数，恒时比较防时序枚举）。
 
 成功返回 `200`，结构同注册（`user` + `tokenPair`）。
 
@@ -88,10 +90,10 @@
 { "refreshToken": "..." }
 ```
 
-- 旋转式：换发新令牌对，旧 refresh 立即作废（Redis `refresh:<user_id>` 存储哈希）
-- 提交已作废/不匹配的 refresh 视为复用攻击，会吊销该用户全部令牌
+- 旋转式：换发新令牌对，旧 refresh 立即作废（SQLite `refresh_tokens` 仅存 SHA-256 哈希，事务内原子轮换）
+- 已过期记录会被清除；提交已作废/不匹配的 token 返回 `401`（哈希不匹配不删除，避免并发旋转误伤）
 
-成功返回 `{ "accessToken": "...", "refreshToken": "..." }`。
+成功返回 `{ "accessToken": "..." }`（新 refresh 经 Cookie 下发）。
 
 ### `POST /api/auth/logout`
 
@@ -107,7 +109,7 @@
 { "guestId": "uuid", "guestToken": "...", "username": "游客_ab12" }
 ```
 
-游客身份与游戏进度存 Redis，30 天过期；`guestToken` 即游客版 access token（同样 30 天有效）。
+游客身份与游戏进度存 SQLite（`guest_sessions` / `guest_progress`），30 天过期；`guestToken` 即游客版 access token（同样 30 天有效）。
 
 ### `GET /api/auth/me`
 
@@ -123,11 +125,11 @@
   "progress": { "totalRounds": 0, "totalScore": 0, "bestScore": 0, "correctGuesses": 0 } }
 ```
 
-用户的 `progress` 与游客同构，均取自 Redis 进度快照（由成绩上报增量维护）。
+用户的 `progress` 与游客同构，均取自 SQLite 进度快照（由成绩上报增量维护）。
 
 ## 游戏成绩（`/api/games`）
 
-需 Bearer 认证（游客或注册用户）。提交走 Redis 滑动窗口限频（按身份，10 次/分钟）。
+需 Bearer 认证（游客或注册用户）。提交走进程内滑动窗口限频（按身份，10 次/分钟）。
 
 | 方法 | 路径 | 说明 |
 | ---- | ---- | ---- |
@@ -203,7 +205,7 @@
 | `date` | 否 | `daily` 期需 YYYY-MM-DD；缺省取当天（UTC） |
 
 - 记为各玩家在 `scores` 表中的最高分（每人每个模式仅记一次最佳）
-- 读 Redis 有序集合（`lb:overall:<mode>` / `lb:daily:<mode>:<日期>`），key 缺失时自动按数据库重建（重建带 60s Redis 锁限频，且仅对总榜 / 当天日榜触发；历史日榜缺键直接返回空榜），夜间 UTC 零点例行重建
+- 读 SQLite 缓存表（`lb:overall:<mode>` / `lb:daily:<mode>:<日期>`），key 缺失时自动按 `scores` 表重建（仅对总榜 / 当天日榜触发；历史日榜缺键直接返回空榜），夜间 UTC 零点例行重建
 - 日榜/总榜均取个人最高分，故 `overall` 为累积性排名；公开接口已按 IP 限频（120 次/分钟）
 
 ```json
@@ -223,7 +225,7 @@
     "country": null, "city": null, "region": "asia", "difficulty": 1, "mapillaryId": null, "panoramaUrl": null } ] }
 ```
 
-- `played`：Redis 抢占（`user_daily:<id>:<date>`）已生效则为 `true`，表示当天已提交
+- `played`：`daily_submissions` 已存在记录（`user_daily:<id>:<date>` 抢占）则为 `true`，表示当天已提交
 - 题单失效（如重跑 seed 使自增 ID 漂移）时自愈重抽，不会返回空题单
 
 ## 个人统计（`/api/profile`）
@@ -241,7 +243,7 @@
 
 ### `GET /api/locations/random`
 
-随机抽取题目。题目 ID 池按参数维度缓存于 Redis（`locations:pool:<区域|all>:<难度|all>`），池 miss 时回源 PostgreSQL 重建，过期自动重建：
+随机抽取题目。题目 ID 池按参数维度缓存于 SQLite 缓存表（`locations:pool:<区域|all>:<难度|all>`），池 miss 时回源 `locations` 表重建，过期自动重建；抽中后用 crypto/rand 打乱去重：
 
 | 查询参数 | 必填 | 说明 |
 | ---- | ---- | ---- |
@@ -259,7 +261,7 @@
 
 ### `GET /api/locations/stats`
 
-题库总量与各洲计数（Redis 缓存 5 分钟）：
+题库总量与各洲计数（SQLite 缓存表 5 分钟）：
 
 ```json
 { "total": 1570, "byRegion": { "asia": 527, "africa": 269, "europe": 188, "northamerica": 200, "oceania": 193, "southamerica": 193 } }
@@ -267,7 +269,7 @@
 
 ## Mapillary 代理（`/api/proxy/mapillary`）
 
-服务端携带 `MAPILLARY_TOKEN` 请求 Mapillary，前端只与后端通信，**密钥永不下发**。两类接口均先过 Redis 滑动窗口限频（按 IP），再查 Redis 缓存，miss 时回源上游。
+服务端携带 `MAPILLARY_TOKEN` 请求 Mapillary，前端只与后端通信，**密钥永不下发**。两类接口均先过进程内滑动窗口限频（按 IP），再查 SQLite 缓存表，miss 时回源上游。
 
 ### `GET /api/proxy/mapillary/search`
 
@@ -330,11 +332,11 @@ Prometheus 文本暴露格式；请求需带 `Authorization: Bearer <METRICS_TOK
 | ---- | ---- | ---- |
 | `accessToken` | 注册用户 | 15 分钟 |
 | `guestToken` | 游客 | 30 天 |
-| `refreshToken` | 注册用户 | 7 天（Redis 存 SHA-256 哈希） |
+| `refreshToken` | 注册用户 | 7 天（SQLite 存 SHA-256 哈希） |
 
 JWT 载荷含 `sub`、`role`（`user` / `guest`）、`type`（access / refresh）与唯一 `jti`。
 
 ## 数据模型
 
 - 用户表结构见 [database.md](database.md)
-- 游客/缓存的 Redis 键设计见 [database.md](database.md)
+- 游客/缓存的 SQLite 键设计见 [database.md](database.md)

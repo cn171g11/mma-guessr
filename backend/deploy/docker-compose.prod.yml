@@ -3,59 +3,22 @@
 # ⚠️ 严禁直接复用仓库根目录 backend/docker-compose.yml（仅本地开发）！
 #
 # 安全要点（对应 docs/deploy.md 生产部署清单）：
-#   1) PostgreSQL / Redis 不映射任何宿主机端口，仅后端容器内网可达 → 公网零暴露
-#   2) 所有密钥 / 密码由 deploy/.env 注入，模板见 .env.prod.example（生成强随机值，勿留默认）
+#   1) 后端为 Go 单二进制（纯标准库 + SQLite，无外部服务依赖）
+#   2) SQLite 数据文件挂载命名卷，随容器持久化
 #   3) Nginx 反向代理对外只暴露 80 / 443，终结 HTTPS（证书挂 /etc/letsencrypt）
-#   4) 数据持久化：pgdata / redisdata 命名卷；Redis 开启 AOF + RDB 双重持久化
-#   5) PostgreSQL 定时备份由 scripts/backup-postgres.sh（宿主 cron）负责
+#   4) 所有密钥由 deploy/.env 注入，模板见 .env.prod.example（生成强随机值，勿留默认）
+#   5) SQLite 定时备份由 scripts/backup-sqlite.sh（宿主 cron）负责
 # =============================================================
 
 services:
-    postgres:
-        image: postgres:16-alpine
-        container_name: mma-guessr-postgres
-        restart: unless-stopped
-        env_file: .env
-        environment:
-            TZ: Asia/Shanghai
-        # 无 ports 段：容器仅在内网网络中被 backend 访问
-        volumes:
-            - pgdata:/var/lib/postgresql/data
-        healthcheck:
-            test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
-            interval: 10s
-            timeout: 5s
-            retries: 10
-
-    redis:
-        image: redis:7-alpine
-        container_name: mma-guessr-redis
-        restart: unless-stopped
-        env_file: .env
-        # AOF + RDB 双重持久化 + requirepass（密码来自 .env）
-        command:
-            - 'sh'
-            - '-c'
-            - redis-server --appendonly yes --save 900 1 --save 300 10 --save 60 10000 --requirepass "$$REDIS_PASSWORD"
-        volumes:
-            - redisdata:/data
-        healthcheck:
-            test: ['CMD-SHELL', 'redis-cli -a $$REDIS_PASSWORD ping | grep PONG']
-            interval: 10s
-            timeout: 5s
-            retries: 10
-
     backend:
         image: ghcr.io/cn171g11/mma-guessr-backend:latest
         container_name: mma-guessr-backend
         restart: unless-stopped
         env_file: .env
-        depends_on:
-            postgres:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
         # 无 ports 段：仅内网暴露 3000 给 Nginx
+        volumes:
+            - sqldata:/app/data
         healthcheck:
             test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1']
             interval: 30s
@@ -80,5 +43,4 @@ services:
             - backend
 
 volumes:
-    pgdata:
-    redisdata:
+    sqldata:

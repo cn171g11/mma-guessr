@@ -5,17 +5,16 @@
 [![License](https://img.shields.io/badge/Apache%202.0-blue?logo=apache)](https://github.com/cn171g11/mma-guessr/blob/main/LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/cn171g11/mma-guessr?logo=git)](https://github.com/cn171g11/mma-guessr/commits/main)
 
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/typescript-%3E%3D5.0.0-blue)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/postgresql-%3E%3D15.0-blue)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/redis-%3E%3D7.0-red)](https://redis.io/)
+[![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)](https://go.dev/)
+[![SQLite](https://img.shields.io/badge/sqlite-modernc-003B57?logo=sqlite)](https://modernc.org/sqlite)
+[![Socket.IO](https://img.shields.io/badge/socket.io-4.8.1-010101?logo=socket.io)](https://socket.io/)
 
 基于 [Mapillary](https://www.mapillary.com/) 街景数据的 **GeoGuessr 风格** 地理猜谜游戏，前端 + 后端一体仓库。
 
 | 目录         | 说明                                            | 入口文档                      |
 | ------------ | ----------------------------------------------- | ----------------------------- |
 | `frontend/`  | 游戏前端（纯静态 HTML/CSS/JS，GitHub Pages 部署） | [docs/frontend.md](docs/frontend.md) |
-| `backend/`   | 后端服务（Node.js + Express + TypeScript + PostgreSQL + Redis） | [docs/backend.md](docs/backend.md) |
+| `backend/`   | 后端服务（Go + SQLite 单二进制，含多人对战 Engine.IO 服务端） | [docs/backend.md](docs/backend.md) |
 | `.github/`   | CI/CD 工作流（前端校验/发布、后端校验/镜像）       | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | `docs/`      | 主题文档汇总（frontend / backend / api / database / build / deploy / testing / locations / scripts） | [docs/README.md](docs/README.md) |
 
@@ -43,9 +42,9 @@ npx serve .
 
 ```bash
 cd backend
-npm run db:up      # docker compose 启动 PostgreSQL + Redis
-npm install
-npm run dev        # http://localhost:3000/api/health
+go build ./...                  # 编译全部包
+go run ./cmd/seed -data ../frontend/src/js/data.js   # 导入题库（1570 条，幂等）
+go run ./cmd/server             # 启动，http://localhost:3000/api/health
 ```
 
 详细说明见 [docs/frontend.md](docs/frontend.md) 与 [docs/backend.md](docs/backend.md)。
@@ -58,15 +57,13 @@ npm run dev        # http://localhost:3000/api/health
 | ----------------- | ------------------------------------- | ------------------------------------------------------------- |
 | `ci.yml`          | `frontend/**` 推送 `main` / PR        | 前端：Prettier 风格、JS 语法、题库数据校验                     |
 | `deploy.yml`      | `frontend/**` 推送 `main`（文档除外） | 前端：校验通过后发布 GitHub Pages                              |
-| `backend.yml`     | `backend/**` 推送 `main` / PR         | 后端：快速检查（typecheck / lint / 构建）；手动可选择集成测试或推送镜像 |
-| `backend-checks.yml` | 供其他工作流复用（`workflow_call`）| 后端检查 + PG/Redis 集成测试的共享实现                        |
-| `release.yml`     | 手动（`workflow_dispatch`，填版本号） | 集成测试 → 推送 GHCR `:版本` 镜像 → 打 `v版本` 标签 → 创建 GitHub Release |
+| `backend.yml`     | `backend/**` 推送 `main` / PR         | 后端：vet / build / 全量测试（含 race）；手动可选择推送镜像    |
+| `backend-checks.yml` | 供其他工作流复用（`workflow_call`）| Go 检查 + e2e 测试（内存 SQLite，无外部依赖）                  |
+| `release.yml`     | 手动（`workflow_dispatch`，填版本号） | 质量门禁 → 跨平台二进制产物 → 推送 GHCR `:版本` 镜像 → 打 `v版本` 标签 → 创建 GitHub Release |
 | `streetview.yml`  | 手动（`workflow_dispatch`）           | 街景覆盖验证，报告存为 artifact                               |
 
-> 后端推送到 `main` 默认只做快速检查（typecheck / lint / 构建）；完整的集成测试与镜像推送
-> 通过 Actions 页手动触发 `backend.yml`（`mode=integration` / `mode=image`）或 `release.yml` 完成。
-> 集成验证通过 `docker/service` 方式在 CI 中临时启动 PostgreSQL 与 Redis，
-> 冒烟测试 `/api/health` 返回 `status: ok` 才算通过。
+> 后端推送到 `main` 默认跑完整 Go 套件（vet / build / test / race，全部在内存 SQLite 上，无需外部服务）；
+> 镜像推送通过 Actions 页手动触发 `backend.yml`（`mode=image`）或 `release.yml` 完成。
 
 ---
 
@@ -80,11 +77,12 @@ mma-guessr/
 │   ├── src/js/               # config.js（配置）/ data.js（题库）/ game.js（逻辑）
 │   ├── tools/                # 题库维护与验证脚本
 │   └── archive/              # 已归档的原型文件
-├── backend/                  # 后端服务
-│   ├── src/                  # Express + TS 源码
-│   ├── scripts/              # 运维脚本（check/build/test/clean/debug/deploy）
-│   ├── docker-compose.yml    # 开发环境：PostgreSQL + Redis
-│   └── Dockerfile            # 生产镜像（多阶段构建）
+├── backend/                  # 后端服务（Go + SQLite 单二进制）
+│   ├── cmd/                  # server（启动）/ seed（题库导入）
+│   ├── internal/             # auth/games/leaderboard/achievements/daily/profile/multiplayer/locations/mapillary 等域
+│   ├── test/                 # e2e 测试（httptest + 内存 SQLite）
+│   ├── Dockerfile            # 生产镜像（多阶段构建）
+│   └── deploy/               # 生产部署栈（compose + Nginx + SQLite 备份）
 ├── docs/                     # 主题文档（README 索引 + frontend/backend/api/database/build/deploy/testing/locations/scripts）
 ├── .github/workflows/        # CI/CD 流水线
 ├── AGENTS.md                 # AI 助手项目指令（opencode 读取）
