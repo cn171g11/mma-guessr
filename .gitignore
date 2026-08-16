@@ -41,5 +41,8 @@ AGENTS.md
 CLAUDE.md
 SKILL.md
 
-# Redis
 *.rdb
+*.db*
+
+mma-guessr
+*.exe
