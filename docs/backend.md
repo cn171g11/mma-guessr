@@ -2,7 +2,7 @@
 
 MmaGuessr 后端服务：**Go（纯标准库）+ SQLite**，编译为单个无外部依赖的二进制。
 
-> 架构决策、API 契约与兼容性约束见根目录 [p.md](../p.md) 与 [api.md](api.md)。
+> 架构决策、API 契约与兼容性约束见 [api.md](api.md)。
 
 ## 技术栈
 
@@ -66,8 +66,12 @@ go run ./cmd/seed -data ../frontend/src/js/data.js
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | — | 邮箱验证码 SMTP 配置；未配置时开发模式打印验证码到日志 |
 | `CORS_ALLOWED_ORIGINS` | `localhost:3000` | 前端来源白名单（逗号分隔）；生产必须配置为前端实际域名 |
 | `COOKIE_SAME_SITE` | `lax` | refresh cookie 的 SameSite（lax/strict/none） |
+| `PAYLOAD_PADDING` | `0` | 载荷填充（网络加固）：`1` 时对 JSON 对象响应注入随机 `_pad` 字段混淆长度指纹（数组/文本端点不受影响） |
 | `METRICS_TOKEN` | — | `/api/metrics` 的 Bearer 令牌；生产留空则端点拒绝访问 |
 | `TRUST_PROXY` | `0` | 可信反代跳数（如 `1`）；启用后按真实客户端 IP 限频 |
+| `SPONSOR_ADMIN_TOKEN` | — | 赞助写端点（POST/DELETE `/api/sponsors`）的 Bearer 令牌；留空则写端点不可用 |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` | — | Google 第三方登录（可选）；三者齐备才启用，回调须为 HTTPS（本地开发可 `http://localhost`） |
+| `OAUTH_STATE_SECRET` | dev 默认值 | OAuth state 令牌签名密钥；配置了任一 Google OAuth 变量时为必填 |
 
 ## 目录结构
 
@@ -81,10 +85,14 @@ backend/
 │   ├── auth/                       # 认证：密码、JWT、验证码、游客、刷新令牌
 │   ├── games/                      # 成绩域：提交/查询/防伪校验/服务端计分
 │   ├── leaderboard/                # 排行榜：scores 表 MAX() 聚合 + 每日 UTC 0 点自动重建
-│   ├── achievements/               # 成就与称号（14 定义 + 解锁判定）
-│   ├── daily/                      # 每日挑战：惰性抽题 + 每日一次
-│   ├── profile/                    # 个人统计聚合
-│   ├── multiplayer/                # 对战：Engine.IO v4 polling + 匹配队列 + 房间
+│   ├── achievements/               # 成就与称号（19 定义 + 聚合解锁判定）
+│   ├── daily/                      # 每日挑战：惰性抽题 + 每日一次 + 每日计分榜
+│   ├── profile/                    # 个人统计聚合 + 地点图鉴
+│   ├── ratings/                    # 天梯排位：赛季评分 / 段位 / 连胜 / 天梯榜
+│   ├── social/                     # 好友关系 + 赞助者记录
+│   ├── facts/                      # 地点冷知识（curated + 模板兜底）
+│   ├── oauth/                      # 第三方登录：Google 授权码流程 + state 防重放
+│   ├── multiplayer/                # 对战：Engine.IO v4 polling + 匹配队列 + 房间（含私房）
 │   ├── locations/                  # 题库：随机抽题池、统计缓存
 │   ├── mapillary/                  # 图源代理：search 缓存 / 图片 SSRF 防护
 │   ├── config/                     # 环境变量加载与校验

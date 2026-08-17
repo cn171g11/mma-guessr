@@ -16,6 +16,7 @@ import (
 	"mma-guessr/backend/internal/config"
 	"mma-guessr/backend/internal/daily"
 	"mma-guessr/backend/internal/db"
+	"mma-guessr/backend/internal/facts"
 	"mma-guessr/backend/internal/games"
 	"mma-guessr/backend/internal/kv"
 	"mma-guessr/backend/internal/leaderboard"
@@ -25,8 +26,11 @@ import (
 	"mma-guessr/backend/internal/mapillary"
 	"mma-guessr/backend/internal/metrics"
 	"mma-guessr/backend/internal/multiplayer"
+	"mma-guessr/backend/internal/oauth"
 	"mma-guessr/backend/internal/profile"
+	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/server"
+	"mma-guessr/backend/internal/social"
 )
 
 // version is injected at build time via -ldflags "-X main.version=...".
@@ -93,6 +97,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	factsSvc := facts.NewService(conn)
+	if err := factsSvc.Seed(); err != nil {
+		logger.Error("seed facts", "error", err)
+	}
+
 	tokens := auth.NewTokenService(
 		cfg.AccessSecret,
 		cfg.RefreshSecret,
@@ -132,13 +141,24 @@ func main() {
 	leaderboardSvc := leaderboard.NewService(conn, cache)
 	profileSvc := profile.NewService(conn, cache)
 	achievementsSvc := achievements.NewService(conn, logger)
+	ratingsSvc := ratings.NewService(conn)
+	socialSvc := social.NewService(conn)
 	gamesStore := games.NewStore(conn)
-	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc)
+	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc)
 	mapillarySvc := mapillary.NewService(cfg.MapillaryToken, cache)
 
 	engine := multiplayer.NewEngineIO(logger)
-	mp := multiplayer.NewService(engine, store, locationsStore, gamesSvc, tokens, logger)
+	mp := multiplayer.NewService(engine, store, locationsStore, gamesSvc, tokens, ratingsSvc, logger)
 	engine.SetHandler(mp)
+
+	// Optional third-party sign-in: only constructed when the provider
+	// credentials are present in the environment; the endpoints then degrade
+	// to an empty provider list / 404 for the unconfigured case.
+	var oauthSvc *oauth.Service
+	if cfg.GoogleOAuthClientID != "" && cfg.GoogleOAuthSecret != "" && cfg.GoogleOAuthRedirectURI != "" {
+		google := oauth.NewGoogleProvider(cfg.GoogleOAuthClientID, cfg.GoogleOAuthSecret, cfg.GoogleOAuthRedirectURI)
+		oauthSvc = oauth.NewService(cfg.OAuthStateSecret, google)
+	}
 
 	registry := metrics.NewRegistry(nil)
 
@@ -153,6 +173,10 @@ func main() {
 		Achievements: achievementsSvc,
 		Mapillary:    mapillarySvc,
 		Multiplayer:  mp,
+		Ratings:      ratingsSvc,
+		Social:       socialSvc,
+		Facts:        factsSvc,
+		OAuth:        oauthSvc,
 		Cache:        cache,
 	}
 

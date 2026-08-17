@@ -83,10 +83,78 @@
 
 | 表 | 说明 |
 | --- | --- |
-| `achievements` | 14 条静态定义（`code` 主键 / name / description / icon / has_title / title），启动时 `INSERT OR IGNORE` 种子 |
+| `achievements` | 19 条静态定义（`code` 主键 / name / description / icon / has_title / title），启动时 `INSERT OR IGNORE` 种子 |
 | `user_achievements` | 解锁记录 `(user_id, achievement_code)` 联合主键，级联删除 |
 
-解锁依据 `game_results` 聚合（局数 / 轮数 / 总分 / 最佳 / 满分轮 / 模式覆盖 / 命中率），由 `/api/achievements` 读写。
+解锁依据 `game_results` 聚合（局数 / 轮数 / 总分 / 最佳 / 满分轮 / 模式覆盖 / 命中率 / 最佳连胜 / 最大连续答对 / 去重地区 / 每日满分局数），由 `/api/achievements` 读写。
+
+### `friends`（好友关系）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `requester_id` | `TEXT` | 主键联合 → `users.id`，发起方 |
+| `addressee_id` | `TEXT` | 主键联合 → `users.id`，接收方 |
+| `status` | `TEXT` | CHECK `pending` / `accepted` / `rejected` |
+| `created_at` / `updated_at` | `TEXT` | 非空 |
+
+约束：`PRIMARY KEY(requester_id, addressee_id)`、`CHECK(requester_id != addressee_id)`，另建 `(addressee_id, status)` 索引。每个关系仅存一行：发起方写 `pending`，接收方接受置 `accepted`（双方互为好友），拒绝置 `rejected`（再次发起会重新打开为 `pending`）。
+
+### `season_ratings`（天梯排位）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `user_id` | `TEXT` | 主键 → `users.id`（每赛季一行） |
+| `season` | `TEXT` | 非空（如 `2026-S1`），与 `rating` 建 `(season, rating DESC)` 索引 |
+| `rating` | `INTEGER` | 非空，初始 1000，区间 [100, 3000] |
+| `tier` | `INTEGER` | 非空，1-7（青铜→宗师） |
+| `games_played` / `wins` | `INTEGER` | 非负，累计对局数 / 胜场数 |
+| `updated_at` | `TEXT` | 非空 |
+
+单机对局 `ApplyGame`、对战 `RecordDuel`（平局不结算连胜）自动更新；历史赛季行保留但不参与榜单。
+
+### `user_streaks`（用户连胜快照）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `user_id` | `TEXT` | 主键 → `users.id` |
+| `current_streak` | `INTEGER` | 非负（当前连胜） |
+| `best_streak` | `INTEGER` | 非负（历史最佳连胜） |
+| `updated_at` | `TEXT` | 非空 |
+
+多人对战结算时刷新：胜 +1、负清零、平局不变；`/api/ratings` 将 `best_streak` 联表返回。
+
+### `location_facts`（地点冷知识）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `location_id` | `INTEGER` | 主键 → `locations.id`，级联删除 |
+| `fact` | `TEXT` | 非空 |
+
+启动时种子 10 条著名地点 curated 事实（`INSERT OR IGNORE`），未命中的地点由 `internal/facts` 按区域模板兜底生成，无需回源。
+
+### `sponsors`（赞助者记录）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `id` | `INTEGER` | 主键自增 |
+| `name` | `TEXT` | 非空 |
+| `note` | `TEXT` | 可空 |
+| `amount_cents` | `INTEGER` | 非负，默认 0（金额分，用于榜单排序） |
+| `visible` | `INTEGER` | 默认 1（是否公开展示） |
+| `created_at` | `TEXT` | 非空 |
+
+写端点由 `SPONSOR_ADMIN_TOKEN`（`Authorization: Bearer`，常量时间比较）保护，读取仅返回 `visible = 1` 的行。
+
+### `oauth_accounts`（第三方登录绑定）
+
+| 列 | 类型 | 约束 |
+| --- | --- | --- |
+| `provider` | `TEXT` | 主键联合（如 `google`） |
+| `provider_id` | `TEXT` | 主键联合（提供方用户 ID） |
+| `user_id` | `TEXT` | 外键 → `users.id`，级联删除 |
+| `created_at` | `TEXT` | 非空 |
+
+另建 `(user_id)` 索引。首次第三方登录自动创建账号并写入绑定；`provider + provider_id` 唯一，实现跨会话稳定识别同一人。
 
 ### 会话与令牌（替代原 Redis 键）
 
@@ -122,7 +190,10 @@
 - 随机抽题：先从缓存池取 ID 再 shuffle（crypto/rand），只回源查抽中的记录
 - Mapillary 代理：服务端携带 `MAPILLARY_TOKEN` 请求上游，结果缓存到 `mapillary_cache`；每次上游调用前限频；图片 URL 经 SSRF 防护（仅 HTTPS + 拒绝私网/云元数据）
 - 每日挑战：`GET /api/daily/today` 惰性抽题；提交时 `daily_submissions` 主键冲突返回 409
-- 对战：进程内存队列双出队配对 → 房间状态（内存）→ 结束后按 `mode=duel` 落库 `game_results`，房间 2 小时后过期
+- 对战：进程内存队列双出队配对 → 房间状态（内存）→ 结束后按 `mode=duel` 落库 `game_results`，房间 2 小时后过期；私房（`mp:createPrivate`）生成 6 位房间码，等待房 10 分钟 TTL，按码加入
+- 天梯：注册用户单机提交 `game_results` 后 `ratings.ApplyGame`（按总分换算评分增量），对战结束 `ratings.RecordDuel`（胜 +1 / 负清零 / 平局跳过）并刷新 `user_streaks`，`/api/ratings` 联表返回连胜快照
+- 每日计分榜：`daily.Leaderboard` 实时聚合 `daily_submissions` → `game_results` → `users`（当日得分降序）
+- 好友：发起请求落 `friends(status=pending)` 一行，接受方接受后置 `accepted`，双方各自可见
 
 ## 本地开发环境
 

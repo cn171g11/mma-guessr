@@ -25,7 +25,7 @@ func newProxyEnv(t *testing.T) (*testEnv, *httptest.Server) {
 		case strings.Contains(r.URL.Path, "/images"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": []map[string]any{
-					{"id": "img_1", "geometry": map[string]any{"type": "Point", "coordinates": []float64{104.1, 30.6}}, "is_pano": true},
+					{"id": "img_1", "geometry": map[string]any{"type": "Point", "coordinates": []float64{104.1, 30.6}}, "is_pano": true, "thumb_1024_url": "https://cdn.example.com/img_1_1024.jpg", "thumb_2048_url": "https://cdn.example.com/img_1_2048.jpg"},
 				},
 			})
 		case strings.HasPrefix(r.URL.Path, "/media_1"):
@@ -64,6 +64,35 @@ func TestMapillaryProxy(t *testing.T) {
 
 	t.Run("invalid bbox rejected", func(t *testing.T) {
 		resp := e.request(t, http.MethodGet, "/api/proxy/mapillary/search?bbox=abc&limit=10", "", nil)
+		if resp.status != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.status)
+		}
+	})
+
+	t.Run("search includes CDN thumbnail urls", func(t *testing.T) {
+		resp := e.request(t, http.MethodGet, "/api/proxy/mapillary/search?bbox=104,30,105,31&limit=10", "", nil)
+		if resp.status != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %v", resp.status, resp.body)
+		}
+		data := resp.nestedArray("data")
+		image := data[0].(map[string]any)
+		if image["thumb_2048_url"] != "https://cdn.example.com/img_1_2048.jpg" {
+			t.Fatalf("expected thumb_2048_url in search result, got %v", image)
+		}
+	})
+
+	t.Run("media resolves CDN url without fetching bytes", func(t *testing.T) {
+		resp := e.request(t, http.MethodGet, "/api/proxy/mapillary/media/media_1?width=1024", "", nil)
+		if resp.status != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %v", resp.status, resp.body)
+		}
+		if resp.str("url") != "https://cdn.example.com/img_1_1024.jpg" {
+			t.Fatalf("expected CDN url, got %v", resp.body)
+		}
+	})
+
+	t.Run("media rejects invalid image id", func(t *testing.T) {
+		resp := e.request(t, http.MethodGet, "/api/proxy/mapillary/media/bad!id", "", nil)
 		if resp.status != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", resp.status)
 		}

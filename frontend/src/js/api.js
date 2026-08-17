@@ -282,6 +282,21 @@ const MmaApi = (() => {
             if (date) params.set('date', date);
             return request('/api/leaderboard?' + params.toString());
         },
+        getGame: (id) => request('/api/games/' + id),
+        getDailyLeaderboard: (date) =>
+            request('/api/daily/leaderboard' + (date ? '?date=' + encodeURIComponent(date) : '')),
+        getRatings: () => request('/api/ratings'),
+        getCollections: () => request('/api/profile/collections'),
+        getFact: (name) => request('/api/locations/fact?name=' + encodeURIComponent(name)),
+        listFriends: () => request('/api/friends'),
+        listFriendRequests: () => request('/api/friends/requests'),
+        sendFriendRequest: (targetUserId) =>
+            request('/api/friends/requests', { method: 'POST', body: { targetUserId } }),
+        acceptFriendRequest: (userId) => request('/api/friends/requests/' + userId + '/accept', { method: 'POST' }),
+        rejectFriendRequest: (userId) => request('/api/friends/requests/' + userId + '/reject', { method: 'POST' }),
+        removeFriend: (userId) => request('/api/friends/' + userId, { method: 'DELETE' }),
+        getSponsors: () => request('/api/sponsors'),
+        getOAuthProviders: () => request('/api/oauth/providers'),
         sendVerificationCode: (email) => request('/api/auth/verification-code', { method: 'POST', body: { email } }),
         login: (identifier, password) =>
             request('/api/auth/login', { method: 'POST', body: { identifier, password } }).then(afterAuth),

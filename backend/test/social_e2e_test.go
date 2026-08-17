@@ -132,14 +132,14 @@ func TestAchievements(t *testing.T) {
 	access := registerUser(t, e, uniqueUsername("tester"), randomEmail("ach"), validPassword).
 		nestedStr("tokenPair", "accessToken")
 
-	t.Run("list returns 14 achievements with unlock states", func(t *testing.T) {
+	t.Run("list returns all achievements with unlock states", func(t *testing.T) {
 		resp := e.request(t, http.MethodGet, "/api/achievements", access, nil)
 		if resp.status != http.StatusOK {
 			t.Fatalf("expected 200, got %d", resp.status)
 		}
 		achievements := resp.nestedArray("achievements")
-		if len(achievements) != 14 {
-			t.Fatalf("expected 14 achievements, got %d", len(achievements))
+		if len(achievements) != 19 {
+			t.Fatalf("expected 19 achievements, got %d", len(achievements))
 		}
 		if resp.str("equippedTitle") != "" {
 			t.Fatalf("expected no equipped title, got %v", resp.body["equippedTitle"])

@@ -47,6 +47,11 @@ var Definitions = []Meta{
 	{Code: "best_20k", Name: "高分达人", Description: "单局成绩达到 20,000 分", Icon: "🚀", HasTitle: true, Title: strPtr("高分达人")},
 	{Code: "china_10", Name: "中国通", Description: "累计完成 10 局中国模式", Icon: "🐉", HasTitle: true, Title: strPtr("中国通")},
 	{Code: "landmark_10", Name: "地标巡礼", Description: "累计完成 10 局地标模式", Icon: "🗼"},
+	{Code: "streak_3", Name: "三连胜", Description: "对战模式连胜 3 场", Icon: "🔥"},
+	{Code: "streak_10", Name: "十连胜", Description: "对战模式连胜 10 场", Icon: "⚡", HasTitle: true, Title: strPtr("十连胜")},
+	{Code: "consecutive_5", Name: "连环射手", Description: "单局内连续答对 5 轮", Icon: "🎯"},
+	{Code: "regions_4", Name: "环球旅行家", Description: "累计体验 4 个不同区域", Icon: "🗺️", HasTitle: true, Title: strPtr("环球旅行家")},
+	{Code: "daily_full", Name: "每日满分", Description: "单次每日挑战每轮均获满分", Icon: "🏅"},
 }
 
 // Aggregates is the server-authoritative unlock criteria snapshot.
@@ -62,6 +67,10 @@ type Aggregates struct {
 	DailyCount     int
 	ChinaCount     int
 	LandmarkCount  int
+	BestStreak     int
+	MaxConsecutive int
+	DistinctRegions int
+	PerfectDailyGames int
 }
 
 // Service evaluates and manages achievements.
@@ -100,6 +109,11 @@ func EvaluateUnlocked(a Aggregates) []string {
 		{"best_20k", a.BestScore >= 20_000},
 		{"china_10", a.ChinaCount >= 10},
 		{"landmark_10", a.LandmarkCount >= 10},
+		{"streak_3", a.BestStreak >= 3},
+		{"streak_10", a.BestStreak >= 10},
+		{"consecutive_5", a.MaxConsecutive >= 5},
+		{"regions_4", a.DistinctRegions >= 4},
+		{"daily_full", a.PerfectDailyGames >= 1},
 	}
 	for _, condition := range conditions {
 		if condition.met {
@@ -169,6 +183,43 @@ func (s *Service) FetchAggregates(userID string) (Aggregates, error) {
 		   AND (SELECT COUNT(*) FROM json_each(rounds)
 		        WHERE CAST(json_extract(value, '$.score') AS INTEGER) < 5000) = 0`,
 		userID).Scan(&a.PerfectGames)
+	if err != nil {
+		return a, err
+	}
+	err = s.conn.QueryRow(
+		`SELECT COUNT(DISTINCT region) FROM game_results
+		 WHERE player_type = 'user' AND player_id = ? AND region IS NOT NULL AND region != ''`,
+		userID).Scan(&a.DistinctRegions)
+	if err != nil {
+		return a, err
+	}
+	err = s.conn.QueryRow(
+		`SELECT COUNT(*) FROM game_results
+		 WHERE player_type = 'user' AND player_id = ? AND mode = 'daily' AND json_array_length(rounds) > 0
+		   AND (SELECT COUNT(*) FROM json_each(rounds)
+		        WHERE CAST(json_extract(value, '$.score') AS INTEGER) < 5000) = 0`,
+		userID).Scan(&a.PerfectDailyGames)
+	if err != nil {
+		return a, err
+	}
+	err = s.conn.QueryRow(
+		`SELECT COALESCE((SELECT best_streak FROM user_streaks WHERE user_id = ?), 0)`,
+		userID).Scan(&a.BestStreak)
+	if err != nil {
+		return a, err
+	}
+	err = s.conn.QueryRow(
+		`SELECT COALESCE(MAX(run_len), 0) FROM (
+			SELECT COUNT(*) AS run_len FROM (
+				SELECT g.id AS gid, CAST(e.key AS INTEGER) AS rn,
+				       CAST(json_extract(e.value, '$.score') AS INTEGER) AS score,
+				       SUM(CASE WHEN CAST(json_extract(e.value, '$.score') AS INTEGER) = 0 THEN 1 ELSE 0 END)
+				         OVER (PARTITION BY g.id ORDER BY CAST(e.key AS INTEGER)) AS grp
+				FROM game_results g CROSS JOIN json_each(g.rounds) e
+				WHERE g.player_type = 'user' AND g.player_id = ?
+			) sub WHERE score > 0 GROUP BY gid, grp
+		)`,
+		userID).Scan(&a.MaxConsecutive)
 	return a, err
 }
 

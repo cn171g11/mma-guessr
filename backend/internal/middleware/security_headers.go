@@ -9,7 +9,7 @@ import (
 func SecurityHeaders(isProduction bool) func(http.Handler) http.Handler {
 	csp := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data: blob: https:; connect-src 'self' https: wss: ws:; " +
-		"object-src 'none'; base-uri 'self'; form-action 'self'"
+		"object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -17,6 +17,7 @@ func SecurityHeaders(isProduction bool) func(http.Handler) http.Handler {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 			w.Header().Set("Content-Security-Policy", csp)
+			w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 			if isProduction {
 				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}

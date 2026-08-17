@@ -137,6 +137,7 @@
 | GET | `/recent?limit=20` | 最近记录（1-30，默认 20） |
 | GET | `/best?mode=classic` | 该模式最高分记录（无则 `null`） |
 | GET | `/summary` | 累计进度快照（场次/总分/最佳/猜中轮数） |
+| GET | `/:gameId` | 获取完整对局记录（含各轮坐标），用于轨迹回放 |
 | DELETE | `/:gameId` | 删除自己的某条记录 |
 
 ### `POST /api/games`
@@ -193,6 +194,19 @@
 { "progress": { "totalRounds": 12, "totalScore": 34500, "bestScore": 8900, "correctGuesses": 9 } }
 ```
 
+### `GET /api/games/:gameId`
+
+需 Bearer 认证，仅可读取自己的对局。返回完整记录（rounds 含 `guessLat/guessLng/answerLat/answerLng` 坐标），供前端地图回放：
+
+```json
+{ "game": { "id": 3, "mode": "classic", "region": null, "totalScore": 4800,
+  "rounds": [ { "name": "北京·天安门", "distanceKm": 2.5, "score": 4800,
+    "guessLat": 39.9, "guessLng": 116.4, "answerLat": 39.9055, "answerLng": 116.3976 } ],
+  "createdAt": "..." } }
+```
+
+对局不存在或不属于当前玩家返回 `404`。
+
 ## 排行榜（`/api/leaderboard`）
 
 `GET /api/leaderboard`，需 Bearer 认证（用户/游客均可读取）。
@@ -227,6 +241,19 @@
 
 - `played`：`daily_submissions` 已存在记录（`user_daily:<id>:<date>` 抢占）则为 `true`，表示当天已提交
 - 题单失效（如重跑 seed 使自增 ID 漂移）时自愈重抽，不会返回空题单
+
+### `GET /api/daily/leaderboard`
+
+需 Bearer 认证。返回今日（或指定日期）每日挑战得分榜，仅统计注册用户（`daily_submissions` → `game_results` → `users`），由服务端权威结算：
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `date` | 否 | YYYY-MM-DD，缺省取当天（UTC） |
+
+```json
+{ "date": "2026-08-17",
+  "entries": [ { "username": "alice", "score": 42000 }, ... ] }
+```
 
 ## 个人统计（`/api/profile`）
 
@@ -273,22 +300,28 @@
 
 ### `GET /api/proxy/mapillary/search`
 
-按 bbox 搜索街景图片，返回与上游一致的 `{ data: [...] }` 结构（`id` / `geometry` / `is_pano`）。结果按 `bbox+limit` 缓存 24h。
+按 bbox 搜索街景图片，返回与上游一致的 `{ data: [...] }` 结构（`id` / `geometry` / `is_pano` / `thumb_1024_url` / `thumb_2048_url`）。缩略图 URL 为公开 CDN 直链，前端可直接加载，无需再经后端代理取字节。结果按 `bbox+limit` 缓存 24h。
 
 | 查询参数 | 必填 | 说明 |
 | ---- | ---- | ---- |
 | `bbox` | 是 | `minLng,minLat,maxLng,maxLat`；格式非法返回 `400` |
 | `limit` | 否 | 1-50，默认 20 |
 
-### `GET /api/proxy/mapillary/image/:imageId`
+### `GET /api/proxy/mapillary/media/:imageId`
 
-代理返回图片字节流（`Content-Type: image/jpeg`），字节按 `imageId+width` 缓存 24h。
+解析图片并返回公开 CDN 缩略图 URL（仅元数据，不下载字节），供浏览器直连 CDN，节省后端带宽与缓存存储。返回 `{ "url": "https://..." }`。
 
 | 查询参数 | 必填 | 说明 |
 | ---- | ---- | ---- |
 | `width` | 否 | 1-2048，默认 1024；内部选择不小于该值的一档缩略图（256/1024/2048） |
 
-限频超限返回 `429`；未配置 `MAPILLARY_TOKEN` 或上游异常返回 `503`/`502`。
+### `GET /api/proxy/mapillary/image/:imageId`
+
+代理返回图片字节流（`Content-Type: image/jpeg`），字节按 `imageId+width` 缓存 24h。**兜底路径**：CDN 直连失败或 URL 缺失时由前端回退使用。
+
+| 查询参数 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `width` | 否 | 1-2048，默认 1024；内部选择不小于该值的一档缩略图（256/1024/2048） |
 
 限频超限返回 `429`；未配置 `MAPILLARY_TOKEN` 或上游异常返回 `503`/`502`。
 
@@ -319,6 +352,85 @@
 ### `PUT /api/achievements/title` · `DELETE /api/achievements/title`
 
 需 Bearer、仅注册用户。`PUT` 请求体 `{ "code": "mode_master" }`，仅可装备已解锁且声明称号的成就，否则 `400`；`DELETE` 清除装备。响应 `{ "equippedTitle": "..." }`。
+
+### `GET /api/profile/collections`
+
+需 Bearer 认证、仅注册用户。返回地点图鉴（按已答对地点聚合，含点亮数/作答次数/首次·末次时间）：
+
+```json
+{ "total": 12,
+  "items": [ { "name": "北京·天安门", "count": 3, "firstSeen": "...", "lastSeen": "..." } ] }
+```
+
+## 好友（`/api/friends`）
+
+需 Bearer 认证、仅注册用户。好友关系单向确认，请求支持按 `userId` 或 `username` 发起。
+
+| 方法 | 路径 | 说明 |
+| ---- | ---- | ---- |
+| GET | `/` | 好友列表 |
+| GET | `/requests` | 好友请求（`incoming` / `outgoing`） |
+| POST | `/requests` | 发起请求，请求体 `{ "targetUserId"?: uuid, "targetUsername"?: string }` |
+| POST | `/requests/:userId/accept` | 接受请求 |
+| POST | `/requests/:userId/reject` | 拒绝请求 |
+| DELETE | `/:userId` | 删除好友 |
+
+```json
+{ "friends": [ { "id": "uuid", "username": "alice" } ] }
+{ "incoming": [ { "id": "uuid", "username": "alice" } ], "outgoing": [] }
+```
+
+## 天梯排位（`/api/ratings`）
+
+需 Bearer 认证、仅注册用户。返回当前赛季个人天梯快照与天梯前 50：
+
+```json
+{ "rating": { "season": "2026-S1", "rating": 1250, "tier": 2, "tierName": "白银",
+    "nextTier": "黄金", "gamesPlayed": 3, "wins": 2, "bestStreak": 3 },
+  "leaderboard": [ { "id": "uuid", "username": "alice", "rating": 2500, "tier": 7,
+    "tierName": "宗师", "wins": 88 }, ... ] }
+```
+
+- 段位：青铜/白银/黄金/铂金/钻石/大师/宗师（0、1100、1300、1500、1800、2100、2500 分段）
+- 未参与过排位的用户返回初始快照（rating 1000、tier 1、青铜）；`nextTier` 在已达最高段位时省略
+- 单机对局提交后 `ApplyGame` 按总分换算评分增量（满分 +25、零分 -25），对战结束 `RecordDuel` 刷新连胜；评分区间 [100, 3000]
+
+## 赞助者（`/api/sponsors`）
+
+`GET /api/sponsors` 公开只读，返回可见赞助名单（金额降序）：
+
+```json
+{ "sponsors": [ { "id": 1, "name": "神秘人", "note": "第一个赞助者",
+    "amountCents": 10000, "visible": true, "createdAt": "..." } ] }
+```
+
+`POST /api/sponsors` / `DELETE /api/sponsors/:sponsorId` 需管理员令牌（`Authorization: Bearer <SPONSOR_ADMIN_TOKEN>`，常量时间比较；令牌未配置时写端点恒返回 403）。POST 请求体 `{ "name": "...", "note": "..." , "amountCents": 10000, "visible": true }`。
+
+## 地点冷知识（`/api/locations/fact`）
+
+`GET /api/locations/fact?name=北京·天安门`，公开只读。命中 curated 事实表返回其内容，否则按区域生成模板化介绍：
+
+```json
+{ "name": "北京·天安门", "fact": "..." }
+```
+
+## 第三方登录（`/api/oauth`）
+
+可选项：未在服务端配置 OAuth 凭据时，`providers` 返回空数组，`authorize`/`callback` 返回 404，前端自动隐藏第三方登录按钮。
+
+| 方法 | 路径 | 说明 |
+| ---- | ---- | ---- |
+| GET | `/providers` | 已配置的第三方提供方列表（普通签名 API 调用） |
+| GET | `/authorize/:provider` | 浏览器整页跳转至提供方授权页（302；绕过请求签名，state 令牌防 CSRF/重放） |
+| GET | `/callback/:provider` | 提供方回调：校验 state → 换取身份 → 绑定/登录账号 → 设置 HttpOnly 刷新 Cookie → 302 回前端 `/?oauth=success\|failed` |
+
+```json
+{ "providers": [ { "name": "google", "label": "Google" } ] }
+```
+
+- 环境变量：`GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI`（须为 HTTPS 回调，本地开发可 `http://localhost`）与 `OAUTH_STATE_SECRET`
+- state 令牌为 `HMAC-SHA256(provider:时间戳:随机 nonce)`，10 分钟 TTL、单次消费，同一令牌重放回调返回失败
+- 回调后前端经 `?oauth=success` 触发会话恢复（HttpOnly 刷新 Cookie 自动带回首跳），失败仅提示不暴露细节
 
 ## 指标（`/api/metrics`）
 

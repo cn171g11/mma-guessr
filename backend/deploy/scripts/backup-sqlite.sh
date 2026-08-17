@@ -24,6 +24,15 @@ OUT_FILE="$BACKUP_DIR/mma-guessr-sqlite-$STAMP.db"
 
 echo "[backup] 开始备份 -> $OUT_FILE"
 
+# 前置自检：镜像内必须存在 sqlite3 CLI（VACUUM INTO 依赖），
+# 缺失时给出可操作的修复提示，避免产出空备份文件。
+if ! docker compose -f "$COMPOSE_FILE" exec -T backend sh -c \
+    'command -v sqlite3 >/dev/null 2>&1'; then
+    echo "[backup] 失败：backend 镜像缺少 sqlite3 CLI。" >&2
+    echo "[backup] 修复：更新后端镜像（Dockerfile 已安装 sqlite 包）后重试。" >&2
+    exit 1
+fi
+
 # VACUUM INTO 生成一致性快照；先落到容器内临时文件再拷出，
 # 避免并发写入期间的跨文件系统不一致。
 docker compose -f "$COMPOSE_FILE" exec -T backend sh -c \

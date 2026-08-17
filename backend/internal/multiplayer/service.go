@@ -1,6 +1,7 @@
 package multiplayer
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"log/slog"
 	"math"
@@ -12,6 +13,7 @@ import (
 	"mma-guessr/backend/internal/games"
 	"mma-guessr/backend/internal/locations"
 	"mma-guessr/backend/internal/ratelimit"
+	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/util"
 )
 
@@ -26,7 +28,12 @@ const (
 	roomTTLSeconds   = 2 * 60 * 60
 	eventRateWindow  = 10 * time.Second
 	eventRateMax     = 20
+
+	waitingRoomTTLSeconds = 10 * 60
 )
+
+// roomCodeAlphabet excludes lookalike characters (0/O, 1/I/L).
+const roomCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 // identity is the authenticated player bound to a connection.
 type identity struct {
@@ -78,6 +85,7 @@ type roundHistory struct {
 
 type room struct {
 	id          string
+	code        string
 	status      string
 	roundIndex  int
 	players     []playerState
@@ -97,6 +105,7 @@ type Service struct {
 	locations *locations.Store
 	games     *games.Service
 	tokens    *auth.TokenService
+	ratings   *ratings.Service
 	logger    *slog.Logger
 
 	mu      sync.Mutex
@@ -112,13 +121,15 @@ type Service struct {
 
 // NewService creates the multiplayer service and starts the matchmaker.
 func NewService(engine *EngineIO, authStore *auth.Store, locations *locations.Store,
-	gamesSvc *games.Service, tokens *auth.TokenService, logger *slog.Logger) *Service {
+	gamesSvc *games.Service, tokens *auth.TokenService, ratingsSvc *ratings.Service,
+	logger *slog.Logger) *Service {
 	service := &Service{
 		engine:    engine,
 		authStore: authStore,
 		locations: locations,
 		games:     gamesSvc,
 		tokens:    tokens,
+		ratings:   ratingsSvc,
 		logger:    logger,
 		sockets:   make(map[string]*socketState),
 		queued:    make(map[string]bool),
@@ -249,6 +260,8 @@ func (s *Service) handleEvent(sid, payload string) {
 	switch name {
 	case "mp:join":
 		s.handleJoin(sid, args)
+	case "mp:createPrivate":
+		s.handleCreatePrivate(sid)
 	case "mp:leave":
 		s.handleLeave(sid)
 	case "mp:answer":
@@ -294,10 +307,24 @@ func (s *Service) handleJoin(sid string, payload any) {
 		return
 	}
 	mode := "classic"
+	roomCode := ""
 	if object, ok := payload.(map[string]any); ok {
 		if raw, ok := object["mode"].(string); ok && raw != "" {
 			mode = raw
 		}
+		if raw, ok := object["roomCode"].(string); ok {
+			roomCode = raw
+		}
+	}
+	if mode == "private" {
+		if roomCode == "" {
+			s.mu.Unlock()
+			s.sendError(sid, "缺少房间码")
+			return
+		}
+		s.mu.Unlock()
+		s.joinPrivateRoom(sid, state, roomCode)
+		return
 	}
 	s.queue = append(s.queue, queueEntry{
 		SID: sid, PlayerID: state.identity.id, Role: state.identity.role,
@@ -309,6 +336,117 @@ func (s *Service) handleJoin(sid string, payload any) {
 
 	raw, _ := json.Marshal(map[string]any{"position": position})
 	s.engine.Send(sid, "42"+`["mp:queued",`+string(raw)+`]`)
+}
+
+// handleCreatePrivate opens a waiting room with a shareable code.
+func (s *Service) handleCreatePrivate(sid string) {
+	state := s.socketOf(sid)
+	if state == nil || state.identity == nil {
+		return
+	}
+	if !s.enforceEventRate(state) {
+		return
+	}
+	s.mu.Lock()
+	if state.roomID != "" || s.queued[state.identity.id] {
+		s.mu.Unlock()
+		s.sendError(sid, "你已在队列或对局中")
+		return
+	}
+	roomID := util.NewUUID()
+	code := s.newRoomCode()
+	newRoom := &room{
+		id:     roomID,
+		code:   code,
+		status: "waiting",
+		players: []playerState{{
+			SocketID: sid, PlayerID: state.identity.id, Role: state.identity.role,
+			Username: state.identity.username,
+		}},
+	}
+	s.rooms[roomID] = newRoom
+	state.roomID = roomID
+	s.mu.Unlock()
+
+	raw, _ := json.Marshal(map[string]any{"roomCode": code})
+	s.engine.Send(sid, "42"+`["mp:privateCreated",`+string(raw)+`]`)
+
+	time.AfterFunc(waitingRoomTTLSeconds*time.Second, func() {
+		s.mu.Lock()
+		current := s.rooms[roomID]
+		if current != nil && current.status == "waiting" {
+			delete(s.rooms, roomID)
+		}
+		s.mu.Unlock()
+	})
+}
+
+// joinPrivateRoom pairs the guest with the waiting host by code.
+func (s *Service) joinPrivateRoom(sid string, state *socketState, code string) {
+	s.mu.Lock()
+	host := s.findWaitingRoom(code)
+	if host == nil {
+		s.mu.Unlock()
+		s.sendError(sid, "房间不存在或已过期")
+		return
+	}
+	host.mu.Lock()
+	if len(host.players) >= 2 {
+		host.mu.Unlock()
+		s.mu.Unlock()
+		s.sendError(sid, "房间已满")
+		return
+	}
+	hostUsername := host.players[0].Username
+	hostSID := host.players[0].SocketID
+	host.players = append(host.players, playerState{
+		SocketID: sid, PlayerID: state.identity.id, Role: state.identity.role,
+		Username: state.identity.username,
+	})
+	host.status = "playing"
+	host.mu.Unlock()
+	state.roomID = host.id
+	delete(s.queued, state.identity.id)
+	if hostState := s.sockets[hostSID]; hostState != nil {
+		hostState.roomID = host.id
+	}
+	s.mu.Unlock()
+
+	matchedHost, _ := json.Marshal(map[string]any{"roomId": host.id, "mode": "duel", "opponentUsername": state.identity.username})
+	matchedGuest, _ := json.Marshal(map[string]any{"roomId": host.id, "mode": "duel", "opponentUsername": hostUsername})
+	s.engine.Send(hostSID, "42"+`["mp:matched",`+string(matchedHost)+`]`)
+	s.engine.Send(sid, "42"+`["mp:matched",`+string(matchedGuest)+`]`)
+	s.startRound(host.id)
+}
+
+// findWaitingRoom returns a waiting private room matching the code.
+func (s *Service) findWaitingRoom(code string) *room {
+	for _, r := range s.rooms {
+		if r.status == "waiting" && r.code == code {
+			return r
+		}
+	}
+	return nil
+}
+
+// newRoomCode generates a unique 6-character code for a waiting room.
+func (s *Service) newRoomCode() string {
+	alphabet := []byte(roomCodeAlphabet)
+	for attempt := 0; attempt < 5; attempt++ {
+		var buf [6]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return util.NewUUID()[:6]
+		}
+		code := make([]byte, 6)
+		for i, v := range buf {
+			code[i] = alphabet[int(v)%len(alphabet)]
+		}
+		candidate := string(code)
+		if s.findWaitingRoom(candidate) == nil {
+			return candidate
+		}
+	}
+	return util.NewUUID()[:6]
 }
 
 func (s *Service) handleLeave(sid string) {
@@ -632,6 +770,8 @@ func (s *Service) finishRoom(roomID string) {
 	rankings := make([]playerState, len(players))
 	copy(rankings, players)
 	sortByScoreDesc(rankings)
+	s.recordDuelStreaks(rankings)
+
 	rankPayload := struct {
 		Rankings []map[string]any `json:"rankings"`
 	}{}
@@ -649,6 +789,24 @@ func (s *Service) finishRoom(roomID string) {
 		delete(s.rooms, roomID)
 		s.mu.Unlock()
 	})
+}
+
+// recordDuelStreaks updates win streaks after a duel. A tie resets nobody.
+func (s *Service) recordDuelStreaks(rankings []playerState) {
+	if len(rankings) != 2 || rankings[0].TotalScore == rankings[1].TotalScore {
+		return
+	}
+	winner, loser := rankings[0], rankings[1]
+	if winner.Role == "user" {
+		if err := s.ratings.RecordDuel(winner.PlayerID, true); err != nil {
+			s.logger.Warn("duel streak update failed", "player", winner.PlayerID, "error", err)
+		}
+	}
+	if loser.Role == "user" {
+		if err := s.ratings.RecordDuel(loser.PlayerID, false); err != nil {
+			s.logger.Warn("duel streak update failed", "player", loser.PlayerID, "error", err)
+		}
+	}
 }
 
 func (s *Service) recordDuelGames(players []playerState, rounds []roundHistory) {
@@ -716,7 +874,16 @@ func (s *Service) handleDisconnect(sid string) {
 		return
 	}
 	current := s.roomOf(roomID)
-	if current == nil || current.status != "playing" {
+	if current == nil {
+		return
+	}
+	if current.status == "waiting" {
+		s.mu.Lock()
+		delete(s.rooms, roomID)
+		s.mu.Unlock()
+		return
+	}
+	if current.status != "playing" {
 		return
 	}
 	current.mu.Lock()

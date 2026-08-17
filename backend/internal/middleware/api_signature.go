@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"mma-guessr/backend/internal/httputil"
@@ -109,27 +110,36 @@ func (s *signatureEnforcer) verify(r *http.Request, body []byte, timestamp, nonc
 	return nil
 }
 
-// consumeNonce records the nonce atomically and rejects a replay.
+// consumeNonce records the nonce atomically and rejects a replay. INSERT OR
+// IGNORE is race-free: a second concurrent request with the same nonce finds
+// the primary key already taken (RowsAffected == 0) and is rejected cleanly.
 func (s *signatureEnforcer) consumeNonce(nonce string) error {
-	var exists int
-	err := s.conn.QueryRow("SELECT COUNT(*) FROM nonces WHERE nonce = ?", nonce).Scan(&exists)
-	if err != nil {
-		return httputil.New(http.StatusServiceUnavailable, "nonce 校验失败")
-	}
-	if exists > 0 {
-		return httputil.BadRequest("nonce 已使用")
-	}
 	expiresAt := time.Now().UTC().Add(2 * time.Minute).Format(time.RFC3339)
-	_, err = s.conn.Exec("INSERT INTO nonces (nonce, expires_at) VALUES (?, ?)", nonce, expiresAt)
+	res, err := s.conn.Exec("INSERT OR IGNORE INTO nonces (nonce, expires_at) VALUES (?, ?)", nonce, expiresAt)
 	if err != nil {
 		return httputil.New(http.StatusServiceUnavailable, "nonce 校验失败")
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return httputil.BadRequest("nonce 已使用")
 	}
 	return nil
 }
 
 func isSignatureSkipped(path string) bool {
 	return path == "/api/health" || path == "/api/metrics" || isProxyPath(path) ||
-		path == "/socket.io" || path == "/socket.io/"
+		path == "/socket.io" || path == "/socket.io/" || isOAuthRedirectPath(path)
+}
+
+// isOAuthRedirectPath reports whether the path is part of the OAuth browser
+// flow. The authorize/callback steps are plain browser navigations (302s) and
+// cannot carry HMAC headers, so they bypass request signing; the state token
+// provides the replay protection instead.
+func isOAuthRedirectPath(path string) bool {
+	const (
+		authorizePrefix = "/api/oauth/authorize/"
+		callbackPrefix  = "/api/oauth/callback/"
+	)
+	return strings.HasPrefix(path, authorizePrefix) || strings.HasPrefix(path, callbackPrefix)
 }
 
 func isProxyPath(path string) bool {

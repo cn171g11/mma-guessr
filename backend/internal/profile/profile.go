@@ -160,3 +160,42 @@ func (s *Service) fetchAggregation(role, id string) (*Aggregation, error) {
 func round1(value float64) float64 {
 	return math.Round(value*10) / 10
 }
+
+// CollectionItem is one positively-identified location in the player's atlas.
+type CollectionItem struct {
+	Name      string `json:"name"`
+	Count     int    `json:"count"`
+	FirstSeen string `json:"firstSeen"`
+	LastSeen  string `json:"lastSeen"`
+}
+
+// Collections returns the distinct locations the player has positively
+// identified (score > 0), most recently seen first.
+func (s *Service) Collections(role, id string) ([]CollectionItem, error) {
+	rows, err := s.conn.Query(`
+		SELECT json_extract(value, '$.name') AS name,
+		       COUNT(*) AS cnt,
+		       MIN(g.created_at),
+		       MAX(g.created_at)
+		FROM game_results g CROSS JOIN json_each(g.rounds)
+		WHERE g.player_type = ? AND g.player_id = ?
+		  AND CAST(json_extract(value, '$.score') AS INTEGER) > 0
+		  AND json_extract(value, '$.name') IS NOT NULL
+		  AND json_extract(value, '$.name') != ''
+		GROUP BY json_extract(value, '$.name')
+		ORDER BY MAX(g.created_at) DESC
+	`, role, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]CollectionItem, 0, 16)
+	for rows.Next() {
+		var item CollectionItem
+		if err := rows.Scan(&item.Name, &item.Count, &item.FirstSeen, &item.LastSeen); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}

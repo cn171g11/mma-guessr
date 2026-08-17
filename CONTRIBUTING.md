@@ -284,12 +284,13 @@ git checkout -b chore/xxx    # 维护（格式化、文档、依赖）
 # 前端
 cd frontend
 npm run format:check                  # 代码风格通过
-node --check src/js/config.js src/js/data.js src/js/game.js    # JS 语法通过
+for f in src/js/*.js; do node --check "$f"; done   # JS 语法通过
 node tools/validate-data.js          # 题库数据校验通过
 
 # 后端
 cd ../backend
 go build ./... && go vet ./... && go test ./...
+go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet ./...   # 安全扫描（可选）
 ```
 
 ```bash

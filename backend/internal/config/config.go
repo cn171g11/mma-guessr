@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -97,8 +98,8 @@ const (
 	devAccessSecret      = "dev-access-secret-change-me-0123456789abcdef"         // #nosec G101
 	devRefreshSecret     = "dev-refresh-secret-change-me-0123456789abcdef"        // #nosec G101
 	devVerifyCodeSecret  = "dev-verify-code-secret-not-for-production-0123456789" // #nosec G101
+	devOAuthStateSecret  = "dev-oauth-state-secret-not-for-production-0123456789" // #nosec G101
 	defaultSQLitePath    = "mma_guessr.db"
-	defaultMapillaryDB   = "mapillary.db"
 	defaultSigningSecret = "dev-signing-secret-change-me" // #nosec G101
 )
 
@@ -107,7 +108,6 @@ type Config struct {
 	Environment        string
 	Port               string
 	SQLitePath         string
-	MapillaryDBPath    string
 	MapillaryToken     string
 	AccessSecret       string
 	RefreshSecret      string
@@ -122,6 +122,23 @@ type Config struct {
 	MetricsToken       string
 	APISigningSecret   string
 	TrustProxy         bool
+	// SponsorAdminToken authorizes the sponsor management endpoints. Empty in
+	// development means the write endpoints stay locked.
+	SponsorAdminToken string
+	// GoogleOAuth* configure the Google sign-in provider (optional feature).
+	GoogleOAuthClientID    string
+	GoogleOAuthSecret      string
+	GoogleOAuthRedirectURI string
+	// OAuthStateSecret signs the OAuth state token (login CSRF / replay
+	// protection). Only required when a Google OAuth provider is configured.
+	OAuthStateSecret string
+	// FrontendOrigin is where the OAuth callback redirects after sign-in. It
+	// is derived from the CORS whitelist (the first configured origin).
+	FrontendOrigin string
+	// PayloadPadding adds a random _pad field to JSON object responses so
+	// traffic length analysis cannot fingerprint API payload shapes. It is a
+	// Low-level network hardening measure, recommended for production.
+	PayloadPadding bool
 	// GCPercent is the GOGC percentage (default 100; -1 means disabled).
 	// Lower values make the GC run more often so the heap returns toward the
 	// live set faster after load bursts; higher values reduce GC overhead.
@@ -142,16 +159,18 @@ func Load() (*Config, error) {
 		Environment:      env,
 		Port:             firstNonEmpty(os.Getenv("PORT"), "3000"),
 		SQLitePath:       firstNonEmpty(os.Getenv("SQLITE_PATH"), defaultSQLitePath),
-		MapillaryDBPath:  firstNonEmpty(os.Getenv("MAPILLARY_DB_PATH"), defaultMapillaryDB),
 		MapillaryToken:   os.Getenv("MAPILLARY_TOKEN"),
 		SMTPHost:         os.Getenv("SMTP_HOST"),
 		SMTPPort:         465,
 		SMTPUser:         os.Getenv("SMTP_USER"),
 		SMTPPass:         os.Getenv("SMTP_PASS"),
 		SMTPFrom:         os.Getenv("SMTP_FROM"),
-		CookieSameSite:   firstNonEmpty(os.Getenv("COOKIE_SAME_SITE"), "lax"),
-		MetricsToken:     os.Getenv("METRICS_TOKEN"),
-		APISigningSecret: os.Getenv("API_SIGNING_SECRET"),
+		CookieSameSite:     firstNonEmpty(os.Getenv("COOKIE_SAME_SITE"), "lax"),
+		MetricsToken:       os.Getenv("METRICS_TOKEN"),
+		SponsorAdminToken:  os.Getenv("SPONSOR_ADMIN_TOKEN"),
+		GoogleOAuthClientID:    os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		GoogleOAuthSecret:      os.Getenv("GOOGLE_OAUTH_SECRET"),
+		GoogleOAuthRedirectURI: os.Getenv("GOOGLE_OAUTH_REDIRECT_URI"),
 	}
 
 	if v, ok := parseNonEmptyInt(os.Getenv("SMTP_PORT")); ok {
@@ -177,6 +196,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Payload padding is off by default; production deployments should opt in
+	// via PAYLOAD_PADDING=1 (see .env.prod.example).
+	switch strings.ToLower(os.Getenv("PAYLOAD_PADDING")) {
+	case "1", "true", "on", "yes":
+		cfg.PayloadPadding = true
+	}
+
 	var err error
 	if cfg.AccessSecret, err = requiredSecret("JWT_ACCESS_SECRET", devAccessSecret, env); err != nil {
 		return nil, err
@@ -185,6 +211,13 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.VerifyCodeSecret, err = requiredSecret("VERIFY_CODE_SECRET", devVerifyCodeSecret, env); err != nil {
+		return nil, err
+	}
+
+	// Request signing stays optional in development (matching the documented
+	// local workflow) but is mandatory in production: silently running without
+	// it would disable tamper/replay protection.
+	if cfg.APISigningSecret, err = resolveSigningSecret(env); err != nil {
 		return nil, err
 	}
 
@@ -200,6 +233,31 @@ func Load() (*Config, error) {
 		o = strings.TrimSpace(o)
 		if o != "" {
 			cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, o)
+		}
+	}
+
+	// The OAuth callback redirects to the frontend; take the first CORS
+	// origin as the canonical one.
+	if len(cfg.CORSAllowedOrigins) > 0 {
+		cfg.FrontendOrigin = cfg.CORSAllowedOrigins[0]
+	}
+
+	// An OAuth redirect URI must be an exact, HTTPS callback (or a localhost
+	// URL in development) — never an arbitrary origin.
+	if cfg.GoogleOAuthRedirectURI != "" {
+		uri, err := url.Parse(cfg.GoogleOAuthRedirectURI)
+		if err != nil || uri.Host == "" || uri.Scheme != "https" {
+			if !(cfg.Environment != "production" && strings.HasPrefix(cfg.GoogleOAuthRedirectURI, "http://localhost")) {
+				return nil, fmt.Errorf("GOOGLE_OAUTH_REDIRECT_URI 必须是 HTTPS 回调地址")
+			}
+		}
+	}
+
+	// The state secret is only mandatory once a provider is configured; a
+	// deployment that never enables OAuth should not need the extra secret.
+	if cfg.GoogleOAuthClientID != "" || cfg.GoogleOAuthSecret != "" || cfg.GoogleOAuthRedirectURI != "" {
+		if cfg.OAuthStateSecret, err = requiredSecret("OAUTH_STATE_SECRET", devOAuthStateSecret, env); err != nil {
+			return nil, err
 		}
 	}
 
@@ -249,6 +307,28 @@ func requiredSecret(name, devFallback, environment string) (string, error) {
 	}
 	if environment == "production" && value == devFallback {
 		return "", fmt.Errorf("environment variable %s must not use the development default", name)
+	}
+	return value, nil
+}
+
+// resolveSigningSecret enforces the request-signing secret only in production.
+// Development keeps the documented short dev default so the out-of-box .env
+// workflow keeps working; production requires a strong, non-default secret.
+func resolveSigningSecret(environment string) (string, error) {
+	value := os.Getenv("API_SIGNING_SECRET")
+	if value == "" {
+		if environment == "production" {
+			return "", fmt.Errorf("missing required environment variable: API_SIGNING_SECRET")
+		}
+		return defaultSigningSecret, nil
+	}
+	if environment == "production" {
+		if value == defaultSigningSecret {
+			return "", fmt.Errorf("environment variable API_SIGNING_SECRET must not use the development default")
+		}
+		if len(value) < minSecretBytes {
+			return "", fmt.Errorf("environment variable API_SIGNING_SECRET must be at least %d bytes", minSecretBytes)
+		}
 	}
 	return value, nil
 }

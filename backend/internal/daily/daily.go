@@ -31,6 +31,12 @@ type DailyChallenge struct {
 // ChallengeRounds is the number of rounds in a daily challenge.
 const ChallengeRounds = 10
 
+// ScoreEntry is one row of the daily scoreboard.
+type ScoreEntry struct {
+	Username string `json:"username"`
+	Score    int    `json:"score"`
+}
+
 // Service manages the daily challenge lifecycle.
 type Service struct {
 	conn      *sql.DB
@@ -45,6 +51,41 @@ func NewService(conn *sql.DB, locations *locations.Store) *Service {
 // UTCDateString returns today's UTC date as YYYY-MM-DD.
 func UTCDateString() string {
 	return time.Now().UTC().Format("2006-01-02")
+}
+
+// Leaderboard returns the top daily scores for a date (registered users only).
+func (s *Service) Leaderboard(date string, limit int) ([]ScoreEntry, error) {
+	if date == "" {
+		date = UTCDateString()
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := s.conn.Query(`
+		SELECT u.username, g.total_score
+		FROM daily_submissions d
+		JOIN game_results g ON g.id = d.game_id
+		JOIN users u ON u.id = d.player_id
+		WHERE d.date = ?
+		ORDER BY g.total_score DESC, d.created_at ASC
+		LIMIT ?
+	`, date, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]ScoreEntry, 0, limit)
+	for rows.Next() {
+		var e ScoreEntry
+		if err := rows.Scan(&e.Username, &e.Score); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
 
 // resolveTodayIDs lazily draws and persists today's challenge set.

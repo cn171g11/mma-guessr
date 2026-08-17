@@ -1,13 +1,20 @@
 package auth
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"mma-guessr/backend/internal/httputil"
 	"mma-guessr/backend/internal/mail"
+	"mma-guessr/backend/internal/util"
 )
 
 // Service orchestrates the auth flows (register, login, refresh, guest).
@@ -277,6 +284,99 @@ func (s *Service) CreateGuest() (*GuestSessionResponse, error) {
 		GuestToken: token,
 		Username:   guest.Username,
 	}, nil
+}
+
+// LinkOAuthUser returns the user bound to a third-party provider account,
+// creating the account on first sign-in. OAuth users have a random password
+// hash, so they cannot authenticate with a password.
+func (s *Service) LinkOAuthUser(provider, providerID, email, displayName string) (*PublicUser, error) {
+	var userID string
+	err := s.store.conn.QueryRow(
+		`SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_id = ?`,
+		provider, providerID).Scan(&userID)
+	switch {
+	case err == nil:
+		user, err := s.store.FindByID(userID)
+		if err != nil || user == nil {
+			return nil, httputil.Unauthorized("OAuth 账号状态异常")
+		}
+		pub := user.ToPublic()
+		return &pub, nil
+	case errors.Is(err, sql.ErrNoRows):
+		// Fall through to account creation.
+	default:
+		return nil, err
+	}
+
+	baseUsername := "u" + oauthHash(provider+":"+providerID)
+	normalizedEmail := NormalizeEmail(email)
+	if !IsValidEmail(normalizedEmail) {
+		normalizedEmail = ""
+	}
+	passwordHash, err := HashPassword(randomHex(24))
+	if err != nil {
+		return nil, err
+	}
+
+	var created *User
+	for attempt := 0; attempt < 5; attempt++ {
+		username := baseUsername
+		if attempt > 0 {
+			username = baseUsername + strconv.Itoa(attempt)
+		}
+		userEmail := normalizedEmail
+		if userEmail == "" || attempt > 0 {
+			userEmail = provider + "_" + baseUsername + "@oauth.local"
+		}
+		user, err := s.store.CreateUser(username, userEmail, passwordHash)
+		if err != nil {
+			if _, ok := err.(*httputil.HttpError); ok {
+				continue // username/email taken; retry with a fresh pair
+			}
+			return nil, err
+		}
+		created = user
+		break
+	}
+	if created == nil {
+		return nil, httputil.New(500, "OAuth 账号创建失败")
+	}
+	if err := s.store.EnsureUserProgress(created.ID); err != nil {
+		return nil, err
+	}
+
+	if _, err := s.store.conn.Exec(
+		`INSERT INTO oauth_accounts (provider, provider_id, user_id, created_at) VALUES (?, ?, ?, ?)`,
+		provider, providerID, created.ID, util.Now()); err != nil {
+		// A concurrent sign-in may have bound the account first; reuse it.
+		var userID string
+		if lookupErr := s.store.conn.QueryRow(
+			`SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_id = ?`,
+			provider, providerID).Scan(&userID); lookupErr == nil && userID != "" {
+			user, findErr := s.store.FindByID(userID)
+			if findErr == nil && user != nil {
+				pub := user.ToPublic()
+				return &pub, nil
+			}
+		}
+		return nil, err
+	}
+	pub := created.ToPublic()
+	return &pub, nil
+}
+
+// oauthHash returns a short hex digest used to derive unique OAuth usernames.
+func oauthHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:6])
+}
+
+func randomHex(bytes int) string {
+	buf := make([]byte, bytes)
+	if _, err := rand.Read(buf); err != nil {
+		panic("crypto/rand failed")
+	}
+	return hex.EncodeToString(buf)
 }
 
 // MeProfile returns the authenticated caller's profile and progress.

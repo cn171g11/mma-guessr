@@ -10,6 +10,7 @@ import (
 	"mma-guessr/backend/internal/leaderboard"
 	"mma-guessr/backend/internal/locations"
 	"mma-guessr/backend/internal/profile"
+	"mma-guessr/backend/internal/ratings"
 )
 
 const (
@@ -25,13 +26,15 @@ type Service struct {
 	leaderboard  *leaderboard.Service
 	achievements *achievements.Service
 	profile      *profile.Service
+	ratings      *ratings.Service
 }
 
 // NewService wires the games service with its dependencies.
 func NewService(store *Store, progress *auth.Store, daily *daily.Service,
-	leaderboard *leaderboard.Service, achievements *achievements.Service, profile *profile.Service) *Service {
+	leaderboard *leaderboard.Service, achievements *achievements.Service, profile *profile.Service,
+	ratings *ratings.Service) *Service {
 	return &Service{store: store, progress: progress, daily: daily,
-		leaderboard: leaderboard, achievements: achievements, profile: profile}
+		leaderboard: leaderboard, achievements: achievements, profile: profile, ratings: ratings}
 }
 
 type verifiedRound struct {
@@ -110,6 +113,7 @@ func (s *Service) SubmitGame(player PlayerRef, input SubmitGameInput) (*GameReco
 	if player.Role == "user" {
 		_ = s.leaderboard.RecordScore(player.ID, input.Mode, verifiedTotal)
 		s.achievements.EvaluateAndUnlock(player.ID)
+		_ = s.ratings.ApplyGame(player.ID, verifiedTotal)
 	}
 	return game, nil
 }
@@ -203,6 +207,11 @@ func (s *Service) accumulateProgress(player PlayerRef, input SubmitGameInput) er
 // GetRecentGames returns the player's latest games.
 func (s *Service) GetRecentGames(player PlayerRef, limit int) ([]GameRecord, error) {
 	return s.store.FetchRecentGames(player, limit)
+}
+
+// GetGame returns a single game owned by the player, or nil.
+func (s *Service) GetGame(player PlayerRef, gameID int64) (*GameRecord, error) {
+	return s.store.FetchGame(player, gameID)
 }
 
 // GetBestGame returns the player's best game for a mode (or nil).

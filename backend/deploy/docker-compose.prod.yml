@@ -8,6 +8,7 @@
 #   3) Nginx 反向代理对外只暴露 80 / 443，终结 HTTPS（证书挂 /etc/letsencrypt）
 #   4) 所有密钥由 deploy/.env 注入，模板见 .env.prod.example（生成强随机值，勿留默认）
 #   5) SQLite 定时备份由 scripts/backup-sqlite.sh（宿主 cron）负责
+#   6) 证书由 certbot 服务用 webroot 模式自动申请/续期（与 nginx 共享 80，不冲突）
 # =============================================================
 
 services:
@@ -19,6 +20,19 @@ services:
         # 无 ports 段：仅内网暴露 3000 给 Nginx
         volumes:
             - sqldata:/app/data
+        # 运行时加固：禁提权、只读根文件系统（数据落命名卷）、临时目录走内存
+        security_opt:
+            - no-new-privileges:true
+        read_only: true
+        tmpfs:
+            - /tmp
+        mem_limit: 512m
+        cpus: 1.0
+        logging:
+            driver: json-file
+            options:
+                max-size: '10m'
+                max-file: '3'
         healthcheck:
             test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1']
             interval: 30s
@@ -30,17 +44,58 @@ services:
         image: nginx:1.27-alpine
         container_name: mma-guessr-nginx
         restart: unless-stopped
-        # 对外只暴露 80（自动跳转 HTTPS）与 443
+        # 对外只暴露 80（HTTP 挑战 + 自动跳转 HTTPS）与 443
         ports:
             - '80:80'
             - '443:443'
         volumes:
             - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-            # 服务器证书（Let's Encrypt），由宿主机或 certbot 容器写入
-            - /etc/letsencrypt:/etc/letsencrypt:ro
+            # 证书与 ACME 挑战由 certbot 服务写入，nginx 只读挂载
+            - certbot-etc:/etc/letsencrypt:ro
+            - certbot-www:/var/www/certbot:ro
             - ./frontend:/usr/share/nginx/html:ro
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        read_only: true
+        tmpfs:
+            - /var/cache/nginx
+            - /var/run
+            - /tmp
+        mem_limit: 256m
+        cpus: 0.5
+        logging:
+            driver: json-file
+            options:
+                max-size: '10m'
+                max-file: '3'
         depends_on:
             - backend
 
+    certbot:
+        image: certbot/certbot:v3.1.0
+        container_name: mma-guessr-certbot
+        restart: unless-stopped
+        # 与 nginx 共享 ACME 挑战目录与证书目录；webroot 模式走 80 端口，
+        # 与 nginx 共存，无需占用独立端口
+        volumes:
+            - certbot-etc:/etc/letsencrypt
+            - certbot-www:/var/www/certbot
+        # 容器仅保持存活；续期由宿主 cron 驱动（见 docs/deploy.md），
+        # 成功后由宿主 docker 对 nginx 执行 reload —— 避免挂载 docker.sock
+        entrypoint: /bin/sh -c 'while :; do sleep 12h; done'
+        logging:
+            driver: json-file
+            options:
+                max-size: '10m'
+                max-file: '3'
+        depends_on:
+            - nginx
+
 volumes:
     sqldata:
+    certbot-etc:
+    certbot-www:

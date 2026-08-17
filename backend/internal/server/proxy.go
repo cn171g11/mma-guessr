@@ -54,6 +54,32 @@ func (s *Server) handleMapillaryImage(w http.ResponseWriter, r *http.Request) {
 	s.serveImage(w, r, imageID, width)
 }
 
+// handleMapillaryMedia resolves a Mapillary image to its public CDN thumbnail
+// URL so the browser can fetch the bytes directly from the CDN, keeping the
+// token server-side and sparing the backend's bandwidth and cache storage.
+func (s *Server) handleMapillaryMedia(w http.ResponseWriter, r *http.Request) {
+	imageID := r.PathValue("imageId")
+	if !proxyImageIDPattern.MatchString(imageID) {
+		httputil.WriteError(w, http.StatusBadRequest, "imageId 不合法")
+		return
+	}
+	width := 1024
+	if raw := r.URL.Query().Get("width"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 2048 {
+			httputil.WriteError(w, http.StatusBadRequest, "width 需为 1-2048 的整数")
+			return
+		}
+		width = parsed
+	}
+	url, err := s.services.Mapillary.ResolveMediaURL(imageID, width)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
 // handleImagerySearch routes to the source provider's search.
 func (s *Server) handleImagerySearch(w http.ResponseWriter, r *http.Request) {
 	source := r.PathValue("source")

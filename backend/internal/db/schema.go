@@ -145,6 +145,61 @@ func Migrate(conn *sql.DB) error {
 			nonce TEXT PRIMARY KEY,
 			expires_at TEXT NOT NULL
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS friends (
+			requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			addressee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected')),
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (requester_id, addressee_id),
+			CHECK (requester_id != addressee_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_friends_addressee
+			ON friends (addressee_id, status)`,
+
+		`CREATE TABLE IF NOT EXISTS season_ratings (
+			user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			season TEXT NOT NULL,
+			rating INTEGER NOT NULL DEFAULT 1000,
+			tier INTEGER NOT NULL DEFAULT 1,
+			games_played INTEGER NOT NULL DEFAULT 0,
+			wins INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_season_ratings_rating
+			ON season_ratings (season, rating DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS user_streaks (
+			user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			current_streak INTEGER NOT NULL DEFAULT 0,
+			best_streak INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS location_facts (
+			location_id INTEGER PRIMARY KEY REFERENCES locations(id) ON DELETE CASCADE,
+			fact TEXT NOT NULL
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS sponsors (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			note TEXT,
+			amount_cents INTEGER NOT NULL DEFAULT 0,
+			visible INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS oauth_accounts (
+			provider TEXT NOT NULL,
+			provider_id TEXT NOT NULL,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (provider, provider_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user
+			ON oauth_accounts (user_id)`,
 	}
 
 	for _, stmt := range statements {
@@ -171,7 +226,7 @@ func migrateGameResultsRounds(conn *sql.DB) error {
 	for rows.Next() {
 		var createSQL string
 		if err := rows.Scan(&createSQL); err != nil {
-			rows.Close()
+			_ = rows.Close() // #nosec G104 -- the pool is single-connection; release before returning
 			return err
 		}
 		if !strings.Contains(createSQL, "rounds") {
@@ -203,7 +258,12 @@ func seedAchievements(conn *sql.DB) error {
 		('accuracy_90',   '神射手', '总命中率高于 90%', '🎖️', 1, '神射手'),
 		('best_20k',      '高分达人', '单局成绩达到 20,000 分', '🚀', 1, '高分达人'),
 		('china_10',      '中国通', '累计完成 10 局中国模式', '🐉', 1, '中国通'),
-		('landmark_10',   '地标巡礼', '累计完成 10 局地标模式', '🗼', 0, NULL)`
+		('landmark_10',   '地标巡礼', '累计完成 10 局地标模式', '🗼', 0, NULL),
+		('streak_3',      '三连胜', '对战模式连胜 3 场', '🔥', 0, NULL),
+		('streak_10',     '十连胜', '对战模式连胜 10 场', '⚡', 1, '十连胜'),
+		('consecutive_5', '连环射手', '单局内连续答对 5 轮', '🎯', 0, NULL),
+		('regions_4',     '环球旅行家', '累计体验 4 个不同区域', '🗺️', 1, '环球旅行家'),
+		('daily_full',    '每日满分', '单次每日挑战每轮均获满分', '🏅', 0, NULL)`
 	_, err := conn.Exec(insert)
 	return err
 }

@@ -20,6 +20,7 @@ const (
 	boardRateMax    = 120
 	searchRateMax   = 30
 	imageRateMax    = 60
+	friendReqMax    = 30
 
 	codeWindow     = 10 * time.Minute
 	guestWindow    = 5 * time.Minute
@@ -57,6 +58,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/games/recent", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleGamesRecent)))
 	mux.Handle("GET /api/games/best", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleGamesBest)))
 	mux.Handle("GET /api/games/summary", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleGamesSummary)))
+	mux.Handle("GET /api/games/{gameId}", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleGamesGet)))
 	mux.Handle("DELETE /api/games/{gameId}", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleGamesDelete)))
 
 	// Locations.
@@ -65,30 +67,66 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// Daily challenge.
 	mux.Handle("GET /api/daily/today", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleDailyToday)))
+	mux.Handle("GET /api/daily/leaderboard", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleDailyLeaderboard)))
 
 	// Leaderboard.
 	mux.Handle("GET /api/leaderboard", middleware.RateLimit("rl:leaderboard", boardWindow, boardRateMax, nil)(http.HandlerFunc(s.handleLeaderboard)))
 
+	// Ratings ladder.
+	mux.Handle("GET /api/ratings", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleRatings)))
+
 	// Profile.
 	mux.Handle("GET /api/profile", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleProfile)))
+	mux.Handle("GET /api/profile/collections", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleProfileCollections)))
 
 	// Achievements.
 	mux.Handle("GET /api/achievements", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleAchievements)))
 	mux.Handle("PUT /api/achievements/title", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleAchievementsPutTitle)))
 	mux.Handle("DELETE /api/achievements/title", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleAchievementsDeleteTitle)))
 
+	// Friends.
+	mux.Handle("GET /api/friends", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleFriendsList)))
+	mux.Handle("GET /api/friends/requests", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleFriendsRequests)))
+	// The request-send endpoint is rate-limited per IP+identity so rotating
+	// guest accounts cannot spam friendship requests at other users.
+	mux.Handle("POST /api/friends/requests", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:friends-request", 1*time.Minute, friendReqMax, gamesIdentity)(http.HandlerFunc(s.handleFriendsRequest))))
+	mux.Handle("POST /api/friends/requests/{userId}/accept", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleFriendsAccept)))
+	mux.Handle("POST /api/friends/requests/{userId}/reject", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleFriendsReject)))
+	mux.Handle("DELETE /api/friends/{userId}", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handleFriendsRemove)))
+
+	// Sponsors (public read; admin write).
+	mux.HandleFunc("GET /api/sponsors", s.handleSponsorsList)
+	mux.Handle("POST /api/sponsors", s.requireAdmin(http.HandlerFunc(s.handleSponsorsAdd)))
+	mux.Handle("DELETE /api/sponsors/{sponsorId}", s.requireAdmin(http.HandlerFunc(s.handleSponsorsDelete)))
+
+	// Location facts.
+	mux.HandleFunc("GET /api/locations/fact", s.handleLocationFact)
+
+	// OAuth sign-in (optional; degrades to 404/empty when unconfigured).
+	// providers is a signed API call; authorize/callback are browser
+	// navigations and are excluded from request signing (state token protects
+	// the flow instead).
+	mux.Handle("GET /api/oauth/providers", middleware.RateLimit("rl:oauth-providers", boardWindow, boardRateMax, nil)(http.HandlerFunc(s.handleOAuthProviders)))
+	mux.HandleFunc("GET /api/oauth/authorize/{provider}", s.handleOAuthAuthorize)
+	mux.HandleFunc("GET /api/oauth/callback/{provider}", s.handleOAuthCallback)
+
 	// Mapillary proxy.
 	mux.Handle("GET /api/proxy/mapillary/search", middleware.RateLimit("rl:mapillary-search", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleMapillarySearch)))
+	mux.Handle("GET /api/proxy/mapillary/media/{imageId}", middleware.RateLimit("rl:mapillary-media", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleMapillaryMedia)))
 	mux.Handle("GET /api/proxy/mapillary/image/{imageId}", middleware.RateLimit("rl:mapillary-image", proxyWindow, imageRateMax, nil)(http.HandlerFunc(s.handleMapillaryImage)))
 	mux.Handle("GET /api/proxy/imagery/{source}/search", middleware.RateLimit("rl:imagery-search", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleImagerySearch)))
 	mux.Handle("GET /api/proxy/imagery/{source}/image/{imageId}", middleware.RateLimit("rl:imagery-image", proxyWindow, imageRateMax, nil)(http.HandlerFunc(s.handleImageryImage)))
 
-	// Socket.IO polling transport (Engine.IO v4, polling only).
+	// Socket.IO polling transport (Engine.IO v4, polling only). The transport
+	// itself is IP rate-limited (events inside a session are limited per
+	// IP+identity in multiplayer) so unauthenticated polling floods cannot
+	// exhaust connections.
 	if s.services.Multiplayer != nil {
-		mux.Handle("GET /socket.io", s.services.Multiplayer.Transport())
-		mux.Handle("GET /socket.io/", s.services.Multiplayer.Transport())
-		mux.Handle("POST /socket.io", s.services.Multiplayer.Transport())
-		mux.Handle("POST /socket.io/", s.services.Multiplayer.Transport())
+		limited := middleware.RateLimit("rl:socketio", 1*time.Minute, 600, nil)(s.services.Multiplayer.Transport())
+		mux.Handle("GET /socket.io", limited)
+		mux.Handle("GET /socket.io/", limited)
+		mux.Handle("POST /socket.io", limited)
+		mux.Handle("POST /socket.io/", limited)
 	}
 
 	// 404 for any unhandled path under /api.

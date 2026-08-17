@@ -2,12 +2,14 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -19,7 +21,9 @@ import (
 	"mma-guessr/backend/internal/config"
 	"mma-guessr/backend/internal/daily"
 	"mma-guessr/backend/internal/db"
+	"mma-guessr/backend/internal/facts"
 	"mma-guessr/backend/internal/games"
+	"mma-guessr/backend/internal/httputil"
 	"mma-guessr/backend/internal/kv"
 	"mma-guessr/backend/internal/leaderboard"
 	"mma-guessr/backend/internal/locations"
@@ -27,8 +31,11 @@ import (
 	"mma-guessr/backend/internal/mapillary"
 	"mma-guessr/backend/internal/metrics"
 	"mma-guessr/backend/internal/multiplayer"
+	"mma-guessr/backend/internal/oauth"
 	"mma-guessr/backend/internal/profile"
+	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/server"
+	"mma-guessr/backend/internal/social"
 )
 
 const (
@@ -134,6 +141,9 @@ func newTestEnv(t *testing.T) *testEnv {
 		VerifyCodeSecret:   testVerifySecret,
 		CORSAllowedOrigins: []string{"http://localhost:3000"},
 		CookieSameSite:     "lax",
+		SponsorAdminToken:  "test-admin-token",
+		OAuthStateSecret:   "test-oauth-state-secret-0123456789abcdef",
+		FrontendOrigin:     "http://localhost:3000",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -156,14 +166,20 @@ func newTestEnv(t *testing.T) *testEnv {
 	leaderboardSvc := leaderboard.NewService(conn, cache)
 	profileSvc := profile.NewService(conn, cache)
 	achievementsSvc := achievements.NewService(conn, logger)
+	ratingsSvc := ratings.NewService(conn)
+	socialSvc := social.NewService(conn)
+	factsSvc := facts.NewService(conn)
+	_ = factsSvc.Seed()
 	gamesStore := games.NewStore(conn)
-	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc)
+	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc)
 	mapillarySvc := mapillary.NewService("", cache)
 
 	engine := multiplayer.NewEngineIO(logger)
-	mp := multiplayer.NewService(engine, store, locationsStore, gamesSvc, tokens, logger)
+	mp := multiplayer.NewService(engine, store, locationsStore, gamesSvc, tokens, ratingsSvc, logger)
 	engine.SetHandler(mp)
 	t.Cleanup(mp.Stop)
+
+	oauthSvc := oauth.NewService(cfg.OAuthStateSecret, fakeOAuthProvider{})
 
 	services := server.Services{
 		Tokens:       tokens,
@@ -176,6 +192,10 @@ func newTestEnv(t *testing.T) *testEnv {
 		Achievements: achievementsSvc,
 		Mapillary:    mapillarySvc,
 		Multiplayer:  mp,
+		Ratings:      ratingsSvc,
+		Social:       socialSvc,
+		Facts:        factsSvc,
+		OAuth:        oauthSvc,
 		Cache:        cache,
 	}
 
@@ -268,6 +288,29 @@ func (e *testEnv) request(t *testing.T, method, path, token string, body any) *r
 	return &response{status: res.StatusCode, body: parsed, header: res.Header}
 }
 
+// requestWithCookies posts an empty JSON body with a raw Cookie header (e.g.
+// a Set-Cookie value captured from an earlier response).
+func (e *testEnv) requestWithCookies(t *testing.T, path, rawCookie string) *response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, e.ts.URL+path, strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if rawCookie != "" {
+		req.Header.Set("Cookie", rawCookie)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	raw, _ := io.ReadAll(res.Body)
+	parsed := make(map[string]any)
+	_ = json.Unmarshal(raw, &parsed)
+	return &response{status: res.StatusCode, body: parsed, header: res.Header}
+}
+
 // cookieValueOf extracts a cookie value from the Set-Cookie header.
 func cookieValueOf(header http.Header, name string) string {
 	for _, line := range header.Values("Set-Cookie") {
@@ -329,4 +372,29 @@ func guestRowExists(t *testing.T, e *testEnv, table, id string) bool {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return n > 0
+}
+
+// fakeOAuthProvider is a deterministic OAuth provider for e2e tests: the
+// authorize URL embeds the state, and any non-empty code maps to a stable
+// identity. It exercises the full callback path without network access.
+type fakeOAuthProvider struct{}
+
+// Name is the provider key used in URLs and storage.
+func (fakeOAuthProvider) Name() string { return "fake" }
+
+// Label is the human-readable provider name.
+func (fakeOAuthProvider) Label() string { return "Fake" }
+
+// AuthorizeURL builds the consent URL carrying the signed state.
+func (fakeOAuthProvider) AuthorizeURL(state string) string {
+	return "https://fake-idp.example.com/authorize?state=" + url.QueryEscape(state)
+}
+
+// ExchangeCode maps the code to an identity; "bad" simulates a provider-side
+// rejection, empty codes are treated as missing.
+func (fakeOAuthProvider) ExchangeCode(_ context.Context, code string) (*oauth.Identity, error) {
+	if code == "" || code == "bad" {
+		return nil, httputil.Unauthorized("第三方授权失败")
+	}
+	return &oauth.Identity{ProviderID: "fake-" + code, Email: "fake-" + code + "@oauth.local", Name: "Fake " + code}, nil
 }

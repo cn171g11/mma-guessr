@@ -118,6 +118,7 @@
                 <button class="changelog-btn" id="btn-mp-panel">⚔️ 对战</button>
                 <button class="changelog-btn" id="btn-history">📜 历史记录</button>
                 <button class="changelog-btn" id="btn-account">👤 账号</button>
+                <button class="changelog-btn" id="btn-sponsors">❤️ 赞助</button>
             </div>
         </div>
 
@@ -226,6 +227,7 @@
                 <div class="new-record" id="new-record">🎉 新纪录！</div>
                 <h2 id="result-title">📊 本轮结果</h2>
                 <div class="location-name" id="result-location">位置：-</div>
+                <div class="fact-line" id="result-fact" style="display: none"></div>
                 <div class="distance" id="result-distance">0 公里</div>
                 <div class="score-gained" id="result-score">+0 分</div>
                 <div class="xp-gained" id="result-xp">✨ +0 经验</div>
@@ -280,6 +282,20 @@
                     <div class="acc-name" id="account-profile-name"></div>
                     <div class="acc-email" id="account-profile-email"></div>
                     <div class="acc-stats" id="account-profile-stats"></div>
+                    <div class="acc-section" id="account-ladder" style="display: none"></div>
+                    <div class="acc-section">
+                        <h3>🤝 好友</h3>
+                        <div class="acc-code-row">
+                            <input id="friend-username" placeholder="输入对方用户名添加好友" autocomplete="off" />
+                            <button class="acc-code-btn" id="friend-add-btn">添加</button>
+                        </div>
+                        <div id="friend-requests"></div>
+                        <div id="friend-list"></div>
+                    </div>
+                    <div class="acc-section">
+                        <h3>🗺️ 地点图鉴</h3>
+                        <div id="collection-list"></div>
+                    </div>
                     <div id="account-achievements"></div>
                 </div>
                 <div id="account-login-form">
@@ -287,6 +303,10 @@
                     <input id="login-identifier" placeholder="用户名 / 邮箱" autocomplete="username" />
                     <input id="login-password" type="password" placeholder="密码" autocomplete="current-password" />
                     <button class="acc-submit" id="login-submit-btn">登录</button>
+                    <div class="oauth-divider" id="oauth-divider" style="display: none">
+                        <span>或</span>
+                    </div>
+                    <button class="oauth-btn" id="oauth-google-btn" style="display: none">🔑 使用第三方账号登录</button>
                 </div>
                 <div id="account-register-form">
                     <h3>注册</h3>
@@ -316,9 +336,7 @@
                     </div>
                     <button class="acc-submit" id="register-submit-btn">注册</button>
                 </div>
-                <button id="account-logout-btn" class="acc-logout" style="display: none">
-                    退出登录
-                </button>
+                <button id="account-logout-btn" class="acc-logout" style="display: none">退出登录</button>
             </div>
         </div>
 
@@ -347,6 +365,7 @@
                     <button class="clog-close" id="daily-close-btn">✕ 关闭</button>
                 </h2>
                 <div id="daily-content"></div>
+                <div class="daily-lb" id="daily-lb"></div>
             </div>
         </div>
 
@@ -363,6 +382,46 @@
                     <button class="acc-submit" id="mp-find-btn">🔍 开始匹配</button>
                     <button class="acc-logout" id="mp-cancel-btn" style="display: none">取消匹配</button>
                 </div>
+                <div class="mp-private">
+                    <button class="acc-submit" id="mp-create-btn" style="display: none">🏠 创建私房</button>
+                    <div class="acc-code-row" id="mp-join-row" style="display: none">
+                        <input id="mp-room-code" placeholder="输入 6 位房间码" maxlength="6" autocomplete="off" />
+                        <button class="acc-code-btn" id="mp-join-btn">加入私房</button>
+                    </div>
+                    <div class="mp-room-code-box" id="mp-room-code-box" style="display: none">
+                        房间码
+                        <b id="mp-room-code-value"></b>
+                        · 发给好友即可加入
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 对局回放弹窗 ============ -->
+        <div id="replay-overlay">
+            <div id="replay-box">
+                <h2>
+                    🕹️ 对局回放
+                    <button class="clog-close" id="replay-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="replay-sub" id="replay-summary"></div>
+                <div id="replay-map"></div>
+                <div id="replay-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 赞助弹窗 ============ -->
+        <div id="sponsor-overlay">
+            <div id="sponsor-box">
+                <h2>
+                    ❤️ 赞助名单
+                    <button class="clog-close" id="sponsor-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats">本项目完全免费、无广告。如果喜欢，欢迎赞助支持服务器与地图数据成本。</div>
+                <div id="sponsor-list"></div>
+                <a class="notion-btn" id="sponsor-link" href="#" target="_blank" rel="noopener noreferrer">
+                    💝 我要赞助
+                </a>
             </div>
         </div>
 
@@ -388,6 +447,7 @@
         <script src="js/lb.js"></script>
         <script src="js/daily.js"></script>
         <script src="js/mp.js"></script>
+        <script src="js/features.js"></script>
         <script src="js/events.js"></script>
         <script src="js/sw-register.js"></script>
     </body>

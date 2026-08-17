@@ -17,7 +17,7 @@ import (
 const (
 	graphBaseURL     = "https://graph.mapillary.com"
 	mediaFields      = "thumb_256_url,thumb_1024_url,thumb_2048_url"
-	searchFields     = "id,geometry,is_pano"
+	searchFields     = "id,geometry,is_pano,thumb_256_url,thumb_1024_url,thumb_2048_url"
 	imageContentType = "image/jpeg"
 
 	searchCachePrefix = "mly:search:"
@@ -39,8 +39,11 @@ type SearchResult struct {
 
 // Image is one Mapillary image entry.
 type Image struct {
-	ID       string `json:"id"`
-	Geometry struct {
+	ID           string    `json:"id"`
+	Thumb256URL  *string   `json:"thumb_256_url,omitempty"`
+	Thumb1024URL *string   `json:"thumb_1024_url,omitempty"`
+	Thumb2048URL *string   `json:"thumb_2048_url,omitempty"`
+	Geometry     struct {
 		Type        string    `json:"type"`
 		Coordinates []float64 `json:"coordinates"`
 	} `json:"geometry"`
@@ -190,6 +193,27 @@ func (s *Service) FetchImage(imageID string, width int) (*FetchedImage, error) {
 	}
 	_ = s.kv.SetBytes(cacheKey, buffer, 24*60*60)
 	return &FetchedImage{Buffer: buffer, ContentType: imageContentType}, nil
+}
+
+// ResolveMediaURL resolves a Mapillary image to its public CDN thumbnail URL.
+// Unlike FetchImage it never downloads bytes, so the browser can load the
+// image directly from the CDN while the token stays server-side.
+func (s *Service) ResolveMediaURL(imageID string, width int) (string, error) {
+	if s.token == "" {
+		return "", httputil.ServiceUnavailable("Mapillary 代理未配置（缺少 MAPILLARY_TOKEN）")
+	}
+	media, err := s.resolveMedia(imageID)
+	if err != nil {
+		return "", err
+	}
+	thumbURL, err := pickThumbURL(media, normalizeWidth(width))
+	if err != nil {
+		return "", err
+	}
+	if err := assertSafeImageURL(thumbURL); err != nil {
+		return "", err
+	}
+	return thumbURL, nil
 }
 
 type mediaRecord struct {

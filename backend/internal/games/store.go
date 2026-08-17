@@ -88,6 +88,22 @@ func (s *Store) FetchBestGame(player PlayerRef, mode string) (*GameRecord, error
 	return game, nil
 }
 
+// FetchGame returns a single game owned by the player, or nil.
+func (s *Store) FetchGame(player PlayerRef, gameID int64) (*GameRecord, error) {
+	row := s.conn.QueryRow(
+		`SELECT id, mode, region, total_score, rounds, created_at FROM game_results
+		 WHERE id = ? AND player_type = ? AND player_id = ?`,
+		gameID, player.Role, player.ID)
+	game, err := scanGame(row)
+	if err != nil {
+		return nil, err
+	}
+	if game == nil {
+		return nil, nil
+	}
+	return game, nil
+}
+
 // DeleteGameRecord removes a game owned by the player. Returns false when
 // the game does not exist.
 func (s *Store) DeleteGameRecord(player PlayerRef, gameID int64) (bool, error) {

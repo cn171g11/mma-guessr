@@ -13,7 +13,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata \
+# sqlite CLI is required by deploy/scripts/backup-sqlite.sh (VACUUM INTO
+# consistent snapshot inside the container); the busybox wget is used by the
+# HEALTHCHECK below.
+RUN apk add --no-cache ca-certificates tzdata sqlite \
     && addgroup -S app && adduser -S app -G app
 
 WORKDIR /app

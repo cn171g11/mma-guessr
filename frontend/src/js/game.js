@@ -297,6 +297,7 @@ function renderHistoryList(all, isRemote) {
                     <span class="hg-score">${scoreStr}</span>
                     <div class="hist-rounds">${roundsHTML}</div>
                     <div style="text-align:right;margin-top:6px">
+                        <button class="hist-replay" data-key="${escapeHtml(String(deleteKey))}" data-remote="${isRemote ? '1' : '0'}" style="${isRemote ? '' : 'display:none'}">🕹 回放</button>
                         <button class="hist-delete" data-key="${escapeHtml(String(deleteKey))}" data-remote="${isRemote ? '1' : '0'}">🗑 删除</button>
                     </div>
                 </div>`;
@@ -601,7 +602,9 @@ function pickLocation(roundTried) {
     return state.drawBag[state.drawBag.length - 1];
 }
 
-// 逐级扩大范围搜索街景；返回 { imageId, lat, lng }（lat/lng 是图片真实坐标，用于精确判分）
+// 逐级扩大范围搜索街景；返回 { imageId, panoramaUrl, lat, lng }（lat/lng 是图片真实坐标，用于精确判分）。
+// 搜索结果直接携带 Mapillary CDN 缩略图 URL，浏览器可绕过后端直连 CDN，
+// 从而省下后端带宽与缓存存储；URL 缺失时 imageId 走 media 解析兜底。
 async function findMapillaryImage(lat, lng) {
     // Mapillary 对过大 bbox 直接报错(“reduce data”)，0.02/0.08 级无效；
     // 改为逐级 0.004/0.008/0.012（约 440m ~ 1.3km），提升港澳台等点位命中率
@@ -616,7 +619,8 @@ async function findMapillaryImage(lat, lng) {
             const list = panos.length ? panos : result.data;
             const img = list[Math.floor(Math.random() * list.length)];
             const [ilng, ilat] = img.geometry.coordinates;
-            return { imageId: img.id, lat: ilat, lng: ilng };
+            const panoramaUrl = img.thumb_2048_url || img.thumb_1024_url || null;
+            return { imageId: img.id, panoramaUrl: panoramaUrl, lat: ilat, lng: ilng };
         }
         if (!result) continue;
         errLog.push(`bbox=${bbox} → 0 images`);
@@ -633,7 +637,7 @@ async function findMapillaryImage(lat, lng) {
 }
 
 // 街景搜索：仅走服务端代理（密钥仅存于服务端，前端永不持有）。
-// 代理不可达/失败时返回 null 并记录错误，由 panorama-fallback 兜底提示，不回退直连 Mapillary。
+// 代理不可达/失败时返回 null 并记录错误，由 panorama-fallback 兜底提示。
 async function searchStreetView(bbox, errLog, offset) {
     try {
         const response = await fetch(
@@ -701,7 +705,7 @@ async function loadRound() {
         roundTried.add(loc.name);
         if (state.mode === 'daily') {
             // 每日挑战由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
-            if (loc.mapillaryId) found = { imageId: loc.mapillaryId, panoramaUrl: null, lat: null, lng: null };
+            if (loc.mapillaryId) found = { imageId: loc.mapillaryId, panoramaUrl: loc.panoramaUrl || null, lat: null, lng: null };
             else if (loc.panoramaUrl) found = { imageId: null, panoramaUrl: loc.panoramaUrl, lat: null, lng: null };
         } else {
             found = await findMapillaryImage(loc.lat, loc.lng);
@@ -733,9 +737,13 @@ async function loadRound() {
     };
     isSubmitting = false; // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
     if (imageId) {
-        showPanorama(imageId);
-    } else {
+        // 优先 CDN 直连；无 CDN URL 时走代理兜底
+        showPanorama(imageId, panoramaUrl);
+    } else if (panoramaUrl) {
+        // 仅有 URL 时按原逻辑直接展示
         showPanoramaUrl(panoramaUrl);
+    } else {
+        showPanoramaFallback();
     }
     showHint();
     startTimer();
@@ -748,10 +756,11 @@ function skipLocation() {
 }
 
 // ==========================================================
-// 【360° 街景查看器（自研，走服务端代理）】
+// 【360° 街景查看器（自研）】
 // v1.17.0 起移除 MapillaryJS：该库需客户端密钥才能直连 Mapillary。
-// 改为经 /api/proxy/mapillary/image/:id 取 equirectangular 全景图，
-// 用 three.js 球面渲染实现拖拽环视与滚轮/双指缩放，密钥永不下发浏览器。
+// 自研 three.js 球面渲染，优先直接加载 Mapillary CDN 缩略图
+// （搜索结果 / media 端点携带公开 CDN URL，密钥永不下发浏览器），
+// 失败时回退到后端代理 /api/proxy/mapillary/image/:id。
 // ==========================================================
 const PANO_IMAGE_WIDTH = 2048;
 const PANO_MIN_FOV = 30;
@@ -866,39 +875,76 @@ function initPanoViewer() {
     panoViewer = { renderer, camera, sphere, animateId };
 }
 
-function setPanoImage(imageId) {
-    if (!panoViewer) return;
-    const url = `${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`;
-    const texture = new THREE.TextureLoader().load(
-        url,
-        () => {
-            $('panorama-loading').style.display = 'none';
-        },
-        undefined,
-        () => {
-            streetViewError = { stage: 'viewer', imageId: imageId, viewerError: '全景图加载失败' };
-            showPanoramaFallback();
+// 优先用 Mapillary CDN 直链加载全景图（绕过后端代理，省带宽与缓存）；
+// 失败时回退到后端代理 /image/:id（该路径可解析任意 mapillaryId）。
+// 返回 promise，加载成功后 resolve，出错时 reject 并附带错误详情。
+function loadPanoramaTexture(imageId, panoramaUrl) {
+    return new Promise((resolve, reject) => {
+        let candidateUrls;
+        if (panoramaUrl) {
+            candidateUrls = [panoramaUrl];
+            if (imageId) candidateUrls.push(`${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`);
+        } else if (imageId) {
+            candidateUrls = [`${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`];
+        } else {
+            reject({ message: '缺少街景来源' });
+            return;
         }
-    );
-    texture.encoding = THREE.sRGBEncoding;
-    panoViewer.sphere.material.map = texture;
-    panoViewer.sphere.material.needsUpdate = true;
-    panoViewer.camera.rotation.set(0, 0, 0);
-    panoViewer.camera.fov = PANO_DEFAULT_FOV;
-    panoViewer.camera.updateProjectionMatrix();
-    resizePanoViewer();
+        let idx = 0;
+        const tryNext = () => {
+            if (idx >= candidateUrls.length) {
+                reject({ message: '全景图加载失败' });
+                return;
+            }
+            const url = candidateUrls[idx++];
+            new THREE.TextureLoader().load(
+                url,
+                (texture) => {
+                    if (!panoViewer) return;
+                    texture.encoding = THREE.sRGBEncoding;
+                    panoViewer.sphere.material.map = texture;
+                    panoViewer.sphere.material.needsUpdate = true;
+                    panoViewer.camera.rotation.set(0, 0, 0);
+                    panoViewer.camera.fov = PANO_DEFAULT_FOV;
+                    panoViewer.camera.updateProjectionMatrix();
+                    resizePanoViewer();
+                    resolve(url);
+                },
+                undefined,
+                () => tryNext()
+            );
+        };
+        tryNext();
+    });
 }
 
-function showPanorama(imageId) {
+function setPanoImage(imageId, panoramaUrl) {
+    if (!panoViewer) return;
+    $('panorama-loading').style.display = 'flex';
+    loadPanoramaTexture(imageId, panoramaUrl)
+        .then(() => {
+            $('panorama-loading').style.display = 'none';
+        })
+        .catch(() => {
+            streetViewError = {
+                stage: 'viewer',
+                imageId: imageId || null,
+                viewerError: '全景图加载失败',
+            };
+            showPanoramaFallback();
+        });
+}
+
+function showPanorama(imageId, panoramaUrl) {
     $('panorama-loading').style.display = 'flex';
     $('panorama-fallback').style.display = 'none';
     try {
         if (!panoViewer) {
             initPanoViewer();
             // 容器刚由隐藏变为可见，尺寸就绪后再挂纹理，避免黑屏
-            setTimeout(() => setPanoImage(imageId), 300);
+            setTimeout(() => setPanoImage(imageId, panoramaUrl), 300);
         } else {
-            setPanoImage(imageId);
+            setPanoImage(imageId, panoramaUrl);
         }
     } catch (e) {
         streetViewError = {

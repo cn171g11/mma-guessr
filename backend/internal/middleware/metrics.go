@@ -86,6 +86,8 @@ func routeLabel(path string) string {
 			return "/api/games"
 		}
 		return "/api/games/:gameId"
+	case strings.HasPrefix(trimmed, "/api/proxy/mapillary/media/"):
+		return "/api/proxy/mapillary/media/:imageId"
 	case strings.HasPrefix(trimmed, "/api/proxy/mapillary/image/"):
 		return "/api/proxy/mapillary/image/:imageId"
 	case strings.HasPrefix(trimmed, "/api/proxy/imagery/"):

@@ -15,6 +15,8 @@
 | [testing.md](testing.md) | 测试指南：端到端测试覆盖范围与运行方式 |
 | [locations.md](locations.md) | 题库维护：`LOCATIONS` 结构、工具脚本、校验规则 |
 | [scripts.md](scripts.md) | 后端运维命令：build / vet / test / seed / gosec |
+| [gap-analysis.md](gap-analysis.md) | 与原版图寻的差距分析：已落地功能（好友/私房/天梯/回放/冷知识/OAuth 等）与待排期项 |
+| [security-audit-2026-08-13.md](security-audit-2026-08-13.md) | 全量安全审计报告（2026-08-13：High 0 / Medium 1 / Low 4） |
 | [BACKUP_outdated.md](BACKUP_outdated.md) | 历史备份方案文档（原 Backup Tool，已过时，仅存档） |
 
 ## 根目录文档

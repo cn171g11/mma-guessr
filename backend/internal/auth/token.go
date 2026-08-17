@@ -13,6 +13,15 @@ import (
 const (
 	RoleUser  = "user"
 	RoleGuest = "guest"
+
+	// tokenIssuer is the JWT iss claim. Verification enforces it so tokens
+	// signed by a different issuer (e.g. a leaked/rogue key) are rejected.
+	tokenIssuer = "mma-guessr"
+
+	// Token audiences separate the two token classes: a stolen access token
+	// cannot be replayed as a refresh token even if the refresh secret leaks.
+	accessAudience  = "mma-guessr:access"
+	refreshAudience = "mma-guessr:refresh"
 )
 
 // Claims are the JWT payload fields issued by the server.
@@ -55,6 +64,8 @@ func (s *TokenService) SignAccessToken(subject, role string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   subject,
 			ID:        newJTI(),
+			Issuer:    tokenIssuer,
+			Audience:  jwt.ClaimStrings{accessAudience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
@@ -71,6 +82,8 @@ func (s *TokenService) SignRefreshToken(userID string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ID:        newJTI(),
+			Issuer:    tokenIssuer,
+			Audience:  jwt.ClaimStrings{refreshAudience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
 		},
@@ -79,6 +92,8 @@ func (s *TokenService) SignRefreshToken(userID string) (string, error) {
 }
 
 // VerifyAccessToken parses and validates an access JWT, returning its claims.
+// Issuer and audience are enforced so only tokens minted by this service for
+// the access audience pass.
 func (s *TokenService) VerifyAccessToken(token string) (*Claims, error) {
 	claims := &Claims{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
@@ -86,7 +101,7 @@ func (s *TokenService) VerifyAccessToken(token string) (*Claims, error) {
 			return nil, errors.New("unexpected signing method")
 		}
 		return s.accessSecret, nil
-	})
+	}, jwt.WithIssuer(tokenIssuer), jwt.WithAudience(accessAudience))
 	if err != nil || !parsed.Valid {
 		return nil, errors.New("invalid access token")
 	}
@@ -100,6 +115,8 @@ func (s *TokenService) VerifyAccessToken(token string) (*Claims, error) {
 }
 
 // VerifyRefreshToken parses and validates a refresh JWT, returning its claims.
+// Issuer and audience are enforced so a token minted for another audience
+// (or another service) cannot be replayed.
 func (s *TokenService) VerifyRefreshToken(token string) (*Claims, error) {
 	claims := &Claims{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
@@ -107,7 +124,7 @@ func (s *TokenService) VerifyRefreshToken(token string) (*Claims, error) {
 			return nil, errors.New("unexpected signing method")
 		}
 		return s.refreshSecret, nil
-	})
+	}, jwt.WithIssuer(tokenIssuer), jwt.WithAudience(refreshAudience))
 	if err != nil || !parsed.Valid {
 		return nil, errors.New("invalid refresh token")
 	}

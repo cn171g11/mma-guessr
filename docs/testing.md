@@ -30,4 +30,4 @@ go test ./...     # 含 test/ 下全部 e2e 测试（内存 SQLite，无需外�
 
 ## CI
 
-CI 的 `backend-checks.yml` 运行 `go vet` + `go build` + 全量 `go test` + race 套件（见 `p.md` 阶段 8）。
+CI 的 `backend-checks.yml` 运行 `go vet` + `go build` + 全量 `go test` + race 套件。

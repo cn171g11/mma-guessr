@@ -55,7 +55,10 @@ function mpCloseLobby() {
     }
     $('mp-overlay').classList.remove('show');
     mpSetStatus('尚未连接');
-    if (!mpState.inMatch) mpSetLobby(false);
+    if (!mpState.inMatch) {
+        mpSetLobby(false);
+        mpShowPrivateUI(false);
+    }
 }
 
 async function createMpSocket() {
@@ -74,7 +77,10 @@ async function createMpSocket() {
     mpState.socket = socket;
 
     socket.on('connect', () => {
-        if (!mpState.inMatch) mpSetStatus('✅ 已连接 · 点击「开始匹配」');
+        if (!mpState.inMatch) {
+            mpSetStatus('✅ 已连接 · 点击「开始匹配」');
+            mpShowPrivateUI(true);
+        }
     });
     socket.on('disconnect', () => {
         if (mpState.inMatch) {
@@ -83,10 +89,14 @@ async function createMpSocket() {
             backHome();
         } else {
             mpSetStatus('📴 连接断开，请重试');
+            mpShowPrivateUI(false);
         }
     });
     socket.on('connect_error', () => {
-        if (!mpState.inMatch) mpSetStatus('❌ 连接服务器失败，请确认后端已启动');
+        if (!mpState.inMatch) {
+            mpSetStatus('❌ 连接服务器失败，请确认后端已启动');
+            mpShowPrivateUI(false);
+        }
     });
     socket.on('mp:queued', (data) => {
         mpSetStatus('⏳ 排队中... 队列第 ' + (data ? data.position : '?') + ' 位');
@@ -95,6 +105,11 @@ async function createMpSocket() {
     socket.on('mp:leftQueue', () => {
         mpSetStatus('已取消匹配');
         mpSetLobby(false);
+    });
+    socket.on('mp:privateCreated', (data) => {
+        mpSetStatus('🏠 私房已创建，等待好友加入...');
+        $('mp-room-code-value').textContent = data && data.roomCode ? data.roomCode : '------';
+        $('mp-room-code-box').style.display = 'block';
     });
     socket.on('mp:matched', (data) => enterMatch(data));
     socket.on('mp:round', (data) => mpStartRound(data));
@@ -136,6 +151,48 @@ function mpCancelMatch() {
     mpSetLobby(false);
 }
 
+// 私房：显示/隐藏私房控件
+function mpShowPrivateUI(show) {
+    const visible = show && !mpState.inMatch && mpState.socket && mpState.socket.connected;
+    $('mp-create-btn').style.display = visible ? 'block' : 'none';
+    $('mp-join-row').style.display = visible ? 'flex' : 'none';
+    if (!visible) $('mp-room-code-box').style.display = 'none';
+}
+
+function mpCreatePrivate() {
+    if (!mpState.socket || !mpState.socket.connected) {
+        mpSetStatus('⏳ 正在连接服务器...');
+        createMpSocket();
+        return;
+    }
+    if (mpState.inMatch) return;
+    $('mp-room-code-box').style.display = 'none';
+    mpState.socket.emit('mp:createPrivate');
+}
+
+function mpJoinPrivate() {
+    const code = ($('mp-room-code').value || '').trim().toUpperCase();
+    if (!mpState.socket || !mpState.socket.connected) {
+        mpSetStatus('⏳ 正在连接服务器...');
+        createMpSocket();
+        return;
+    }
+    if (mpState.inMatch) return;
+    if (!/^[A-Z2-9]{6}$/.test(code)) {
+        mpSetStatus('❌ 请输入 6 位房间码');
+        return;
+    }
+    $('mp-room-code').value = '';
+    mpState.socket.emit('mp:join', { mode: 'private', roomCode: code });
+}
+
+// 私房控件事件绑定
+$('mp-create-btn').addEventListener('click', mpCreatePrivate);
+$('mp-join-btn').addEventListener('click', mpJoinPrivate);
+$('mp-room-code').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') mpJoinPrivate();
+});
+
 // ==========================================================
 // 【对局中】
 // ==========================================================
@@ -147,6 +204,7 @@ function enterMatch(data) {
     mpState.myScore = 0;
     mpState.waitingResult = false;
     mpActive = true;
+    mpShowPrivateUI(false);
 
     $('mp-overlay').classList.remove('show');
     mpSetLobby(false);
@@ -189,7 +247,8 @@ function mpStartRound(data) {
     $('panorama-fallback').style.display = 'none';
 
     if (location && location.mapillaryId) {
-        showPanorama(location.mapillaryId);
+        // 优先 CDN 直连（服务端已附带公开 CDN URL），无则走代理兜底
+        showPanorama(location.mapillaryId, location.panoramaUrl || null);
     } else if (location && location.panoramaUrl) {
         // 无街景 ID 时退化为直接展示全景图 URL；走 DOM 构建而非 innerHTML，防止 URL 被注入为标签
         showPanoramaUrl(location.panoramaUrl);

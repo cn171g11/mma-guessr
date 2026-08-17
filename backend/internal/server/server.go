@@ -9,7 +9,9 @@ import (
 	"mma-guessr/backend/internal/auth"
 	"mma-guessr/backend/internal/config"
 	"mma-guessr/backend/internal/daily"
+	"mma-guessr/backend/internal/facts"
 	"mma-guessr/backend/internal/games"
+	"mma-guessr/backend/internal/httputil"
 	"mma-guessr/backend/internal/kv"
 	"mma-guessr/backend/internal/leaderboard"
 	"mma-guessr/backend/internal/locations"
@@ -17,7 +19,10 @@ import (
 	"mma-guessr/backend/internal/metrics"
 	"mma-guessr/backend/internal/middleware"
 	"mma-guessr/backend/internal/multiplayer"
+	"mma-guessr/backend/internal/oauth"
 	"mma-guessr/backend/internal/profile"
+	"mma-guessr/backend/internal/ratings"
+	"mma-guessr/backend/internal/social"
 )
 
 // Services bundles the domain services the server needs.
@@ -32,6 +37,10 @@ type Services struct {
 	Achievements *achievements.Service
 	Mapillary    *mapillary.Service
 	Multiplayer  *multiplayer.Service
+	Ratings      *ratings.Service
+	Social       *social.Service
+	Facts        *facts.Service
+	OAuth        *oauth.Service
 	Cache        *kv.Store
 }
 
@@ -49,6 +58,8 @@ func New(cfg *config.Config, conn *sql.DB, logger *slog.Logger, services Service
 	// Resolve client IPs from X-Forwarded-For only when the operator opted in
 	// via TRUST_PROXY; otherwise rate limits keep the direct-connection key.
 	middleware.ConfigureTrustProxy(cfg.TrustProxy)
+	// Network hardening: randomize JSON object response lengths when enabled.
+	httputil.EnablePayloadPadding(cfg.PayloadPadding)
 	return &Server{
 		cfg:      cfg,
 		conn:     conn,
