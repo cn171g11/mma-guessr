@@ -12,6 +12,8 @@ pnpm-debug.log*
 dist/
 build/
 out/
+bin/
+backend/bin/
 coverage/
 
 .vscode/

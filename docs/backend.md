@@ -39,6 +39,7 @@ go run ./cmd/seed -data ../frontend/src/js/data.js
 | `go test -race ./test/` | 竞态检测套件 |
 | `go run ./cmd/server` | 启动开发服务 |
 | `go run ./cmd/seed -data <data.js>` | 题库导入（幂等） |
+| `go run ./cmd/rebuild-leaderboards` | 从 scores 表重建总榜与今日日榜缓存（迁移/恢复后使用） |
 | `gofmt -l .` | 格式检查 |
 | `go run github.com/securego/gosec/v2/cmd/gosec@latest ./...` | 安全扫描（0 问题） |
 
@@ -73,30 +74,31 @@ go run ./cmd/seed -data ../frontend/src/js/data.js
 ```
 backend/
 ├── cmd/
-│   ├── server/main.go      # 启动入口（HTTP + Engine.IO 挂载）
-│   └── seed/main.go        # 题库导入工具
+│   ├── server/main.go              # 启动入口（HTTP + Engine.IO 挂载）
+│   ├── seed/main.go                # 题库导入工具
+│   └── rebuild-leaderboards/main.go  # 排行榜缓存重建工具
 ├── internal/
-│   ├── auth/               # 认证：密码、JWT、验证码、游客、刷新令牌
-│   ├── games/              # 成绩域：提交/查询/防伪校验/服务端计分
-│   ├── leaderboard/        # 排行榜：scores 表 MAX() 聚合
-│   ├── achievements/       # 成就与称号（14 定义 + 解锁判定）
-│   ├── daily/              # 每日挑战：惰性抽题 + 每日一次
-│   ├── profile/            # 个人统计聚合
-│   ├── multiplayer/        # 对战：Engine.IO v4 polling + 匹配队列 + 房间
-│   ├── locations/          # 题库：随机抽题池、统计缓存
-│   ├── mapillary/          # 图源代理：search 缓存 / 图片 SSRF 防护
-│   ├── config/             # 环境变量加载与校验
-│   ├── db/                 # SQLite 打开 + 建表 schema（幂等迁移）
-│   ├── kv/                 # SQLite 上的 TTL 缓存（替代 Redis）
-│   ├── middleware/         # 请求签名、鉴权、限频、安全头、CORS、错误处理
-│   ├── server/             # HTTP 路由（/api/*）
-│   ├── httputil/           # JSON/Cookie/错误响应辅助
-│   ├── signature/          # HMAC 请求签名 + nonce 防重放
-│   ├── ratelimit/          # 进程内滑动窗口限频
-│   └── ...                 # logging / metrics / mail / util
-├── test/                   # e2e 测试（httptest + 内存 SQLite）
-├── Dockerfile              # 生产镜像（多阶段，alpine 运行）
-└── deploy/                 # 生产部署栈（docker-compose + Nginx + SQLite 备份）
+│   ├── auth/                       # 认证：密码、JWT、验证码、游客、刷新令牌
+│   ├── games/                      # 成绩域：提交/查询/防伪校验/服务端计分
+│   ├── leaderboard/                # 排行榜：scores 表 MAX() 聚合 + 每日 UTC 0 点自动重建
+│   ├── achievements/               # 成就与称号（14 定义 + 解锁判定）
+│   ├── daily/                      # 每日挑战：惰性抽题 + 每日一次
+│   ├── profile/                    # 个人统计聚合
+│   ├── multiplayer/                # 对战：Engine.IO v4 polling + 匹配队列 + 房间
+│   ├── locations/                  # 题库：随机抽题池、统计缓存
+│   ├── mapillary/                  # 图源代理：search 缓存 / 图片 SSRF 防护
+│   ├── config/                     # 环境变量加载与校验
+│   ├── db/                         # SQLite 打开 + 建表 schema（幂等迁移）
+│   ├── kv/                         # SQLite 上的 TTL 缓存（替代 Redis）
+│   ├── middleware/                 # 请求签名、鉴权、限频、安全头、CORS、错误处理
+│   ├── server/                     # HTTP 路由（/api/*）
+│   ├── httputil/                   # JSON/Cookie/错误响应辅助
+│   ├── signature/                  # HMAC 请求签名 + nonce 防重放
+│   ├── ratelimit/                  # 进程内滑动窗口限频
+│   └── ...                         # logging / metrics / mail / util
+├── test/                           # e2e 测试（httptest + 内存 SQLite）
+├── Dockerfile                      # 生产镜像（多阶段，alpine 运行）
+└── deploy/                         # 生产部署栈（docker-compose + Nginx + SQLite 备份）
 ```
 
 ## CI/CD

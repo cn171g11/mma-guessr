@@ -1,8 +1,10 @@
 package leaderboard
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -149,6 +151,39 @@ func (s *Service) GetRankings(query Query) ([]Entry, error) {
 		out = append(out, Entry{ID: entry.ID, Username: username, Score: entry.Score})
 	}
 	return out, nil
+}
+
+// StartNightlyRebuild recomputes the overall and today's daily caches at every
+// UTC midnight, mirroring the previous backend's scheduleNightlyRebuild. The
+// goroutine stops when ctx is cancelled.
+func (s *Service) StartNightlyRebuild(ctx context.Context, logger *slog.Logger) {
+	go s.nightlyRebuildLoop(ctx, logger)
+}
+
+// nightlyRebuildLoop runs the rebuild once per UTC day until the context ends.
+func (s *Service) nightlyRebuildLoop(ctx context.Context, logger *slog.Logger) {
+	for {
+		timer := time.NewTimer(time.Until(nextMidnightUTC(time.Now())))
+		select {
+		case <-timer.C:
+			if err := s.Rebuild(); err != nil {
+				logger.Error("nightly leaderboard rebuild failed", "error", err)
+				continue
+			}
+			logger.Info("nightly leaderboard rebuild completed")
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		}
+	}
+}
+
+// nextMidnightUTC returns the upcoming UTC midnight boundary after now, so the
+// rebuild aligns with the UTC day rollover that defines the daily board.
+func nextMidnightUTC(now time.Time) time.Time {
+	utc := now.UTC()
+	midnight := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+	return midnight.AddDate(0, 0, 1)
 }
 
 // Rebuild recomputes overall and today's daily caches from the scores table

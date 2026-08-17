@@ -1,8 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime/debug"
+	"syscall"
 	"time"
 
 	"mma-guessr/backend/internal/achievements"
@@ -26,6 +32,39 @@ import (
 // version is injected at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
+const (
+	// maintenanceInterval is how often expired rows are swept from SQLite.
+	maintenanceInterval = time.Hour
+	// shutdownGracePeriod bounds how long the server waits for in-flight
+	// requests to drain before forcing a close.
+	shutdownGracePeriod = 10 * time.Second
+)
+
+// serveUntilSignal blocks until the HTTP server stops or the process context
+// is cancelled; on a signal it stops the multiplayer engine and drains
+// in-flight requests gracefully. A nil error means a clean stop.
+func serveUntilSignal(httpServer *http.Server, mp *multiplayer.Service, logger *slog.Logger, ctx context.Context) error {
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+		mp.Stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
+		defer cancel()
+		return httpServer.Shutdown(shutdownCtx)
+	}
+}
+
 func main() {
 	logger := logging.New()
 
@@ -33,6 +72,13 @@ func main() {
 	if err != nil {
 		logger.Error("load config", "error", err)
 		os.Exit(1)
+	}
+
+	// Apply GC tuning before any significant allocation so the heap goal and
+	// soft limit are in effect for the whole process lifetime.
+	debug.SetGCPercent(cfg.GCPercent)
+	if cfg.MemoryLimitBytes > 0 {
+		debug.SetMemoryLimit(cfg.MemoryLimitBytes)
 	}
 
 	conn, err := db.Open(cfg.SQLitePath)
@@ -121,7 +167,16 @@ func main() {
 	}
 
 	logger.Info("server starting", "port", cfg.Port, "env", cfg.Environment)
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+
+	// Background sweeper for expired rows; stops with the process context.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	db.NewJanitor(conn, maintenanceInterval, logger).Start(ctx)
+	// Recompute the leaderboard caches at each UTC midnight (matching the
+	// previous backend's nightly rebuild), alongside the lazy on-read rebuild.
+	leaderboardSvc.StartNightlyRebuild(ctx, logger)
+
+	if err := serveUntilSignal(httpServer, mp, logger, ctx); err != nil {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

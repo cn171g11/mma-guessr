@@ -56,6 +56,8 @@ func routeLabel(path string) string {
 		return "/api/games/best"
 	case trimmed == "/api/games/summary":
 		return "/api/games/summary"
+	case trimmed == "/api/games":
+		return "/api/games"
 	case trimmed == "/api/locations/random":
 		return "/api/locations/random"
 	case trimmed == "/api/locations/stats":

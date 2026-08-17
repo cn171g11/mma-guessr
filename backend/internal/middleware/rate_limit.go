@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"mma-guessr/backend/internal/httputil"
@@ -27,9 +28,31 @@ func RateLimit(prefix string, window time.Duration, limit int, identity func(*ht
 	}
 }
 
-// ClientIP returns the client IP from the remote address. When the service
-// runs behind a trusted proxy, the caller should populate X-Forwarded-For.
+// trustProxy mirrors Express' trust-proxy behavior: when enabled, ClientIP
+// resolves the real client from the leftmost X-Forwarded-For entry so rate
+// limits apply per real client behind a reverse proxy instead of the proxy IP.
+var trustProxy bool
+
+// ConfigureTrustProxy enables X-Forwarded-For resolution for ClientIP. It must
+// be called once at startup from the TRUST_PROXY configuration. Leaving it
+// disabled keeps the direct-connection default so a client cannot spoof the
+// header to bypass per-IP limits.
+func ConfigureTrustProxy(enabled bool) {
+	trustProxy = enabled
+}
+
+// ClientIP returns the client IP. When the service runs behind a trusted
+// reverse proxy, the leftmost X-Forwarded-For entry is used (mirroring
+// Express with one trust hop); otherwise the TCP remote address is used
+// unchanged.
 func ClientIP(r *http.Request) string {
+	if trustProxy {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			if first := strings.TrimSpace(strings.Split(forwarded, ",")[0]); first != "" {
+				return first
+			}
+		}
+	}
 	host := r.RemoteAddr
 	if i := lastColonIndex(host); i >= 0 {
 		host = host[:i]

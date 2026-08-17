@@ -46,6 +46,9 @@ type Server struct {
 
 // New creates a Server with the given dependencies.
 func New(cfg *config.Config, conn *sql.DB, logger *slog.Logger, services Services, registry *metrics.Registry) *Server {
+	// Resolve client IPs from X-Forwarded-For only when the operator opted in
+	// via TRUST_PROXY; otherwise rate limits keep the direct-connection key.
+	middleware.ConfigureTrustProxy(cfg.TrustProxy)
 	return &Server{
 		cfg:      cfg,
 		conn:     conn,

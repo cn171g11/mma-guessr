@@ -122,6 +122,13 @@ type Config struct {
 	MetricsToken       string
 	APISigningSecret   string
 	TrustProxy         bool
+	// GCPercent is the GOGC percentage (default 100; -1 means disabled).
+	// Lower values make the GC run more often so the heap returns toward the
+	// live set faster after load bursts; higher values reduce GC overhead.
+	GCPercent int
+	// MemoryLimitBytes is an optional soft heap cap for the Go runtime
+	// (runtime/debug.SetMemoryLimit). 0 keeps the runtime default.
+	MemoryLimitBytes int64
 }
 
 // Load reads configuration from environment variables with secure defaults.
@@ -149,6 +156,25 @@ func Load() (*Config, error) {
 
 	if v, ok := parseNonEmptyInt(os.Getenv("SMTP_PORT")); ok {
 		cfg.SMTPPort = v
+	}
+
+	// GC tuning (cross-platform, mirrors Go's native GOGC / GOMEMLIMIT env
+	// handling but also applies when the binary is wrapped by a launcher that
+	// does not propagate the process environment).
+	cfg.GCPercent = 100
+	switch os.Getenv("GOGC") {
+	case "":
+	case "off":
+		cfg.GCPercent = -1
+	default:
+		if v, ok := parseNonEmptyInt(os.Getenv("GOGC")); ok && v != 0 {
+			cfg.GCPercent = v
+		}
+	}
+	if raw := os.Getenv("GOMEMLIMIT"); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			cfg.MemoryLimitBytes = n
+		}
 	}
 
 	var err error
