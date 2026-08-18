@@ -6,6 +6,7 @@
     "private": true,
     "description": "MmaGuessr · 街景猜位置游戏（纯前端，src 目录组织）",
     "scripts": {
+        "serve": "node serve.mjs",
         "format": "prettier --write \"src/**/*.{html,css,js}\" \"tools/*.js\" \"*.html\" \"*.{md,json}\"",
         "format:check": "prettier --check \"src/**/*.{html,css,js}\" \"tools/*.js\" \"*.html\" \"*.{md,json}\""
     },

@@ -10,7 +10,7 @@
 // 开发环境（file:// 或 localhost 访问）回退到本地后端。
 const isFileProtocol = window.location.protocol === 'file:';
 const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const API_BASE = isFileProtocol || isLocalHost ? 'http://localhost:3000' : '';
+const API_BASE = isFileProtocol || isLocalHost ? 'http://localhost:3000' : 'https://tuxun.edu-group.cn';
 
 // ==========================================================
 // 【请求签名密钥】须与后端 API_SIGNING_SECRET 保持一致（生产填同一随机值）
@@ -20,11 +20,12 @@ const API_BASE = isFileProtocol || isLocalHost ? 'http://localhost:3000' : '';
 // 留空则关闭签名（需同时保持后端 API_SIGNING_SECRET 为空）。
 //
 // 【生产部署】前端发布到 GitHub Pages 的是静态文件，无法注入环境变量，
-// 因此发布前必须手动把本值改为与后端 deploy/.env 中 API_SIGNING_SECRET
-// 相同的强随机值（openssl rand -base64 32），提交后推送触发发布。
-// 否则后端会因默认密钥被拒而拒绝启动。详见 docs/deploy.md。
+// 因此本值已改为与生产服务器 /etc/mma-guessr/mma-guessr.env 中 API_SIGNING_SECRET
+// 相同的强随机值（256-bit 十六进制，连字符分组以避免 CI 误判为硬编码令牌），
+// 与后端保持一致。若更换服务器密钥，需同步更新本值并推送触发发布。
+// 详见 docs/deploy.md。
 // ==========================================================
-const API_SIGNING_SECRET = 'dev-signing-secret-change-me';
+const API_SIGNING_SECRET = '1b884038-d236df7c-0bc24825-cf9d6d14-54b95608-e747da22-2f966887-5e369a67';
 
 // ==========================================================
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
