@@ -64,6 +64,7 @@ jobs:
                   node --check src/js/lb.js
                   node --check src/js/daily.js
                   node --check src/js/mp.js
+                  node --check src/js/packs.js
                   for f in tools/*.js; do node --check "$f"; done
 
             - name: Location data validation

@@ -6,7 +6,8 @@
 | --- | --- | --- |
 | 前端 GitHub Pages | 静态站点托管，推荐用于前端 | §1 |
 | 后端 GHCR 镜像 | 容器镜像发布（手动触发） | §2 |
-| 云服务器生产栈 | docker-compose + Nginx + HTTPS + 备份 + 监控 | §3（最完整） |
+| 云服务器生产栈（Docker） | docker-compose + Nginx + HTTPS + 备份 + 监控 | §3（最完整） |
+| 云服务器生产栈（备选） | systemd 单二进制 + Nginx + HTTPS + 备份 + 监控 | §4 |
 
 ---
 
@@ -114,7 +115,8 @@ backend/deploy/
 ├── .env.prod.example            # 环境变量模板（强随机密钥占位）
 ├── nginx/nginx.conf             # 反代 + HTTPS + 安全头 + WebSocket + gzip/缓存
 ├── frontend/                    # 前端静态文件（Nginx 站点根目录）
-└── scripts/backup-sqlite.sh     # SQLite 定时备份（宿主 cron 调用）
+├── systemd/                     # 单二进制部署形态（服务单元 + Nginx 配置 + env 模板，见 §4）
+└── scripts/backup-sqlite.sh     # SQLite 定时备份（Docker 与宿主 HOST_MODE=1 双模式）
 ```
 
 ### 3.3 安全特性
@@ -212,7 +214,7 @@ DEPLOY_DIR="$(pwd)"
 (crontab -l 2>/dev/null; echo "0 2 * * * $DEPLOY_DIR/scripts/backup-sqlite.sh >> /var/log/mma-guessr-backup.log 2>&1") | crontab -
 crontab -l | grep -E 'certbot|backup'      # 确认两条任务已安装
 
-# ⑩ 按 §6 上线检查清单逐项验收
+# ⑩ 按 §7 上线检查清单逐项验收
 ```
 
 ### 3.6 证书管理
@@ -277,12 +279,147 @@ curl -s https://<域名>/api/health && curl -s https://<域名>/api/leaderboard 
    const API_BASE = window.location.hostname.includes('<pages域名>') ? 'https://<api域名>' : '';
    ```
 5. 注意：分域部署的刷新 Cookie 依赖 `SameSite=None`，部分旧浏览器/隐私模式可能受限，**优先推荐同域**
+6. 图包工坊依赖后端：地图选点街景解析走 `/api/proxy/mapillary/search`，需 `MAPILLARY_TOKEN` 且 `API_BASE` 指向可达后端；纯静态模式（经典/地标等）可离线游玩
 
 ---
 
-## 4. 监控与告警
+## 4. 后端 · 单二进制 systemd 部署（备选形态）
 
-### 4.1 Prometheus 抓取
+不依赖 Docker 的轻量形态：编译产物为一个 Go 二进制，由 systemd 守护，Nginx 走宿主安装。功能、安全特性（请求签名、nonce 防重放、限频、CSP、TLS）与 §3 完全一致，仅进程托管方式不同。
+
+### 4.1 与 Docker 形态的取舍
+
+| 维度 | Docker（§3） | systemd 单二进制（本节） |
+| --- | --- | --- |
+| 部署前置 | Docker Engine + Compose v2 | Go 工具链（仅自建时）+ Nginx + certbot + sqlite3 |
+| 运行隔离 | 容器只读根文件系统 + 命名卷 | systemd 沙箱（ProtectSystem 等，见服务单元） |
+| 内存/CPU 上限 | mem_limit / cpus | MemoryMax / CPUQuota（服务单元内） |
+| 备份 | 容器内 `sqlite3 VACUUM INTO` | 宿主 `sqlite3 VACUUM INTO`（同一脚本 `HOST_MODE=1`） |
+| 适用 | 已有 Docker 环境、想要统一编排 | 1C1G 小服务器、免 Docker 依赖、启动更快 |
+
+### 4.2 目录与文件布局
+
+```
+backend/deploy/systemd/
+├── mma-guessr.service        # systemd 服务单元（沙箱加固 + 内存/CPU 上限）
+├── nginx-mma-guessr.conf     # Nginx 站点配置（__DOMAIN__ 占位）
+└── .env.systemd.example      # EnvironmentFile 模板（与 .env.prod.example 同变量集）
+
+/usr/local/bin/mma-guessr                # 后端二进制
+/etc/mma-guessr/mma-guessr.env           # 环境变量（chmod 600）
+/etc/systemd/system/mma-guessr.service   # 服务单元
+/etc/nginx/sites-available/mma-guessr    # Nginx 站点配置
+/var/lib/mma-guessr/mma_guessr.db        # SQLite 数据（服务唯一可写目录）
+/var/www/mma-guessr/                     # 前端静态文件
+```
+
+### 4.3 安装步骤
+
+```bash
+# ① 前置：Ubuntu 22.04+（nginx 1.22+ / certbot / sqlite3）
+sudo apt-get install -y nginx certbot sqlite3 ca-certificates tzdata
+
+# ② 运行用户与目录
+sudo useradd -r -s /usr/sbin/nologin mma-guessr
+sudo mkdir -p /var/lib/mma-guessr /var/www/mma-guessr /etc/mma-guessr
+sudo chown -R mma-guessr:mma-guessr /var/lib/mma-guessr
+
+# ③ 二进制（二选一）
+#    方式 A：解压 release 的 mma-guessr-backend-<version>.zip 到 /usr/local/bin/mma-guessr
+#    方式 B：本地自建
+cd backend
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=2.0.0" \
+    -o /tmp/mma-guessr ./cmd/server
+sudo install -m 0755 /tmp/mma-guessr /usr/local/bin/mma-guessr
+
+# ④ 环境变量（生成命令与占位替换同 §3.4；同步前端 API_SIGNING_SECRET，见 §1.2）
+sudo cp backend/deploy/systemd/.env.systemd.example /etc/mma-guessr/mma-guessr.env
+sudo chmod 600 /etc/mma-guessr/mma-guessr.env
+sudo vi /etc/mma-guessr/mma-guessr.env
+
+# ⑤ 启动后端
+sudo cp backend/deploy/systemd/mma-guessr.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mma-guessr
+curl -s http://127.0.0.1:3000/api/health        # 期望 {"status":"ok",...}
+
+# ⑥ Nginx 站点（替换 __DOMAIN__ 后启用）
+sed -i 's/__DOMAIN__/your-domain.com/g' backend/deploy/systemd/nginx-mma-guessr.conf
+sudo cp backend/deploy/systemd/nginx-mma-guessr.conf /etc/nginx/sites-available/mma-guessr
+sudo ln -s /etc/nginx/sites-available/mma-guessr /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# ⑦ 前端静态资源（同域托管时；分域部署由 GitHub Pages 承担，此步跳过）
+sudo rsync -av --delete --exclude node_modules ../frontend/src/ /var/www/mma-guessr/
+
+# ⑧ 申请证书（webroot 复用 nginx 80 端口）
+sudo certbot certonly --webroot -w /var/www/certbot -d your-domain.com \
+    --email admin@your-domain.com --agree-tos --no-eff-email
+sudo nginx -t && sudo systemctl reload nginx
+
+# ⑨ 导入题库（首次执行一次，幂等）
+cd backend
+SQLITE_PATH=/var/lib/mma-guessr/mma_guessr.db go run ./cmd/seed -data ../frontend/src/js/data.js
+
+# ⑩ 宿主 cron（续期 + 备份）
+# 证书续期（每 12h，仅在真正续期成功后 reload nginx）
+(crontab -l 2>/dev/null; echo "0 */12 * * * certbot renew --quiet --deploy-hook 'systemctl reload nginx'") | crontab -
+# SQLite 备份（每日 02:00；HOST_MODE=1 走宿主 sqlite3，保留 14 份）
+(crontab -l 2>/dev/null; echo "0 2 * * * HOST_MODE=1 SQLITE_PATH=/var/lib/mma-guessr/mma_guessr.db /opt/mma-guessr/backend/deploy/scripts/backup-sqlite.sh >> /var/log/mma-guessr-backup.log 2>&1") | crontab -
+crontab -l | grep -E 'certbot|backup'          # 确认两条任务已安装
+```
+
+### 4.4 备份与恢复
+
+- 备份即 `backup-sqlite.sh` 的宿主模式（`HOST_MODE=1`），产物与 §3.7 相同（`mma-guessr-sqlite-<时间戳>.db.gz`，保留 14 天）。
+- 手动触发验证：
+
+```bash
+HOST_MODE=1 SQLITE_PATH=/var/lib/mma-guessr/mma_guessr.db ./scripts/backup-sqlite.sh
+ls -la backend/deploy/backups/
+```
+
+- 恢复：停止服务 → 覆盖数据库 → 启动：
+
+```bash
+sudo systemctl stop mma-guessr
+gunzip -c backups/mma-guessr-sqlite-xxx.db.gz | sudo tee /var/lib/mma-guessr/mma_guessr.db >/dev/null
+sudo chown mma-guessr:mma-guessr /var/lib/mma-guessr/mma_guessr.db
+sudo systemctl start mma-guessr
+curl -s https://<域名>/api/health
+```
+
+### 4.5 升级与回滚
+
+```bash
+# 升级：先备份库与旧二进制，替换后重启
+sudo ./scripts/backup-sqlite.sh   # （HOST_MODE=1）
+sudo systemctl stop mma-guessr
+sudo cp /usr/local/bin/mma-guessr /usr/local/bin/mma-guessr.bak
+sudo install -m 0755 <新二进制> /usr/local/bin/mma-guessr
+sudo systemctl start mma-guessr
+
+# 回滚
+sudo systemctl stop mma-guessr
+sudo mv /usr/local/bin/mma-guessr.bak /usr/local/bin/mma-guessr
+sudo systemctl start mma-guessr
+```
+
+### 4.6 运维速查
+
+```bash
+sudo systemctl status mma-guessr                # 状态（含内存/CPU 用量）
+sudo systemctl restart mma-guessr               # 重启
+sudo journalctl -u mma-guessr -f                # 实时日志（slog JSON）
+sudo journalctl -u mma-guessr --since "1 hour ago"
+sudo systemctl reload nginx                     # Nginx 配置重载
+```
+
+---
+
+## 5. 监控与告警
+
+### 5.1 Prometheus 抓取
 
 后端暴露 `GET /api/metrics`（Prometheus 文本格式），需 `METRICS_TOKEN` Bearer 鉴权：
 
@@ -305,7 +442,7 @@ http_request_duration_seconds              # 请求耗时直方图
 go_goroutines / process_resident_memory_bytes  # 运行时指标
 ```
 
-### 4.2 建议告警规则
+### 5.2 建议告警规则
 
 ```yaml
 groups:
@@ -324,7 +461,7 @@ groups:
 
 （备份健康建议直接用 cron 探针：备份脚本失败时 `exit 1`，配合宿主监控或 `cron` 邮件通知即可。）
 
-### 4.3 日志查看
+### 5.3 日志查看
 
 ```bash
 docker compose -f backend/deploy/docker-compose.prod.yml logs -f backend      # 实时日志
@@ -336,9 +473,9 @@ docker logs mma-guessr-backend 2>&1 | grep -i "error"                          #
 
 ---
 
-## 5. 升级与回滚
+## 6. 升级与回滚
 
-### 5.1 后端升级
+### 6.1 后端升级
 
 ```bash
 cd backend/deploy
@@ -355,7 +492,7 @@ docker compose -f docker-compose.prod.yml up -d
 curl -s https://<域名>/api/health
 ```
 
-### 5.2 前端升级
+### 6.2 前端升级
 
 推送 `frontend/**` 至 `main` → CI 校验 → Pages 自动发布。同域部署时把新前端静态文件同步到 `backend/deploy/frontend/`：
 
@@ -363,17 +500,17 @@ curl -s https://<域名>/api/health
 rsync -av --delete --exclude node_modules ../frontend/src/ backend/deploy/frontend/
 ```
 
-### 5.3 回滚
+### 6.3 回滚
 
 - **后端**：`docker compose -f docker-compose.prod.yml up -d <旧镜像tag>`（先备份当前库）
 - **前端**：`git revert <发布提交>` 并推送，Pages 回滚到上一版本；同域则 rsync 旧文件
 - **数据库**：按 §3.7 恢复流程用备份回滚
 
-> 重要：镜像 tag 用版本号（如 `:1.19.0`）而非 `latest`，回滚时指向旧 tag 即可。
+> 重要：镜像 tag 用版本号（如 `:2.0.0`）而非 `latest`，回滚时指向旧 tag 即可。
 
 ---
 
-## 6. 上线检查清单
+## 7. 上线检查清单
 
 ### 功能与连接
 
@@ -383,6 +520,7 @@ rsync -av --delete --exclude node_modules ../frontend/src/ backend/deploy/fronte
 - [ ] `curl -sI https://<domain>` 含 `Strict-Transport-Security` / `X-Frame-Options: DENY` / `nosniff` / `Permissions-Policy`
 - [ ] 主菜单题库 1570 题，各区域题数与 data.js 一致
 - [ ] 经典/挑战/区域/中国/无限/地标六种模式各跑一局
+- [ ] 图包工坊：创建图包 → 地图选点（自动解析街景）→ 保存 → 游玩 → 权威结算；成绩不出现在排行榜/天梯/资料统计
 - [ ] 登录/注册（验证码邮件）、每日挑战、排行榜、对战（Socket.IO 升级）可用
 - [ ] 好友/天梯/图鉴/回放/赞助/冷知识面板正常
 - [ ] 手机横竖屏各检查一次；PWA 可安装
@@ -404,7 +542,7 @@ rsync -av --delete --exclude node_modules ../frontend/src/ backend/deploy/fronte
 
 ---
 
-## 7. 密钥与 Secret 管理
+## 8. 密钥与 Secret 管理
 
 | 类别 | 位置 | 说明 |
 | --- | --- | --- |
@@ -417,11 +555,12 @@ rsync -av --delete --exclude node_modules ../frontend/src/ backend/deploy/fronte
 
 ---
 
-## 8. 故障排查速查
+## 9. 故障排查速查
 
 | 症状 | 原因 | 处理 |
 | --- | --- | --- |
-| 后端启动即退出，报 `missing required environment variable` | `.env` 缺密钥或用默认值 | 补强随机值后 `up -d` |
+| 后端启动即退出，报 `missing required environment variable` | `.env` 缺密钥或用默认值 | 补强随机值后 `up -d`；systemd 形态改为改 `/etc/mma-guessr/mma-guessr.env` 后 `systemctl restart mma-guessr` |
+| systemd 服务启动失败且 journal 报 `Failed to load environment files` | EnvironmentFile 路径或权限不对 | 检查 `/etc/mma-guessr/mma-guessr.env` 存在且 `chmod 600`；`systemctl daemon-reload` |
 | 在线功能全挂，接口 `400 签名校验失败` | 前端/后端 `API_SIGNING_SECRET` 不一致 | 两端改为同一值，重新发布/重启 |
 | 80 端口不跳 HTTPS / 证书告警 | 未申请或已过期 | §3.5 步骤⑦申请；检查续期 cron |
 | 备份报 `backend 镜像缺少 sqlite3 CLI` | 镜像过旧 | 拉取最新镜像重试 |
@@ -434,7 +573,7 @@ rsync -av --delete --exclude node_modules ../frontend/src/ backend/deploy/fronte
 
 ---
 
-## 9. 运维速查表
+## 10. 运维速查表
 
 ```bash
 # ---- 服务管理（backend/deploy 目录下） ----
@@ -459,9 +598,30 @@ curl -s https://<域名>/api/health                                # 健康
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" https://<域名>/api/metrics | head
 ```
 
+### 10.1 systemd 形态速查
+
+```bash
+# ---- 服务管理 ----
+sudo systemctl status mma-guessr              # 状态（含内存/CPU）
+sudo systemctl restart mma-guessr             # 重启
+sudo journalctl -u mma-guessr -f              # 实时日志
+
+# ---- 数据 ----
+HOST_MODE=1 ./scripts/backup-sqlite.sh        # 手动备份（宿主 sqlite3）
+ls -la backups/                               # 查看备份
+
+# ---- 证书 ----
+certbot certificates                          # 证书状态
+sudo systemctl reload nginx                   # 重载配置
+
+# ---- 验证 ----
+curl -s https://<域名>/api/health
+curl -s -H "Authorization: Bearer $METRICS_TOKEN" https://<域名>/api/metrics | head
+```
+
 ---
 
-## 10. 常见问题（FAQ）
+## 11. 常见问题（FAQ）
 
 **Q1：必须用 GitHub Pages 托管前端吗？**
 不必须。同域部署（Nginx 托管）是推荐形态；GitHub Pages 适合纯前端场景或分域部署。
@@ -477,3 +637,6 @@ curl -s -H "Authorization: Bearer $METRICS_TOKEN" https://<域名>/api/metrics |
 
 **Q5：`PAYLOAD_PADDING` 是什么？**
 网络加固项：给 JSON 对象响应注入随机 `_pad` 字段，混淆流量长度指纹。数组与文本端点不受影响，前端无需适配（忽略未知字段）。
+
+**Q6：Docker（§3）和 systemd 单二进制（§4）选哪个？**
+功能与安全完全等价。已有 Docker 环境、需要统一编排/自动重启用 §3；1C1G 小服务器、想免 Docker 依赖或追求最小启动开销用 §4。数据文件、环境变量、备份格式两边可互相迁移（`SQLITE_PATH` 与 `HOST_MODE` 对应切换）。

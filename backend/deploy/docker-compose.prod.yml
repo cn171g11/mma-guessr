@@ -9,6 +9,9 @@
 #   4) 所有密钥由 deploy/.env 注入，模板见 .env.prod.example（生成强随机值，勿留默认）
 #   5) SQLite 定时备份由 scripts/backup-sqlite.sh（宿主 cron）负责
 #   6) 证书由 certbot 服务用 webroot 模式自动申请/续期（与 nginx 共享 80，不冲突）
+#
+# 1C1G 服务器内存预算：backend 硬上限 512m + nginx 硬上限 128m + certbot ≈ 700m，
+# 其余留给系统；GOMEMLIMIT=384MiB（软上限）须始终低于 backend 的 mem_limit。
 # =============================================================
 
 services:
@@ -26,6 +29,7 @@ services:
         read_only: true
         tmpfs:
             - /tmp
+        # 1C1G：512m 为硬上限，与 .env 的 GOMEMLIMIT=384MiB 软上限配套
         mem_limit: 512m
         cpus: 1.0
         logging:
@@ -65,8 +69,9 @@ services:
             - /var/cache/nginx
             - /var/run
             - /tmp
-        mem_limit: 256m
-        cpus: 0.5
+        # 1C1G：nginx 静态文件 + 反代实际占用 <50m，128m 硬上限留足余量给后端
+        mem_limit: 128m
+        cpus: 0.25
         logging:
             driver: json-file
             options:

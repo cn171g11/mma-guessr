@@ -1,0 +1,48 @@
+# MmaGuessr 后端 systemd 服务单元（单二进制部署，非 Docker）
+# 安装：
+#   cp mma-guessr.service /etc/systemd/system/mma-guessr.service
+#   systemctl daemon-reload && systemctl enable --now mma-guessr
+# 说明：环境变量经 EnvironmentFile 注入（/etc/mma-guessr/mma-guessr.env），
+#       与 docker-compose 的 env_file 等价。数据目录 /var/lib/mma-guessr 为唯一可写路径。
+
+[Unit]
+Description=MmaGuessr backend (Go + SQLite single binary)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mma-guessr
+Group=mma-guessr
+EnvironmentFile=/etc/mma-guessr/mma-guessr.env
+WorkingDirectory=/var/lib/mma-guessr
+ExecStart=/usr/local/bin/mma-guessr
+Restart=on-failure
+RestartSec=3
+
+# 内存/CPU 上限与 compose 版 (mem_limit/cpus) 对齐，适合 1C1G 服务器；
+# GOMEMLIMIT=384MiB 为 Go 软上限，MemoryMax 为硬上限（超限 OOM）。
+MemoryHigh=512M
+MemoryMax=512M
+CPUQuota=100%
+
+# journald 结构化日志（后端本身输出 slog JSON）
+StandardOutput=journal
+StandardError=journal
+
+# ---- systemd 沙箱加固（与 compose 的 no-new-privileges/read_only 对齐）----
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/mma-guessr
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

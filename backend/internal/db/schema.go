@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"strings"
+	"time"
 )
 
 // Migrate creates all tables if they do not yet exist. It is idempotent and
@@ -68,6 +69,17 @@ func Migrate(conn *sql.DB) error {
 			ON scores (player_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_scores_mode_score
 			ON scores (mode, score DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS leaderboard_best (
+			mode TEXT NOT NULL,
+			date_key TEXT NOT NULL,
+			player_id TEXT NOT NULL,
+			best_score INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (mode, date_key, player_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_leaderboard_best_rank
+			ON leaderboard_best (mode, date_key, best_score DESC)`,
 
 		`CREATE TABLE IF NOT EXISTS daily_challenges (
 			date TEXT PRIMARY KEY,
@@ -200,6 +212,36 @@ func Migrate(conn *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user
 			ON oauth_accounts (user_id)`,
+
+		`CREATE TABLE IF NOT EXISTS packs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			is_public INTEGER NOT NULL DEFAULT 0,
+			play_count INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_packs_owner ON packs (owner_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_packs_public_play
+			ON packs (is_public, play_count DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS pack_locations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			pack_id INTEGER NOT NULL REFERENCES packs(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			lat REAL NOT NULL,
+			lng REAL NOT NULL,
+			difficulty INTEGER NOT NULL DEFAULT 3,
+			region TEXT NOT NULL DEFAULT 'world',
+			image_id TEXT,
+			panorama_url TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pack_locations_pack
+			ON pack_locations (pack_id)`,
 	}
 
 	for _, stmt := range statements {
@@ -211,8 +253,41 @@ func Migrate(conn *sql.DB) error {
 	if err := migrateGameResultsRounds(conn); err != nil {
 		return err
 	}
+	if err := migrateGameResultsPackID(conn); err != nil {
+		return err
+	}
+	if err := backfillLeaderboardBest(conn); err != nil {
+		return err
+	}
 
 	return seedAchievements(conn)
+}
+
+// backfillLeaderboardBest seeds the leaderboard_best table from the scores
+// history the first time it runs (existing databases upgraded in place). Live
+// game submissions keep the table current afterwards, so the full scan runs
+// exactly once; INSERT OR IGNORE preserves any higher already-recorded bests.
+func backfillLeaderboardBest(conn *sql.DB) error {
+	var count int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM leaderboard_best`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	if _, err := conn.Exec(
+		`INSERT OR IGNORE INTO leaderboard_best (mode, date_key, player_id, best_score, updated_at)
+		 SELECT mode, '', player_id, MAX(score), MAX(created_at) FROM scores
+		 WHERE player_type = 'user' GROUP BY mode, player_id`); err != nil {
+		return err
+	}
+	boundary := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
+	_, err := conn.Exec(
+		`INSERT OR IGNORE INTO leaderboard_best (mode, date_key, player_id, best_score, updated_at)
+		 SELECT mode, substr(created_at, 1, 10), player_id, MAX(score), MAX(created_at) FROM scores
+		 WHERE player_type = 'user' AND substr(created_at, 1, 10) >= ?
+		 GROUP BY mode, substr(created_at, 1, 10), player_id`, boundary)
+	return err
 }
 
 // migrateGameResultsRounds adds the rounds JSON column to databases created
@@ -237,6 +312,31 @@ func migrateGameResultsRounds(conn *sql.DB) error {
 				return err
 			}
 			_, err = conn.Exec(`ALTER TABLE game_results ADD COLUMN rounds TEXT NOT NULL DEFAULT '[]'`)
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// migrateGameResultsPackID adds the pack_id column to databases created
+// before pack games existed. The column stays null for regular games, which
+// lets the aggregate queries exclude casual pack play by pack_id IS NULL.
+func migrateGameResultsPackID(conn *sql.DB) error {
+	rows, err := conn.Query(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'game_results'`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var createSQL string
+		if err := rows.Scan(&createSQL); err != nil {
+			_ = rows.Close() // #nosec G104 -- the pool is single-connection; release before returning
+			return err
+		}
+		if !strings.Contains(createSQL, "pack_id") {
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			_, err = conn.Exec(`ALTER TABLE game_results ADD COLUMN pack_id INTEGER`)
 			return err
 		}
 	}

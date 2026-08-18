@@ -861,6 +861,82 @@ button {
     display: none;
 }
 
+/* ============ 图包工坊 ============ */
+#packs-overlay,
+#packedit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    background: rgba(10, 15, 35, 0.92);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+#packs-overlay.show,
+#packedit-overlay.show {
+    display: flex;
+}
+#packs-box,
+#packedit-box {
+    background: #16213e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 26px 30px;
+}
+#packs-box h2,
+#packedit-box h2 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pack-public {
+    color: #aab8d0;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#packedit-map {
+    height: 280px;
+    border-radius: 12px;
+    margin: 10px 0;
+    z-index: 1;
+}
+#packedit-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#packedit-preview img {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 10px;
+}
+#packedit-preview select {
+    background: #0f1a33;
+    color: #e6edf3;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+}
+#packedit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0;
+}
+
 /* ============ 信息栏 ============ */
 #info-bar {
     position: fixed;

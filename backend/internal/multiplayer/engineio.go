@@ -57,7 +57,7 @@ func NewEngineIO(logger *slog.Logger) *EngineIO {
 		sessions:     make(map[string]*engineSession),
 		pingInterval: 25 * time.Second,
 		pingTimeout:  20 * time.Second,
-		pollHold:     20 * time.Second,
+		pollHold:     10 * time.Second,
 		logger:       logger,
 	}
 }

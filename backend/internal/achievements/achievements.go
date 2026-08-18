@@ -162,7 +162,7 @@ func (s *Service) FetchAggregates(userID string) (Aggregates, error) {
 		        SUM(CASE WHEN mode = 'daily' THEN 1 ELSE 0 END),
 		        SUM(CASE WHEN mode = 'china' THEN 1 ELSE 0 END),
 		        SUM(CASE WHEN mode = 'landmark' THEN 1 ELSE 0 END)
-		 FROM game_results WHERE player_type = 'user' AND player_id = ?`,
+		 FROM game_results WHERE player_type = 'user' AND player_id = ? AND pack_id IS NULL`,
 		userID).Scan(&a.TotalGames, &a.TotalRounds, &a.TotalScore, &a.BestScore,
 		&a.DistinctModes, &a.DailyCount, &a.ChinaCount, &a.LandmarkCount)
 	if err != nil {
@@ -172,14 +172,15 @@ func (s *Service) FetchAggregates(userID string) (Aggregates, error) {
 		`SELECT SUM(CASE WHEN CAST(json_extract(value, '$.score') AS INTEGER) > 0 THEN 1 ELSE 0 END),
 		        SUM(CASE WHEN CAST(json_extract(value, '$.score') AS INTEGER) >= 5000 THEN 1 ELSE 0 END)
 		 FROM game_results CROSS JOIN json_each(rounds)
-		 WHERE player_type = 'user' AND player_id = ?`,
+		 WHERE player_type = 'user' AND player_id = ? AND pack_id IS NULL`,
 		userID).Scan(&a.CorrectGuesses, &a.PerfectRounds)
 	if err != nil {
 		return a, err
 	}
 	err = s.conn.QueryRow(
 		`SELECT COUNT(*) FROM game_results
-		 WHERE player_type = 'user' AND player_id = ? AND json_array_length(rounds) > 0
+		 WHERE player_type = 'user' AND player_id = ? AND pack_id IS NULL
+		   AND json_array_length(rounds) > 0
 		   AND (SELECT COUNT(*) FROM json_each(rounds)
 		        WHERE CAST(json_extract(value, '$.score') AS INTEGER) < 5000) = 0`,
 		userID).Scan(&a.PerfectGames)
@@ -188,7 +189,8 @@ func (s *Service) FetchAggregates(userID string) (Aggregates, error) {
 	}
 	err = s.conn.QueryRow(
 		`SELECT COUNT(DISTINCT region) FROM game_results
-		 WHERE player_type = 'user' AND player_id = ? AND region IS NOT NULL AND region != ''`,
+		 WHERE player_type = 'user' AND player_id = ? AND pack_id IS NULL
+		   AND region IS NOT NULL AND region != ''`,
 		userID).Scan(&a.DistinctRegions)
 	if err != nil {
 		return a, err
@@ -216,7 +218,7 @@ func (s *Service) FetchAggregates(userID string) (Aggregates, error) {
 				       SUM(CASE WHEN CAST(json_extract(e.value, '$.score') AS INTEGER) = 0 THEN 1 ELSE 0 END)
 				         OVER (PARTITION BY g.id ORDER BY CAST(e.key AS INTEGER)) AS grp
 				FROM game_results g CROSS JOIN json_each(g.rounds) e
-				WHERE g.player_type = 'user' AND g.player_id = ?
+				WHERE g.player_type = 'user' AND g.player_id = ? AND g.pack_id IS NULL
 			) sub WHERE score > 0 GROUP BY gid, grp
 		)`,
 		userID).Scan(&a.MaxConsecutive)

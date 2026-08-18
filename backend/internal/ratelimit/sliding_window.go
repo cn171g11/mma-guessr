@@ -15,6 +15,10 @@ type SlidingWindow struct {
 	buckets map[string][]int64
 }
 
+// maxKeys bounds each limiter's map so rotating-client address floods cannot
+// grow process memory without bound. Idle keys are pruned opportunistically.
+const maxKeys = 8192
+
 // NewSlidingWindow creates a limiter allowing `limit` events per `window`.
 func NewSlidingWindow(window time.Duration, limit int) *SlidingWindow {
 	return &SlidingWindow{
@@ -47,7 +51,28 @@ func (s *SlidingWindow) Allow(key string) bool {
 	}
 	kept = append(kept, now)
 	s.buckets[key] = kept
+	if len(s.buckets) > maxKeys {
+		s.sweepIdle(cutoff)
+	}
 	return true
+}
+
+// sweepIdle drops keys with no events inside the current window, bounding the
+// map under sustained traffic from rotating addresses. A key with no recent
+// events is indistinguishable from a never-seen key, so deleting it is safe.
+func (s *SlidingWindow) sweepIdle(cutoff int64) {
+	for key, events := range s.buckets {
+		active := false
+		for _, ts := range events {
+			if ts > cutoff {
+				active = true
+				break
+			}
+		}
+		if !active {
+			delete(s.buckets, key)
+		}
+	}
 }
 
 // Reset clears all recorded events for key (used on login success to clear a

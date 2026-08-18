@@ -18,9 +18,11 @@ const (
 	gamesRateMax    = 10
 	randomRateMax   = 120
 	boardRateMax    = 120
-	searchRateMax   = 30
+	searchRateMax   = 60
 	imageRateMax    = 60
 	friendReqMax    = 30
+	packsListMax    = 120
+	packsWriteMax   = 20
 
 	codeWindow     = 10 * time.Minute
 	guestWindow    = 5 * time.Minute
@@ -101,6 +103,16 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// Location facts.
 	mux.HandleFunc("GET /api/locations/fact", s.handleLocationFact)
+
+	// Map-pack workshop.
+	mux.Handle("GET /api/packs", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:packs-list", boardWindow, packsListMax, nil)(http.HandlerFunc(s.handlePacksList))))
+	mux.Handle("POST /api/packs", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:packs-create", boardWindow, packsWriteMax, gamesIdentity)(http.HandlerFunc(s.handlePacksCreate))))
+	mux.Handle("GET /api/packs/{packId}", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handlePacksGet)))
+	mux.Handle("PATCH /api/packs/{packId}", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:packs-update", boardWindow, packsWriteMax, gamesIdentity)(http.HandlerFunc(s.handlePacksUpdate))))
+	mux.Handle("DELETE /api/packs/{packId}", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handlePacksDelete)))
+	mux.Handle("GET /api/packs/{packId}/locations", middleware.RequireAuth(s.services.Tokens)(http.HandlerFunc(s.handlePacksLocationsList)))
+	mux.Handle("POST /api/packs/{packId}/locations", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:packs-locations", boardWindow, packsWriteMax, gamesIdentity)(http.HandlerFunc(s.handlePacksLocationsReplace))))
+	mux.Handle("GET /api/packs/{packId}/play", middleware.RequireAuth(s.services.Tokens)(middleware.RateLimit("rl:packs-play", boardWindow, packsListMax, nil)(http.HandlerFunc(s.handlePacksPlay))))
 
 	// OAuth sign-in (optional; degrades to 404/empty when unconfigured).
 	// providers is a signed API call; authorize/callback are browser

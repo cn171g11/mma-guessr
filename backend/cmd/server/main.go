@@ -27,6 +27,7 @@ import (
 	"mma-guessr/backend/internal/metrics"
 	"mma-guessr/backend/internal/multiplayer"
 	"mma-guessr/backend/internal/oauth"
+	"mma-guessr/backend/internal/packs"
 	"mma-guessr/backend/internal/profile"
 	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/server"
@@ -38,7 +39,10 @@ var version = "dev"
 
 const (
 	// maintenanceInterval is how often expired rows are swept from SQLite.
-	maintenanceInterval = time.Hour
+	// A 10-minute cadence keeps the request-nonce table small even under a
+	// sustained flood of validly-signed requests (the HMAC secret is public
+	// in the static frontend, so replay-protection nonces are insert-only).
+	maintenanceInterval = 10 * time.Minute
 	// shutdownGracePeriod bounds how long the server waits for in-flight
 	// requests to drain before forcing a close.
 	shutdownGracePeriod = 10 * time.Second
@@ -138,13 +142,14 @@ func main() {
 	cache := kv.New(conn)
 	locationsStore := locations.NewStore(conn, cache)
 	dailySvc := daily.NewService(conn, locationsStore)
-	leaderboardSvc := leaderboard.NewService(conn, cache)
+	leaderboardSvc := leaderboard.NewService(conn)
 	profileSvc := profile.NewService(conn, cache)
 	achievementsSvc := achievements.NewService(conn, logger)
 	ratingsSvc := ratings.NewService(conn)
 	socialSvc := social.NewService(conn)
 	gamesStore := games.NewStore(conn)
-	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc)
+	packsSvc := packs.NewService(packs.NewStore(conn))
+	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc, packsSvc)
 	mapillarySvc := mapillary.NewService(cfg.MapillaryToken, cache)
 
 	engine := multiplayer.NewEngineIO(logger)
@@ -177,6 +182,7 @@ func main() {
 		Social:       socialSvc,
 		Facts:        factsSvc,
 		OAuth:        oauthSvc,
+		Packs:        packsSvc,
 		Cache:        cache,
 	}
 

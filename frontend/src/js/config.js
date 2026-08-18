@@ -30,8 +30,21 @@ const API_SIGNING_SECRET = 'dev-signing-secret-change-me';
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v1.19.0';
+const VERSION = 'v2.0.0';
 const CHANGELOG = [
+    {
+        version: 'v2.0.0',
+        date: '2026-08-18 18:00:00',
+        changes: [
+            '🚀 排行榜性能重构：得分增量 UPSERT + 排序直查，去掉全表重写；用户名 5 分钟缓存；轮询保持缩短至 10s，1 核 1G 服务器更稳。',
+            '🔒 安全审计（全模块）：未发现高危项；修复 nonce 表增长窗口（清理周期 1h → 10min）；输出安全审查报告与网络加固评估。',
+            '📦 图包工坊：注册用户可在地图上选点创建自定义题库，公开分享给全球玩家；游客与用户均可游玩公开图包。',
+            '🔒 图包成绩隔离：图包对局由服务端权威结算，不计入排行榜、天梯、成就与个人统计，杜绝自建题库刷榜。',
+            '🎯 图包模式自动选点：创建者点选地图位置后自动解析最近的 Mapillary 街景，无需手动填写图片 ID。',
+            '🛠 生产部署双形态：Docker Compose（1C1G 内存预算）与 systemd 单二进制（沙箱加固 + 备份脚本宿主模式），二选一即可上线。',
+            '版本号递增至 v2.0.0。',
+        ],
+    },
     {
         version: 'v1.19.0',
         date: '2026-08-17 12:00:00',
@@ -294,6 +307,7 @@ const MODES = {
     endless: { label: '♾️ 无限模式', rounds: Infinity, timer: 0, scale: 2000, diffPool: null },
     daily: { label: '📅 每日挑战', rounds: 10, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
     landmark: { label: '🗼 地标模式', rounds: 5, timer: 0, scale: 2000, diffPool: [1, 2] },
+    pack: { label: '📦 图包', rounds: 5, timer: 0, scale: 2000, diffPool: null },
 };
 const REGION_NAMES = {
     asia: '亚洲',

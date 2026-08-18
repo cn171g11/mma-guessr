@@ -98,7 +98,7 @@ func (r *Registry) Render(poolTotal, poolIdle, poolWaiting int64) string {
 
 	sb.WriteString("# HELP backend_info 后端版本信息\n")
 	sb.WriteString("# TYPE backend_info gauge\n")
-	fmt.Fprintf(&sb, "backend_info{version=%q} 1\n", "1.18.0")
+	fmt.Fprintf(&sb, "backend_info{version=%q} 1\n", "2.0.0")
 
 	sb.WriteString("# HELP http_requests_total 处理的 HTTP 请求总数（按方法/路由/状态码）\n")
 	sb.WriteString("# TYPE http_requests_total counter\n")

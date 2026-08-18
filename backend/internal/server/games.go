@@ -32,6 +32,7 @@ type gameSubmitRequest struct {
 	Region     *string            `json:"region"`
 	TotalScore int                `json:"totalScore"`
 	Rounds     []gameRoundRequest `json:"rounds"`
+	PackID     *int64             `json:"packId"`
 }
 
 // handleGamesSubmit validates and persists a game submission.
@@ -76,6 +77,7 @@ func (s *Server) handleGamesSubmit(w http.ResponseWriter, r *http.Request) {
 		Region:     req.Region,
 		TotalScore: req.TotalScore,
 		Rounds:     rounds,
+		PackID:     req.PackID,
 	})
 	if err != nil {
 		s.writeServiceError(w, r, err)
@@ -97,6 +99,13 @@ func validateGameSubmit(req *gameSubmitRequest) *httputil.HttpError {
 		}
 	} else if req.Region != nil {
 		return httputil.BadRequest("仅区域模式可携带 region")
+	}
+	if req.Mode == "pack" {
+		if req.PackID == nil || *req.PackID <= 0 {
+			return httputil.BadRequest("图包模式必须携带 packId")
+		}
+	} else if req.PackID != nil {
+		return httputil.BadRequest("仅图包模式可携带 packId")
 	}
 	if req.TotalScore < 0 || req.TotalScore > 1_000_000 {
 		return httputil.BadRequest("总分超限")

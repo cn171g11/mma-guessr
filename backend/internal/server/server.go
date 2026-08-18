@@ -20,6 +20,7 @@ import (
 	"mma-guessr/backend/internal/middleware"
 	"mma-guessr/backend/internal/multiplayer"
 	"mma-guessr/backend/internal/oauth"
+	"mma-guessr/backend/internal/packs"
 	"mma-guessr/backend/internal/profile"
 	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/social"
@@ -41,6 +42,7 @@ type Services struct {
 	Social       *social.Service
 	Facts        *facts.Service
 	OAuth        *oauth.Service
+	Packs        *packs.Service
 	Cache        *kv.Store
 }
 

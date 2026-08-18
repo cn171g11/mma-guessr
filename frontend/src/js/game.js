@@ -8,6 +8,7 @@
 const state = {
     mode: null,
     region: null,
+    packId: null,
     round: 0,
     totalScore: 0,
     current: null, // 当前地点 { name, lat, lng, ... } (lat/lng 为街景图片真实坐标)
@@ -172,12 +173,12 @@ function saveHistory(arr) {
 
 function saveGameHistory(options = {}) {
     if (state.mode === 'endless' && state.history.length === 0) return; // 没打成的不记
-    const maxPossible = MODES[state.mode].rounds === Infinity ? null : MODES[state.mode].rounds * MAX_SCORE;
+    const maxPossible = roundsFor() === Infinity ? null : roundsFor() * MAX_SCORE;
     const game = {
         id: Date.now(),
         date: new Date().toLocaleString('zh-CN', { hour12: false }),
         mode: state.mode,
-        modeLabel: MODES[state.mode].label,
+        modeLabel: state.mode === 'pack' ? '📦 图包 · ' + (packChallenge.name || '') : MODES[state.mode].label,
         region: state.region || null,
         regionName: state.region ? REGION_NAMES[state.region] : null,
         totalScore: state.totalScore,
@@ -193,14 +194,14 @@ function saveGameHistory(options = {}) {
     all.unshift(game);
     saveHistory(all);
     // 在线时同步上报服务端；失败静默，本地记录已兜底
-    // 每日挑战的整局上报已在 applyAuthoritativeDailyResult 完成，跳过以免重复
+    // 每日挑战 / 图包的整局上报已在 applyAuthoritativeResult 完成，跳过以免重复
     if (MmaApi.isOnline() && options.skipSubmit !== true) {
         MmaApi.submitGame(buildGamePayload()).catch(() => {});
     }
 }
 
 function buildGamePayload() {
-    return {
+    const payload = {
         mode: state.mode,
         region: state.mode === 'region' ? state.region : null,
         totalScore: state.totalScore,
@@ -218,6 +219,10 @@ function buildGamePayload() {
             answerLng: h.answerLng != null ? h.answerLng : null,
         })),
     };
+    if (state.mode === 'pack') {
+        payload.packId = state.packId;
+    }
+    return payload;
 }
 
 // 服务端记录转为本地历史渲染所需的结构
@@ -373,6 +378,13 @@ function startDailyChallenge(challenge) {
     startGame('daily', null);
 }
 
+// 图包题单：由 packs.js 拉取 /api/packs/{id}/play 后注入，pack 模式固定使用该题单
+let packChallenge = { id: null, name: null, locations: [] };
+function startPackGame(challenge) {
+    packChallenge = { id: challenge.pack.id, name: challenge.pack.name, locations: challenge.locations };
+    startGame('pack', null);
+}
+
 function chooseMode(mode) {
     if (mode === 'region') {
         $('region-screen').classList.add('show');
@@ -380,6 +392,10 @@ function chooseMode(mode) {
     }
     if (mode === 'daily') {
         openDailyPanel();
+        return;
+    }
+    if (mode === 'pack') {
+        openPacksPanel();
         return;
     }
     startGame(mode, null);
@@ -392,6 +408,7 @@ function startGame(mode, region) {
     hideRegionScreen();
     state.mode = mode;
     state.region = region;
+    state.packId = mode === 'pack' ? packChallenge.id : null;
     state.round = 0;
     state.totalScore = 0;
     state.history = [];
@@ -409,7 +426,8 @@ function startGame(mode, region) {
     $('quit-btn').classList.add('show');
 
     const cfg = MODES[mode];
-    $('mode-tag').textContent = cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
+    const tagName = mode === 'pack' ? '📦 ' + (packChallenge.name || '图包') : cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
+    $('mode-tag').textContent = tagName;
     $('total-score').textContent = '0';
 
     if (mode === 'endless') {
@@ -417,9 +435,10 @@ function startGame(mode, region) {
         $('level-panel').classList.add('show');
         updateLevelPanel();
     } else {
+        const rounds = mode === 'pack' ? Math.min(packChallenge.locations.length, MODES.pack.rounds) : cfg.rounds;
         $('round-info').innerHTML =
             '第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">' +
-            cfg.rounds +
+            rounds +
             '</span> 轮';
         $('level-panel').classList.remove('show');
     }
@@ -442,6 +461,12 @@ function startGame(mode, region) {
         map.setMaxBounds(null);
         map.setMinZoom(2);
     }
+}
+
+// 当前模式实际轮数（图包由题单长度决定，上限 5）
+function roundsFor() {
+    if (state.mode === 'pack') return Math.min(packChallenge.locations.length, MODES.pack.rounds);
+    return MODES[state.mode].rounds;
 }
 
 function quitGame() {
@@ -522,6 +547,7 @@ function poolKeyFor() {
     if (state.mode === 'region') return 'region:' + state.region;
     if (state.mode === 'china') return 'china';
     if (state.mode === 'daily') return 'daily:' + dailyChallenge.date;
+    if (state.mode === 'pack') return 'pack:' + state.packId;
     return 'mode:' + state.mode;
 }
 
@@ -531,6 +557,9 @@ function buildPool() {
     if (state.mode === 'daily') {
         pool = dailyChallenge.locations.slice();
         if (!pool.length) pool = WORLD_LOCATIONS.slice();
+    } else if (state.mode === 'pack') {
+        // 图包由服务端下发可玩题单（不含答案坐标），仅含该图包地点
+        pool = packChallenge.locations.slice();
     } else if (state.mode === 'endless') {
         const d = currentDifficulty();
         const world = WORLD_LOCATIONS.filter((l) => l.difficulty === d);
@@ -703,8 +732,8 @@ async function loadRound() {
     for (let i = 0; i < 4 && !found; i++) {
         loc = pickLocation(roundTried);
         roundTried.add(loc.name);
-        if (state.mode === 'daily') {
-            // 每日挑战由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
+        if (state.mode === 'daily' || state.mode === 'pack') {
+            // 每日挑战 / 图包由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
             if (loc.mapillaryId) found = { imageId: loc.mapillaryId, panoramaUrl: loc.panoramaUrl || null, lat: null, lng: null };
             else if (loc.panoramaUrl) found = { imageId: null, panoramaUrl: loc.panoramaUrl, lat: null, lng: null };
         } else {
@@ -1197,8 +1226,8 @@ function submitGuess() {
     $('submit-btn').disabled = true;
     $('submit-btn').textContent = '📏 测量中...';
 
-    if (state.mode === 'daily') {
-        completeDailyRound();
+    if (state.mode === 'daily' || state.mode === 'pack') {
+        completeDeferredRound();
         return;
     }
 
@@ -1282,8 +1311,8 @@ function submitGuess() {
     }, 2200);
 }
 
-// 每日挑战单轮提交：答案坐标仅由服务端在整局结算后回传，本地只记录猜测点，不做距离/得分展示
-function completeDailyRound() {
+// 每日挑战 / 图包单轮提交：答案坐标仅由服务端在整局结算后回传，本地只记录猜测点，不做距离/得分展示
+function completeDeferredRound() {
     const round = state.current;
     state.history.push({
         name: round.name,
@@ -1309,8 +1338,7 @@ function completeDailyRound() {
 }
 
 function setupNextButton() {
-    const cfg = MODES[state.mode];
-    const isLast = state.mode !== 'endless' && state.round >= cfg.rounds;
+    const isLast = state.mode !== 'endless' && state.round >= roundsFor();
     $('next-btn').textContent = isLast ? '🏁 查看总成绩' : state.mode === 'endless' ? '下一题 ▶' : '下一轮 ▶';
     $('next-btn').style.display = 'inline-block';
     $('share-btn').style.display = 'none';
@@ -1321,8 +1349,7 @@ function setupNextButton() {
 
 function nextRound() {
     $('result-overlay').classList.remove('show');
-    const cfg = MODES[state.mode];
-    if (state.mode !== 'endless' && state.round >= cfg.rounds) {
+    if (state.mode !== 'endless' && state.round >= roundsFor()) {
         showFinalScore();
         return;
     }
@@ -1332,8 +1359,8 @@ function nextRound() {
 // ==========================================================
 // 【游戏结束：总结 / 记录 / 分享】
 // ==========================================================
-// 每日挑战整局结算：提交所有猜测点，服务端权威计算各轮距离/得分并回传，客户端不得提前知晓答案坐标
-async function applyAuthoritativeDailyResult() {
+// 每日挑战 / 图包整局结算：提交所有猜测点，服务端权威计算各轮距离/得分并回传，客户端不得提前知晓答案坐标
+async function applyAuthoritativeResult() {
     if (!MmaApi.isOnline()) {
         return;
     }
@@ -1398,10 +1425,10 @@ async function showFinalScore() {
         $('result-distance').textContent = 'Lv.' + e.level;
         $('result-score').textContent = '累计 ' + e.totalXp + ' 经验';
     } else {
-        if (state.mode === 'daily') {
-            await applyAuthoritativeDailyResult();
+        if (state.mode === 'daily' || state.mode === 'pack') {
+            await applyAuthoritativeResult();
         }
-        const maxPossible = MODES[state.mode].rounds * MAX_SCORE;
+        const maxPossible = roundsFor() * MAX_SCORE;
         const pct = maxPossible ? (state.totalScore / maxPossible) * 100 : 0;
         const rank =
             pct >= 90
@@ -1413,11 +1440,13 @@ async function showFinalScore() {
                     : pct >= 30
                       ? '📚 继续学习~'
                       : '🌍 下次更好！';
-        isRecord = saveBestIfHigher(
-            state.mode,
-            { score: state.totalScore, region: state.region, date: Date.now() },
-            'score'
-        );
+        if (state.mode !== 'pack') {
+            isRecord = saveBestIfHigher(
+                state.mode,
+                { score: state.totalScore, region: state.region, date: Date.now() },
+                'score'
+            );
+        }
         $('result-title').textContent = '🎮 游戏结束！' + MODES[state.mode].label;
         $('result-location').textContent = state.region
             ? '区域：' + REGION_NAMES[state.region]
@@ -1432,8 +1461,8 @@ async function showFinalScore() {
     $('share-btn').style.display = 'inline-block';
     $('home-btn2').style.display = 'inline-block';
     $('result-overlay').classList.add('show');
-    // 每日挑战已在 applyAuthoritativeDailyResult 中完成上报，此处避免重复提交
-    saveGameHistory({ skipSubmit: state.mode === 'daily' });
+    // 每日挑战 / 图包已在 applyAuthoritativeResult 中完成上报，此处避免重复提交
+    saveGameHistory({ skipSubmit: state.mode === 'daily' || state.mode === 'pack' });
 }
 
 function buildShareText() {

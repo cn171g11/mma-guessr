@@ -14,7 +14,7 @@
         <link rel="manifest" href="manifest.webmanifest" />
         <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="icons/icon-192.svg" />
-        <title>🌍 MmaGuessr v1.18.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+        <title>🌍 MmaGuessr v2.0.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
         <!-- CSP：纯静态托管无响应头可加，故用 meta 声明。
              内联 onclick 已全部迁移至 js/events.js（addEventListener），故 script-src 无需 unsafe-inline；
@@ -100,6 +100,12 @@
                     <p>聚焦全球最著名地标（难度 1-2），5 轮速刷，新手入门与高分冲刺两相宜。</p>
                     <div class="best" id="best-landmark">历史最佳：--</div>
                 </div>
+                <div class="mode-card" data-mode="pack">
+                    <div class="icon">📦</div>
+                    <h3>图包工坊</h3>
+                    <p>玩家自建题库：地图选点自动解析街景，公开分享全球游玩；成绩不计入排行榜与天梯。</p>
+                    <div class="best">公开 · 可创建</div>
+                </div>
             </div>
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
@@ -118,6 +124,7 @@
                 <button class="changelog-btn" id="btn-mp-panel">⚔️ 对战</button>
                 <button class="changelog-btn" id="btn-history">📜 历史记录</button>
                 <button class="changelog-btn" id="btn-account">👤 账号</button>
+                <button class="changelog-btn" id="btn-packs">📦 图包工坊</button>
                 <button class="changelog-btn" id="btn-sponsors">❤️ 赞助</button>
             </div>
         </div>
@@ -439,6 +446,53 @@
         </div>
         <div id="err-toast2"></div>
 
+        <!-- ============ 图包工坊弹窗 ============ -->
+        <div id="packs-overlay">
+            <div id="packs-box">
+                <h2>
+                    📦 图包工坊
+                    <button class="clog-close" id="packs-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats">玩家自建题库 · 地图选点自动解析街景 · 图包成绩不参与排行榜 / 天梯 / 成就</div>
+                <div id="packs-create" style="display: none">
+                    <div class="acc-code-row">
+                        <input id="pack-name" placeholder="图包名称（60 字以内）" maxlength="60" autocomplete="off" />
+                    </div>
+                    <div class="acc-code-row">
+                        <input id="pack-desc" placeholder="图包描述（可选）" maxlength="500" autocomplete="off" />
+                    </div>
+                    <div class="acc-code-row">
+                        <label class="pack-public">
+                            <input type="checkbox" id="pack-public" checked />
+                            公开（所有人可玩）
+                        </label>
+                        <button class="acc-code-btn" id="pack-create-btn">＋ 创建图包</button>
+                    </div>
+                </div>
+                <div class="lb-tabs">
+                    <button class="lb-tab active" id="pack-tab-public">🌍 公开图包</button>
+                    <button class="lb-tab" id="pack-tab-mine">👤 我的图包</button>
+                </div>
+                <div id="pack-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 图包地点编辑器弹窗 ============ -->
+        <div id="packedit-overlay">
+            <div id="packedit-box">
+                <h2>
+                    📍 编辑图包
+                    <button class="clog-close" id="packedit-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats" id="packedit-name"></div>
+                <div class="acc-stats">点击地图选点 → 自动解析最近街景 → 命名后添加（最多 50 题）</div>
+                <div id="packedit-map"></div>
+                <div id="packedit-preview"></div>
+                <div id="packedit-list"></div>
+                <button class="acc-submit" id="packedit-save-btn">💾 保存地点</button>
+            </div>
+        </div>
+
         <script src="js/config.js"></script>
         <script src="js/data.js"></script>
         <script src="js/api.js"></script>
@@ -447,6 +501,7 @@
         <script src="js/lb.js"></script>
         <script src="js/daily.js"></script>
         <script src="js/mp.js"></script>
+        <script src="js/packs.js"></script>
         <script src="js/features.js"></script>
         <script src="js/events.js"></script>
         <script src="js/sw-register.js"></script>

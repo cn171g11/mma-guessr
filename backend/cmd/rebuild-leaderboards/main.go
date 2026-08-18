@@ -5,7 +5,6 @@ import (
 
 	"mma-guessr/backend/internal/config"
 	"mma-guessr/backend/internal/db"
-	"mma-guessr/backend/internal/kv"
 	"mma-guessr/backend/internal/leaderboard"
 	"mma-guessr/backend/internal/logging"
 )
@@ -35,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	service := leaderboard.NewService(conn, kv.New(conn))
+	service := leaderboard.NewService(conn)
 	if err := service.Rebuild(); err != nil {
 		logger.Error("rebuild leaderboard", "error", err)
 		os.Exit(1)

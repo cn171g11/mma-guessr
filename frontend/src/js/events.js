@@ -28,6 +28,7 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#btn-mp-panel', openMpPanel);
     bindClick('#btn-history', openHistory);
     bindClick('#btn-account', openAccount);
+    bindClick('#btn-packs', openPacksPanel);
     bindClick('#back-btn', hideRegionScreen);
 
     bindClick('#quit-btn', routeQuit);
@@ -60,6 +61,13 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#err-download-btn', downloadErrReport);
     bindClick('#err-copy-btn', copyErrReport);
 
+    bindClick('#packs-close-btn', closePacksPanel);
+    bindClick('#pack-create-btn', createPack);
+    bindClick('#pack-tab-public', () => switchPacksTab('public'));
+    bindClick('#pack-tab-mine', () => switchPacksTab('mine'));
+    bindClick('#packedit-close-btn', closePackEditor);
+    bindClick('#packedit-save-btn', savePackLocations);
+
     bindOverlayDismiss('changelog-overlay', closeChangelog);
     bindOverlayDismiss('history-overlay', closeHistory);
     bindOverlayDismiss('account-overlay', closeAccount);
@@ -67,4 +75,6 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindOverlayDismiss('daily-overlay', closeDailyPanel);
     bindOverlayDismiss('mp-overlay', mpCloseLobby);
     bindOverlayDismiss('err-overlay', closeErrReport);
+    bindOverlayDismiss('packs-overlay', closePacksPanel);
+    bindOverlayDismiss('packedit-overlay', closePackEditor);
 })();

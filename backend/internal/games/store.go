@@ -26,9 +26,9 @@ func (s *Store) InsertGameRecord(player PlayerRef, input SubmitGameInput) (*Game
 	}
 	now := util.Now()
 	result, err := s.conn.Exec(
-		`INSERT INTO game_results (player_type, player_id, mode, region, total_score, rounds, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		player.Role, player.ID, input.Mode, input.Region, input.TotalScore, string(roundsJSON), now)
+		`INSERT INTO game_results (player_type, player_id, mode, region, total_score, rounds, created_at, pack_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		player.Role, player.ID, input.Mode, input.Region, input.TotalScore, string(roundsJSON), now, input.PackID)
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +43,14 @@ func (s *Store) InsertGameRecord(player PlayerRef, input SubmitGameInput) (*Game
 		TotalScore: input.TotalScore,
 		Rounds:     input.Rounds,
 		CreatedAt:  now,
+		PackID:     input.PackID,
 	}, nil
 }
 
 // FetchRecentGames returns the player's latest games, newest first.
 func (s *Store) FetchRecentGames(player PlayerRef, limit int) ([]GameRecord, error) {
 	rows, err := s.conn.Query(
-		`SELECT id, mode, region, total_score, rounds, created_at FROM game_results
+		`SELECT id, mode, region, total_score, rounds, created_at, pack_id FROM game_results
 		 WHERE player_type = ? AND player_id = ?
 		 ORDER BY created_at DESC, id DESC
 		 LIMIT ?`,
@@ -73,7 +74,7 @@ func (s *Store) FetchRecentGames(player PlayerRef, limit int) ([]GameRecord, err
 // FetchBestGame returns the player's best game for a mode, or nil.
 func (s *Store) FetchBestGame(player PlayerRef, mode string) (*GameRecord, error) {
 	row := s.conn.QueryRow(
-		`SELECT id, mode, region, total_score, rounds, created_at FROM game_results
+		`SELECT id, mode, region, total_score, rounds, created_at, pack_id FROM game_results
 		 WHERE player_type = ? AND player_id = ? AND mode = ?
 		 ORDER BY total_score DESC, created_at DESC
 		 LIMIT 1`,
@@ -91,7 +92,7 @@ func (s *Store) FetchBestGame(player PlayerRef, mode string) (*GameRecord, error
 // FetchGame returns a single game owned by the player, or nil.
 func (s *Store) FetchGame(player PlayerRef, gameID int64) (*GameRecord, error) {
 	row := s.conn.QueryRow(
-		`SELECT id, mode, region, total_score, rounds, created_at FROM game_results
+		`SELECT id, mode, region, total_score, rounds, created_at, pack_id FROM game_results
 		 WHERE id = ? AND player_type = ? AND player_id = ?`,
 		gameID, player.Role, player.ID)
 	game, err := scanGame(row)
@@ -124,8 +125,9 @@ type gameScanner interface {
 func scanGame(row gameScanner) (*GameRecord, error) {
 	var game GameRecord
 	var region sql.NullString
+	var packID sql.NullInt64
 	var roundsJSON string
-	err := row.Scan(&game.ID, &game.Mode, &region, &game.TotalScore, &roundsJSON, &game.CreatedAt)
+	err := row.Scan(&game.ID, &game.Mode, &region, &game.TotalScore, &roundsJSON, &game.CreatedAt, &packID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -134,6 +136,9 @@ func scanGame(row gameScanner) (*GameRecord, error) {
 	}
 	if region.Valid {
 		game.Region = &region.String
+	}
+	if packID.Valid {
+		game.PackID = &packID.Int64
 	}
 	if err := json.Unmarshal([]byte(roundsJSON), &game.Rounds); err != nil {
 		return nil, err

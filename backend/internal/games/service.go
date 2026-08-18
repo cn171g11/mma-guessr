@@ -9,6 +9,7 @@ import (
 	"mma-guessr/backend/internal/httputil"
 	"mma-guessr/backend/internal/leaderboard"
 	"mma-guessr/backend/internal/locations"
+	"mma-guessr/backend/internal/packs"
 	"mma-guessr/backend/internal/profile"
 	"mma-guessr/backend/internal/ratings"
 )
@@ -27,14 +28,15 @@ type Service struct {
 	achievements *achievements.Service
 	profile      *profile.Service
 	ratings      *ratings.Service
+	packs        *packs.Service
 }
 
 // NewService wires the games service with its dependencies.
 func NewService(store *Store, progress *auth.Store, daily *daily.Service,
 	leaderboard *leaderboard.Service, achievements *achievements.Service, profile *profile.Service,
-	ratings *ratings.Service) *Service {
+	ratings *ratings.Service, packs *packs.Service) *Service {
 	return &Service{store: store, progress: progress, daily: daily,
-		leaderboard: leaderboard, achievements: achievements, profile: profile, ratings: ratings}
+		leaderboard: leaderboard, achievements: achievements, profile: profile, ratings: ratings, packs: packs}
 }
 
 type verifiedRound struct {
@@ -63,6 +65,11 @@ func (s *Service) SubmitGame(player PlayerRef, input SubmitGameInput) (*GameReco
 			return nil, httputil.BadRequest("每日挑战至少需作答一题")
 		}
 		if err := s.daily.GuardDailySubmission(player.Role, player.ID); err != nil {
+			return nil, err
+		}
+	} else if input.Mode == "pack" {
+		verified, err = s.verifyPackRoundsAuthoritative(player, input)
+		if err != nil {
 			return nil, err
 		}
 	} else {
@@ -96,6 +103,7 @@ func (s *Service) SubmitGame(player PlayerRef, input SubmitGameInput) (*GameReco
 		Region:     input.Region,
 		TotalScore: verifiedTotal,
 		Rounds:     verifiedRounds,
+		PackID:     input.PackID,
 	}
 
 	game, err := s.store.InsertGameRecord(player, verifiedInput)
@@ -106,11 +114,16 @@ func (s *Service) SubmitGame(player PlayerRef, input SubmitGameInput) (*GameReco
 	if input.Mode == "daily" {
 		_ = s.daily.MarkClaimed(player.ID, daily.UTCDateString(), game.ID)
 	}
-	if err := s.accumulateProgress(player, verifiedInput); err != nil {
-		return nil, err
+	// Pack games are casual play: they persist for history/replay but are
+	// excluded from progress, leaderboard, ratings and achievements so custom
+	// (self-curated) packs cannot farm competitive stats.
+	if input.Mode != "pack" {
+		if err := s.accumulateProgress(player, verifiedInput); err != nil {
+			return nil, err
+		}
 	}
 	s.profile.InvalidateStatsCache(player.Role, player.ID)
-	if player.Role == "user" {
+	if player.Role == "user" && input.Mode != "pack" {
 		_ = s.leaderboard.RecordScore(player.ID, input.Mode, verifiedTotal)
 		s.achievements.EvaluateAndUnlock(player.ID)
 		_ = s.ratings.ApplyGame(player.ID, verifiedTotal)
@@ -175,6 +188,54 @@ func (s *Service) verifyDailyRoundsAuthoritative(input SubmitGameInput) ([]verif
 		}
 		distanceKm := HaversineKm(*round.GuessLat, *round.GuessLng, location.Lat, location.Lng)
 		score := ComputeRoundScore(input.Mode, regionValue(input.Region), distanceKm)
+		round.DistanceKm = &distanceKm
+		round.Score = score
+		round.AnswerLat = &location.Lat
+		round.AnswerLng = &location.Lng
+		out = append(out, verifiedRound{round: round, score: score})
+	}
+	return out, nil
+}
+
+// verifyPackRoundsAuthoritative settles a pack game entirely on the server:
+// the answer coordinates never reach the client during play. The pack must be
+// public or owned by the submitting player.
+func (s *Service) verifyPackRoundsAuthoritative(player PlayerRef, input SubmitGameInput) ([]verifiedRound, error) {
+	if input.PackID == nil {
+		return nil, httputil.BadRequest("图包模式必须指定 packId")
+	}
+	packLocations, err := s.packs.FetchPackLocations(*input.PackID, packs.PlayerRef{Role: player.Role, ID: player.ID})
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]packs.Location, len(packLocations))
+	for _, location := range packLocations {
+		byID[location.ID] = location
+	}
+
+	out := make([]verifiedRound, 0, len(input.Rounds))
+	for _, round := range input.Rounds {
+		if round.LocationID == nil {
+			return nil, httputil.BadRequest("回合题目不属于该图包")
+		}
+		location, ok := byID[*round.LocationID]
+		if !ok {
+			return nil, httputil.BadRequest("回合题目不属于该图包")
+		}
+		if round.DistanceKm != nil || round.AnswerLat != nil || round.AnswerLng != nil {
+			return nil, httputil.BadRequest("图包由服务端权威结算，客户端不得携带距离或答案坐标")
+		}
+
+		if !hasGuess(round) {
+			round.DistanceKm = nil
+			round.Score = 0
+			round.AnswerLat = &location.Lat
+			round.AnswerLng = &location.Lng
+			out = append(out, verifiedRound{round: round, score: 0})
+			continue
+		}
+		distanceKm := HaversineKm(*round.GuessLat, *round.GuessLng, location.Lat, location.Lng)
+		score := ComputeRoundScore("pack", "", distanceKm)
 		round.DistanceKm = &distanceKm
 		round.Score = score
 		round.AnswerLat = &location.Lat

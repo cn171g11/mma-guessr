@@ -1,8 +1,9 @@
 package games
 
 // GameModes are the supported single-player game modes, kept in the same
-// order as the previous backend so validation errors stay identical.
-var GameModes = []string{"classic", "challenge", "region", "china", "endless", "daily", "duel", "landmark"}
+// order as the previous backend so validation errors stay identical. pack is
+// the user-created pack mode added by the map-pack workshop.
+var GameModes = []string{"classic", "challenge", "region", "china", "endless", "daily", "duel", "landmark", "pack"}
 
 // PlayerRef identifies a guest or registered player.
 type PlayerRef struct {
@@ -32,6 +33,8 @@ type SubmitGameInput struct {
 	Region     *string
 	TotalScore int
 	Rounds     []GameRound
+	// PackID links a pack-mode game to its source pack; null for other modes.
+	PackID *int64
 }
 
 // GameRecord is a stored game result.
@@ -42,4 +45,7 @@ type GameRecord struct {
 	TotalScore int         `json:"totalScore"`
 	Rounds     []GameRound `json:"rounds"`
 	CreatedAt  string      `json:"createdAt"`
+	// PackID is set only for pack-mode games; absent otherwise so existing
+	// responses stay byte-identical.
+	PackID *int64 `json:"packId,omitempty"`
 }

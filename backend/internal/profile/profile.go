@@ -84,7 +84,7 @@ func (s *Service) fetchAggregation(role, id string) (*Aggregation, error) {
 		        COALESCE(SUM(total_score), 0),
 		        COALESCE(AVG(total_score), 0),
 		        COALESCE(MAX(total_score), 0)
-		 FROM game_results WHERE player_type = ? AND player_id = ?`,
+		 FROM game_results WHERE player_type = ? AND player_id = ? AND pack_id IS NULL`,
 		role, id).Scan(&totalGames, &totalRounds, &totalScore, &avgScore, &bestScore)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,8 @@ func (s *Service) fetchAggregation(role, id string) (*Aggregation, error) {
 	err = s.conn.QueryRow(
 		`SELECT COUNT(*) FROM game_results
 		 CROSS JOIN json_each(rounds)
-		 WHERE player_type = ? AND player_id = ? AND CAST(json_extract(value, '$.score') AS INTEGER) > 0`,
+		 WHERE player_type = ? AND player_id = ? AND pack_id IS NULL
+		   AND CAST(json_extract(value, '$.score') AS INTEGER) > 0`,
 		role, id).Scan(&correctGuesses)
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (s *Service) fetchAggregation(role, id string) (*Aggregation, error) {
 	var bestMode *string
 	row := s.conn.QueryRow(
 		`SELECT mode FROM game_results
-		 WHERE player_type = ? AND player_id = ?
+		 WHERE player_type = ? AND player_id = ? AND pack_id IS NULL
 		 ORDER BY total_score DESC, id DESC LIMIT 1`,
 		role, id)
 	var mode sql.NullString
@@ -118,7 +119,7 @@ func (s *Service) fetchAggregation(role, id string) (*Aggregation, error) {
 		        COALESCE(SUM(json_array_length(rounds)), 0),
 		        COALESCE(MAX(total_score), 0),
 		        COALESCE(AVG(total_score), 0)
-		 FROM game_results WHERE player_type = ? AND player_id = ?
+		 FROM game_results WHERE player_type = ? AND player_id = ? AND pack_id IS NULL
 		 GROUP BY mode`,
 		role, id)
 	if err != nil {
@@ -178,7 +179,7 @@ func (s *Service) Collections(role, id string) ([]CollectionItem, error) {
 		       MIN(g.created_at),
 		       MAX(g.created_at)
 		FROM game_results g CROSS JOIN json_each(g.rounds)
-		WHERE g.player_type = ? AND g.player_id = ?
+		WHERE g.player_type = ? AND g.player_id = ? AND g.pack_id IS NULL
 		  AND CAST(json_extract(value, '$.score') AS INTEGER) > 0
 		  AND json_extract(value, '$.name') IS NOT NULL
 		  AND json_extract(value, '$.name') != ''

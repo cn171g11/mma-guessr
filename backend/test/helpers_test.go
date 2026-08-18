@@ -32,6 +32,7 @@ import (
 	"mma-guessr/backend/internal/metrics"
 	"mma-guessr/backend/internal/multiplayer"
 	"mma-guessr/backend/internal/oauth"
+	"mma-guessr/backend/internal/packs"
 	"mma-guessr/backend/internal/profile"
 	"mma-guessr/backend/internal/ratings"
 	"mma-guessr/backend/internal/server"
@@ -163,7 +164,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	cache := kv.New(conn)
 	locationsStore := locations.NewStore(conn, cache)
 	dailySvc := daily.NewService(conn, locationsStore)
-	leaderboardSvc := leaderboard.NewService(conn, cache)
+	leaderboardSvc := leaderboard.NewService(conn)
 	profileSvc := profile.NewService(conn, cache)
 	achievementsSvc := achievements.NewService(conn, logger)
 	ratingsSvc := ratings.NewService(conn)
@@ -171,7 +172,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	factsSvc := facts.NewService(conn)
 	_ = factsSvc.Seed()
 	gamesStore := games.NewStore(conn)
-	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc)
+	packsSvc := packs.NewService(packs.NewStore(conn))
+	gamesSvc := games.NewService(gamesStore, store, dailySvc, leaderboardSvc, achievementsSvc, profileSvc, ratingsSvc, packsSvc)
 	mapillarySvc := mapillary.NewService("", cache)
 
 	engine := multiplayer.NewEngineIO(logger)
@@ -196,6 +198,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Social:       socialSvc,
 		Facts:        factsSvc,
 		OAuth:        oauthSvc,
+		Packs:        packsSvc,
 		Cache:        cache,
 	}
 

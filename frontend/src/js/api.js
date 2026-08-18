@@ -288,6 +288,16 @@ const MmaApi = (() => {
         getRatings: () => request('/api/ratings'),
         getCollections: () => request('/api/profile/collections'),
         getFact: (name) => request('/api/locations/fact?name=' + encodeURIComponent(name)),
+        listPacks: (mine, search) =>
+            request('/api/packs?mine=' + (mine ? '1' : '0') + (search ? '&q=' + encodeURIComponent(search) : '')),
+        createPack: (payload) => request('/api/packs', { method: 'POST', body: payload }),
+        getPack: (id) => request('/api/packs/' + id),
+        updatePack: (id, payload) => request('/api/packs/' + id, { method: 'PATCH', body: payload }),
+        deletePack: (id) => request('/api/packs/' + id, { method: 'DELETE' }),
+        getPackLocations: (id) => request('/api/packs/' + id + '/locations'),
+        replacePackLocations: (id, locations) =>
+            request('/api/packs/' + id + '/locations', { method: 'POST', body: { locations } }),
+        getPackPlay: (id) => request('/api/packs/' + id + '/play'),
         listFriends: () => request('/api/friends'),
         listFriendRequests: () => request('/api/friends/requests'),
         sendFriendRequest: (targetUserId) =>

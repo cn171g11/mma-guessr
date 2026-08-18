@@ -3,12 +3,12 @@ package leaderboard
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"log/slog"
-	"sort"
+	"strings"
+	"sync"
 	"time"
 
-	"mma-guessr/backend/internal/kv"
+	"mma-guessr/backend/internal/util"
 )
 
 // Periods are the supported leaderboard windows.
@@ -29,131 +29,158 @@ type Query struct {
 	Date   *string
 }
 
-// Service maintains the per-mode best-score leaderboards.
+const (
+	// overallDateKey is the date_key used for the all-time board.
+	overallDateKey = ""
+	// dailyRetentionDays is how many daily boards are kept before pruning.
+	dailyRetentionDays = 7
+	// usernameCacheTTL bounds how long a resolved username is reused before
+	// the users table is consulted again.
+	usernameCacheTTL = 5 * time.Minute
+)
+
+// Service maintains the per-mode best-score leaderboards. Ranks live in the
+// leaderboard_best table: RecordScore upserts one row per board (O(log n))
+// instead of the previous full-list rewrite, and reads are a single indexed
+// ORDER BY LIMIT query.
 type Service struct {
-	conn *sql.DB
-	kv   *kv.Store
+	conn      *sql.DB
+	usernames *usernameCache
 }
 
 // NewService creates a leaderboard Service.
-func NewService(conn *sql.DB, cache *kv.Store) *Service {
-	return &Service{conn: conn, kv: cache}
+func NewService(conn *sql.DB) *Service {
+	return &Service{conn: conn, usernames: newUsernameCache(usernameCacheTTL)}
 }
 
-const (
-	overallPrefix   = "lb:overall:"
-	dailyPrefix     = "lb:daily:"
-	rebuildLockKey  = "lb:rebuild-lock"
-	rebuildLockTTL  = 60
-	overallCacheTTL = 30 * 24 * 60 * 60
-	dailyCacheTTL   = 8 * 24 * 60 * 60
-	retentionDays   = 7
-)
-
-func overallKey(mode string) string {
-	return overallPrefix + mode
+// rankedPlayer is a cached-in-memory best-score row awaiting username lookup.
+type rankedPlayer struct {
+	id    string
+	score int
 }
 
-func dailyKey(mode, yyyymmdd string) string {
-	return dailyPrefix + mode + ":" + yyyymmdd
-}
-
-func utcDateKey(now time.Time) string {
-	return now.UTC().Format("20060102")
-}
-
-type cachedEntry struct {
-	ID    string `json:"id"`
-	Score int    `json:"score"`
-}
-
-// RecordScore persists one game score and updates the overall/daily caches
-// (best-score semantics, mirroring the previous ZSET GT updates).
+// RecordScore persists one game score and upserts the best-score rows for the
+// overall and today's daily boards.
 func (s *Service) RecordScore(userID, mode string, score int) error {
-	_, err := s.conn.Exec(
+	if _, err := s.conn.Exec(
 		`INSERT INTO scores (player_type, player_id, mode, score, created_at) VALUES ('user', ?, ?, ?, ?)`,
-		userID, mode, score, time.Now().UTC().Format("2006-01-02T15:04:05Z"))
-	if err != nil {
+		userID, mode, score, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		return err
 	}
-	now := time.Now().UTC()
-	_ = s.upsertBestCache(overallKey(mode), userID, score)
-	_ = s.upsertBestCache(dailyKey(mode, now.Format("20060102")), userID, score)
-	return nil
+	today := util.UTCDate()
+	if err := s.upsertBest(mode, overallDateKey, userID, score); err != nil {
+		return err
+	}
+	return s.upsertBest(mode, today, userID, score)
 }
 
-func (s *Service) upsertBestCache(key, userID string, score int) error {
-	entries, ok := s.readCache(key)
-	if !ok {
-		// Missing cache is rebuilt lazily by GetRankings.
-		return nil
-	}
-	updated := false
-	for i := range entries {
-		if entries[i].ID == userID {
-			if score > entries[i].Score {
-				entries[i].Score = score
-				updated = true
-			}
-			break
-		}
-	}
-	if !updated {
-		entries = append(entries, cachedEntry{ID: userID, Score: score})
-	}
-	entries = normalizeEntries(entries)
-	return s.writeCache(key, entries, overallCacheTTL)
+// upsertBest records the score only when it improves the player's best. The
+// single-connection SQLite pool serializes writes, so the guarded UPSERT is
+// race-free.
+func (s *Service) upsertBest(mode, dateKey, userID string, score int) error {
+	_, err := s.conn.Exec(
+		`INSERT INTO leaderboard_best (mode, date_key, player_id, best_score, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(mode, date_key, player_id) DO UPDATE SET
+		   best_score = MAX(best_score, excluded.best_score),
+		   updated_at = excluded.updated_at`,
+		mode, dateKey, userID, score, time.Now().UTC().Format(time.RFC3339))
+	return err
 }
 
-// GetRankings returns the top entries, rebuilding the cache lazily for the
-// overall and today's daily boards.
+// GetRankings returns the top entries for the board.
 func (s *Service) GetRankings(query Query) ([]Entry, error) {
-	today := utcDateKey(time.Now())
-	dateKey := today
-	if query.Date != nil {
-		dateKey = (*query.Date)[0:4] + (*query.Date)[5:7] + (*query.Date)[8:10]
-	}
-	isOverall := query.Period == "overall"
-	key := overallKey(query.Mode)
-	if !isOverall {
-		key = dailyKey(query.Mode, dateKey)
-	}
-
-	entries, ok := s.readCache(key)
-	if !ok {
-		if isOverall || dateKey == today {
-			if acquired, err := s.kv.SetNX(rebuildLockKey, "1", rebuildLockTTL); err == nil && acquired {
-				_ = s.Rebuild()
-				_ = s.kv.Del(rebuildLockKey)
-				entries, _ = s.readCache(key)
-			}
+	dateKey := overallDateKey
+	if query.Period == "daily" {
+		if query.Date != nil {
+			dateKey = *query.Date
+		} else {
+			dateKey = util.UTCDate()
 		}
 	}
-	if len(entries) == 0 {
-		// Historical daily boards are not rebuilt on demand.
-		return []Entry{}, nil
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 50
 	}
 
-	usernames, err := s.fetchUsernames(entries)
+	rows, err := s.conn.Query(
+		`SELECT player_id, best_score FROM leaderboard_best
+		 WHERE mode = ? AND date_key = ?
+		 ORDER BY best_score DESC, player_id DESC
+		 LIMIT ?`,
+		query.Mode, dateKey, limit)
 	if err != nil {
 		return nil, err
 	}
-	limit := query.Limit
-	if limit > len(entries) {
-		limit = len(entries)
+	defer rows.Close()
+
+	players := make([]rankedPlayer, 0, limit)
+	for rows.Next() {
+		var id string
+		var score int
+		if err := rows.Scan(&id, &score); err != nil {
+			return nil, err
+		}
+		players = append(players, rankedPlayer{id: id, score: score})
 	}
-	out := make([]Entry, 0, limit)
-	for _, entry := range entries[:limit] {
-		username, ok := usernames[entry.ID]
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(players) == 0 {
+		return []Entry{}, nil
+	}
+
+	usernames := s.fetchUsernames(players)
+	out := make([]Entry, 0, len(players))
+	for _, player := range players {
+		username, ok := usernames[player.id]
 		if !ok {
 			username = "未知玩家"
 		}
-		out = append(out, Entry{ID: entry.ID, Username: username, Score: entry.Score})
+		out = append(out, Entry{ID: player.id, Username: username, Score: player.score})
 	}
 	return out, nil
 }
 
-// StartNightlyRebuild recomputes the overall and today's daily caches at every
+// fetchUsernames resolves usernames for ranked players, serving cache hits
+// from memory and batching DB lookups only for misses.
+func (s *Service) fetchUsernames(players []rankedPlayer) map[string]string {
+	names := make(map[string]string, len(players))
+	missing := make([]string, 0, len(players))
+	for _, player := range players {
+		if name, ok := s.usernames.Get(player.id); ok {
+			names[player.id] = name
+			continue
+		}
+		missing = append(missing, player.id)
+	}
+	if len(missing) == 0 {
+		return names
+	}
+
+	placeholders := strings.Repeat("?,", len(missing))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, 0, len(missing))
+	for _, id := range missing {
+		args = append(args, id)
+	}
+	rows, err := s.conn.Query(`SELECT id, username FROM users WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return names
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, username string
+		if err := rows.Scan(&id, &username); err != nil {
+			break
+		}
+		names[id] = username
+		s.usernames.Set(id, username)
+	}
+	return names
+}
+
+// StartNightlyRebuild recomputes the overall and recent daily boards at every
 // UTC midnight, mirroring the previous backend's scheduleNightlyRebuild. The
 // goroutine stops when ctx is cancelled.
 func (s *Service) StartNightlyRebuild(ctx context.Context, logger *slog.Logger) {
@@ -186,165 +213,88 @@ func nextMidnightUTC(now time.Time) time.Time {
 	return midnight.AddDate(0, 0, 1)
 }
 
-// Rebuild recomputes overall and today's daily caches from the scores table
-// and prunes stale daily keys beyond the retention window.
+// Rebuild recomputes leaderboard_best from the authoritative scores table and
+// prunes daily rows outside the retention window. INSERT OR IGNORE leaves any
+// higher live upserts untouched, so the rebuild is idempotent and safe to run
+// nightly, on demand, or after a database restore.
 func (s *Service) Rebuild() error {
-	today := utcDateKey(time.Now())
-	overallRows, err := s.fetchBestScores("")
-	if err != nil {
+	if err := s.backfillFromScores(); err != nil {
 		return err
 	}
-	dailyRows, err := s.fetchBestScores(today)
-	if err != nil {
+	return s.pruneStaleDailyRows()
+}
+
+// backfillFromScores inserts best-score rows missing from leaderboard_best.
+func (s *Service) backfillFromScores() error {
+	if _, err := s.conn.Exec(
+		`INSERT OR IGNORE INTO leaderboard_best (mode, date_key, player_id, best_score, updated_at)
+		 SELECT mode, '', player_id, MAX(score), MAX(created_at) FROM scores
+		 WHERE player_type = 'user' GROUP BY mode, player_id`); err != nil {
 		return err
 	}
-
-	byOverall := map[string][]cachedEntry{}
-	for _, row := range overallRows {
-		byOverall[row.mode] = append(byOverall[row.mode], cachedEntry{ID: row.userID, Score: row.score})
+	boundary := time.Now().UTC().AddDate(0, 0, -dailyRetentionDays).Format("2006-01-02")
+	if _, err := s.conn.Exec(
+		`INSERT OR IGNORE INTO leaderboard_best (mode, date_key, player_id, best_score, updated_at)
+		 SELECT mode, substr(created_at, 1, 10), player_id, MAX(score), MAX(created_at) FROM scores
+		 WHERE player_type = 'user' AND substr(created_at, 1, 10) >= ?
+		 GROUP BY mode, substr(created_at, 1, 10), player_id`, boundary); err != nil {
+		return err
 	}
-	byDaily := map[string][]cachedEntry{}
-	for _, row := range dailyRows {
-		byDaily[row.mode] = append(byDaily[row.mode], cachedEntry{ID: row.userID, Score: row.score})
-	}
-	for mode, list := range byOverall {
-		if err := s.writeCache(overallKey(mode), normalizeEntries(list), overallCacheTTL); err != nil {
-			return err
-		}
-	}
-	for mode, list := range byDaily {
-		if err := s.writeCache(dailyKey(mode, today), normalizeEntries(list), dailyCacheTTL); err != nil {
-			return err
-		}
-	}
-	return s.pruneStaleDailyKeys()
+	return nil
 }
 
-type scoreRow struct {
-	userID string
-	mode   string
-	score  int
+// pruneStaleDailyRows drops daily boards older than the retention window.
+func (s *Service) pruneStaleDailyRows() error {
+	boundary := time.Now().UTC().AddDate(0, 0, -dailyRetentionDays).Format("2006-01-02")
+	_, err := s.conn.Exec(
+		`DELETE FROM leaderboard_best WHERE date_key <> '' AND date_key < ?`, boundary)
+	return err
 }
 
-func (s *Service) fetchBestScores(dateKey string) ([]scoreRow, error) {
-	var rows *sql.Rows
-	var err error
-	if dateKey == "" {
-		rows, err = s.conn.Query(
-			`SELECT player_id, mode, MAX(score) AS score FROM scores GROUP BY player_id, mode`)
-	} else {
-		rows, err = s.conn.Query(
-			`SELECT player_id, mode, MAX(score) AS score FROM scores
-			 WHERE substr(created_at, 1, 10) = ? GROUP BY player_id, mode`,
-			dateKey[:4]+"-"+dateKey[4:6]+"-"+dateKey[6:8])
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []scoreRow
-	for rows.Next() {
-		var row scoreRow
-		if err := rows.Scan(&row.userID, &row.mode, &row.score); err != nil {
-			return nil, err
-		}
-		out = append(out, row)
-	}
-	return out, rows.Err()
+// usernameCache is a small in-process TTL cache mapping player IDs to
+// usernames. It removes one DB round-trip per ranked player per board read.
+type usernameCache struct {
+	mu   sync.Mutex
+	ttl  time.Duration
+	byID map[string]usernameEntry
 }
 
-func (s *Service) fetchUsernames(entries []cachedEntry) (map[string]string, error) {
-	if len(entries) == 0 {
-		return map[string]string{}, nil
-	}
-	placeholders := ""
-	args := make([]any, 0, len(entries))
-	for i, entry := range entries {
-		if i > 0 {
-			placeholders += ","
-		}
-		placeholders += "?"
-		args = append(args, entry.ID)
-	}
-	rows, err := s.conn.Query(
-		`SELECT id, username FROM users WHERE id IN (`+placeholders+`)`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	usernames := make(map[string]string, len(entries))
-	for rows.Next() {
-		var id, username string
-		if err := rows.Scan(&id, &username); err != nil {
-			return nil, err
-		}
-		usernames[id] = username
-	}
-	return usernames, rows.Err()
+type usernameEntry struct {
+	name string
+	exp  time.Time
 }
 
-// normalizeEntries sorts by score desc, then id desc (mirroring Redis
-// ZREVRANGE tie-breaking).
-func normalizeEntries(entries []cachedEntry) []cachedEntry {
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Score != entries[j].Score {
-			return entries[i].Score > entries[j].Score
-		}
-		return entries[i].ID > entries[j].ID
-	})
-	return entries
+// newUsernameCache creates an empty username cache.
+func newUsernameCache(ttl time.Duration) *usernameCache {
+	return &usernameCache{ttl: ttl, byID: make(map[string]usernameEntry)}
 }
 
-func (s *Service) readCache(key string) ([]cachedEntry, bool) {
-	raw, ok := s.kv.Get(key)
+// Get returns a fresh cached username, evicting expired entries.
+func (c *usernameCache) Get(playerID string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.byID[playerID]
 	if !ok {
-		return nil, false
+		return "", false
 	}
-	var entries []cachedEntry
-	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
-		return nil, false
+	if time.Now().After(entry.exp) {
+		delete(c.byID, playerID)
+		return "", false
 	}
-	return entries, true
+	return entry.name, true
 }
 
-func (s *Service) writeCache(key string, entries []cachedEntry, ttl int) error {
-	raw, err := json.Marshal(entries)
-	if err != nil {
-		return err
-	}
-	return s.kv.Set(key, string(raw), ttl)
-}
-
-func (s *Service) pruneStaleDailyKeys() error {
-	boundary := utcDateKey(time.Now().AddDate(0, 0, -retentionDays))
-	// Scan the cache table for lb:daily: keys and drop stale ones.
-	rows, err := s.conn.Query(`SELECT key FROM mapillary_cache WHERE key LIKE 'lb:daily:%'`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	var stale []string
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			return err
-		}
-		datePart := key[len(dailyPrefix):]
-		// key format: <mode>:<yyyymmdd>
-		if len(datePart) >= 8 {
-			datePart = datePart[len(datePart)-8:]
-			if datePart < boundary {
-				stale = append(stale, key)
+// Set caches a username, pruning expired entries when the map grows large.
+func (c *usernameCache) Set(playerID, name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.byID) >= 4096 {
+		now := time.Now()
+		for id, entry := range c.byID {
+			if now.After(entry.exp) {
+				delete(c.byID, id)
 			}
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, key := range stale {
-		_ = s.kv.Del(key)
-	}
-	return nil
+	c.byID[playerID] = usernameEntry{name: name, exp: time.Now().Add(c.ttl)}
 }
