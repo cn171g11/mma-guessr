@@ -11,8 +11,14 @@ import (
 // concurrency settings. Modernc sqlite is pure Go and needs no CGO. The
 // 20MiB page cache is a fixed, per-connection allocation that cuts repeated
 // reads of hot tables (scores, leaderboard_best, mapillary_cache).
+//
+// temp_store(MEMORY) keeps ORDER BY / GROUP BY temp B-trees (leaderboard
+// rebuild, daily queries) in RAM instead of temp files; journal_size_limit
+// bounds WAL growth on write bursts; wal_autocheckpoint(2000) checkpoints
+// every ~8MiB instead of ~4MiB, cutting fsync churn. None of these change
+// durability (synchronous stays NORMAL) or the schema.
 func Open(path string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-20480)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-20480)&_pragma=temp_store(MEMORY)&_pragma=journal_size_limit(67108864)&_pragma=wal_autocheckpoint(2000)", path)
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)

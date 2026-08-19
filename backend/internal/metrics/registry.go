@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +43,7 @@ func (r *Registry) RecordRequest(method, route string, status int, durationMs fl
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	countKey := method + " " + route + " " + fmt.Sprint(status)
+	countKey := method + " " + route + " " + strconv.Itoa(status)
 	r.counters[countKey]++
 
 	histKey := method + " " + route
