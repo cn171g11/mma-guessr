@@ -38,7 +38,8 @@ async function switchPacksTab(tab) {
         const result = await MmaApi.listPacks(tab === 'mine', '');
         renderPackList(list, result.packs);
     } catch (e) {
-        list.innerHTML = '<div class="lb-empty">❌ 加载失败' + (e.message ? '：' + escapeHtml(e.message) : '') + '</div>';
+        list.innerHTML =
+            '<div class="lb-empty">❌ 加载失败' + (e.message ? '：' + escapeHtml(e.message) : '') + '</div>';
     }
 }
 

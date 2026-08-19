@@ -426,7 +426,10 @@ function startGame(mode, region) {
     $('quit-btn').classList.add('show');
 
     const cfg = MODES[mode];
-    const tagName = mode === 'pack' ? '📦 ' + (packChallenge.name || '图包') : cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
+    const tagName =
+        mode === 'pack'
+            ? '📦 ' + (packChallenge.name || '图包')
+            : cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
     $('mode-tag').textContent = tagName;
     $('total-score').textContent = '0';
 
@@ -437,9 +440,7 @@ function startGame(mode, region) {
     } else {
         const rounds = mode === 'pack' ? Math.min(packChallenge.locations.length, MODES.pack.rounds) : cfg.rounds;
         $('round-info').innerHTML =
-            '第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">' +
-            rounds +
-            '</span> 轮';
+            '第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">' + rounds + '</span> 轮';
         $('level-panel').classList.remove('show');
     }
     // 【修复】地图容器刚从 display:none 变为可见，必须先让 Leaflet 重算尺寸，
@@ -734,7 +735,8 @@ async function loadRound() {
         roundTried.add(loc.name);
         if (state.mode === 'daily' || state.mode === 'pack') {
             // 每日挑战 / 图包由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
-            if (loc.mapillaryId) found = { imageId: loc.mapillaryId, panoramaUrl: loc.panoramaUrl || null, lat: null, lng: null };
+            if (loc.mapillaryId)
+                found = { imageId: loc.mapillaryId, panoramaUrl: loc.panoramaUrl || null, lat: null, lng: null };
             else if (loc.panoramaUrl) found = { imageId: null, panoramaUrl: loc.panoramaUrl, lat: null, lng: null };
         } else {
             found = await findMapillaryImage(loc.lat, loc.lng);
@@ -912,9 +914,14 @@ function loadPanoramaTexture(imageId, panoramaUrl) {
         let candidateUrls;
         if (panoramaUrl) {
             candidateUrls = [panoramaUrl];
-            if (imageId) candidateUrls.push(`${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`);
+            if (imageId)
+                candidateUrls.push(
+                    `${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`
+                );
         } else if (imageId) {
-            candidateUrls = [`${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`];
+            candidateUrls = [
+                `${API_BASE}/api/proxy/mapillary/image/${encodeURIComponent(imageId)}?width=${PANO_IMAGE_WIDTH}`,
+            ];
         } else {
             reject({ message: '缺少街景来源' });
             return;
