@@ -700,7 +700,14 @@ function safeFly(fn, fallback) {
     }
 }
 function resetMapView(animate) {
-    if (state.mode === 'region' && REGION_VIEWS[state.region]) {
+    if (state.mode === 'china') {
+        // 中国模式: 地图锁定在中国国境内, 重置视角应回到中国中心,
+        // 否则 flyTo([20,0],2) 会与 setMaxBounds(CHINA_BOUNDS) 冲突, 导致地图锁定位置错乱
+        safeFly(
+            () => (animate ? map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }) : map.setView(CHINA_CENTER, 4)),
+            () => map.setView(CHINA_CENTER, 4, { animate: false })
+        );
+    } else if (state.mode === 'region' && REGION_VIEWS[state.region]) {
         const b = REGION_VIEWS[state.region];
         safeFly(
             () => (animate ? map.flyToBounds(b, { duration: 1.0 }) : map.fitBounds(b)),
@@ -1763,7 +1770,20 @@ function toggleMobileMap() {
     const btn = $('mobile-map-btn');
     const isOpen = mc.classList.toggle('mobile-open');
     btn.textContent = isOpen ? '✕ 收起地图' : '🗺️ 地图';
-    if (isOpen) setTimeout(() => map.invalidateSize(), 300);
+    if (isOpen) setTimeout(() => {
+        map.invalidateSize();
+        // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
+        // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
+        // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
+        if (state.mode === 'china') {
+            map.setMaxBounds(CHINA_BOUNDS);
+            map.setMinZoom(3);
+            safeFly(
+                () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
+                () => map.setView(CHINA_CENTER, 4, { animate: false })
+            );
+        }
+    }, 300);
 }
 
 function showHint() {

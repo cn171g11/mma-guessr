@@ -43,6 +43,7 @@ p.txt
 AGENTS.md
 CLAUDE.md
 SKILL.md
+COMPACTION.md
 
 # Redis
 *.rdb
