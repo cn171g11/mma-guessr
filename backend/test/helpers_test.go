@@ -203,7 +203,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Cache:        cache,
 	}
 
-	srv := server.New(cfg, conn, logger, services, metrics.NewRegistry(nil))
+	srv := server.New(cfg, conn, logger, services, metrics.NewRegistry(cfg.Version(), nil))
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 

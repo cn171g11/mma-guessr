@@ -50,7 +50,7 @@ var AppConstants = struct {
 	MPEventRateWindowMS           int
 	MPEventRateMax                int
 }{
-	ServiceVersion:                "2.1.0",
+	ServiceVersion:                "2.1.1",
 	BcryptRounds:                  12,
 	AccessTTLSeconds:              15 * 60,
 	RefreshTTLSeconds:             7 * 24 * 60 * 60,

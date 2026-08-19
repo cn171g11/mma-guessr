@@ -721,6 +721,67 @@ button {
     height: 100%;
 }
 
+#pano-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    z-index: 12;
+}
+.pano-mode-group {
+    display: flex;
+    gap: 6px;
+    background: rgba(20, 30, 60, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 4px;
+    backdrop-filter: blur(4px);
+}
+.pano-mode-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #cfd8e3;
+    font-size: 13px;
+    cursor: pointer;
+}
+.pano-mode-btn.active {
+    background: rgba(52, 152, 219, 0.85);
+    color: #fff;
+    font-weight: bold;
+}
+.pano-icon-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    background: rgba(20, 30, 60, 0.75);
+    color: #cfd8e3;
+    font-size: 16px;
+    cursor: pointer;
+}
+#pano-settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(20, 30, 60, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #cfd8e3;
+}
+#pano-settings-panel label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
 #panorama-loading {
     position: absolute;
     top: 0;

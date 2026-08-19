@@ -37,6 +37,12 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#map-toggle-btn', toggleMapSize);
     bindClick('#submit-btn', routeSubmit);
     bindClick('#mobile-map-btn', toggleMobileMap);
+    bindClick('#pano-mode-auto', () => setViewMode('auto'));
+    bindClick('#pano-mode-sphere', () => setViewMode('sphere'));
+    bindClick('#pano-mode-flat', () => setViewMode('flat'));
+    bindClick('#pano-settings-btn', togglePanoSettingsPanel);
+    $('pano-invert-x').addEventListener('change', (e) => updatePanoSettings({ invertX: e.target.checked }));
+    $('pano-invert-y').addEventListener('change', (e) => updatePanoSettings({ invertY: e.target.checked }));
 
     bindClick('#next-btn', nextRound);
     bindClick('#share-btn', shareResult);

@@ -109,7 +109,7 @@
             </div>
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-                <span class="ver-badge" id="home-version">版本 v2.1.0</span>
+                <span class="ver-badge" id="home-version">版本 v2.1.1</span>
                 <button class="changelog-btn" id="btn-changelog">📋 更新记录</button>
                 <a
                     class="notion-btn"
@@ -194,7 +194,7 @@
                 <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
                 <div id="diff-stars">难度 ★☆☆☆☆</div>
             </div>
-            <div id="version-line">版本 v2.1.0</div>
+            <div id="version-line">版本 v2.1.1</div>
         </div>
 
         <div id="timer-box">
@@ -206,7 +206,49 @@
 
         <div id="game-container">
             <div id="panorama-area">
-                <div id="panorama-view"></div>
+                <div id="panorama-view">
+                    <div id="pano-controls" style="display: none">
+                        <div class="pano-mode-group">
+                            <button
+                                type="button"
+                                id="pano-mode-auto"
+                                class="pano-mode-btn active"
+                                title="自动识别图片类型（360° 全景 / 平面照片）"
+                            >
+                                🔄 自动
+                            </button>
+                            <button
+                                type="button"
+                                id="pano-mode-sphere"
+                                class="pano-mode-btn"
+                                title="强制 360° 球面显示"
+                            >
+                                360°
+                            </button>
+                            <button
+                                type="button"
+                                id="pano-mode-flat"
+                                class="pano-mode-btn"
+                                title="平面图片模式（可平移 / 缩放）"
+                            >
+                                平面
+                            </button>
+                        </div>
+                        <button type="button" id="pano-settings-btn" class="pano-icon-btn" title="拖动方向设置">
+                            ⚙
+                        </button>
+                        <div id="pano-settings-panel" style="display: none">
+                            <label>
+                                <input type="checkbox" id="pano-invert-x" />
+                                水平拖动反转
+                            </label>
+                            <label>
+                                <input type="checkbox" id="pano-invert-y" />
+                                垂直拖动反转
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 <div id="panorama-loading" style="display: none">
                     <div class="spinner"></div>
                     <div>正在寻找并加载街景...</div>

@@ -655,7 +655,7 @@ async function findMapillaryImage(lat, lng) {
             const img = list[Math.floor(Math.random() * list.length)];
             const [ilng, ilat] = img.geometry.coordinates;
             const panoramaUrl = img.thumb_2048_url || img.thumb_1024_url || null;
-            return { imageId: img.id, panoramaUrl: panoramaUrl, lat: ilat, lng: ilng };
+            return { imageId: img.id, panoramaUrl: panoramaUrl, lat: ilat, lng: ilng, isPano: img.is_pano === true };
         }
         if (!result) continue;
         errLog.push(`bbox=${bbox} → 0 images`);
@@ -769,12 +769,13 @@ async function loadRound() {
         difficulty: loc.difficulty,
         imageId,
         panoramaUrl,
+        isPano: found.isPano,
         locationId: loc.id != null ? loc.id : null,
     };
     isSubmitting = false; // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
     if (imageId) {
         // 优先 CDN 直连；无 CDN URL 时走代理兜底
-        showPanorama(imageId, panoramaUrl);
+        showPanorama(imageId, panoramaUrl, found.isPano);
     } else if (panoramaUrl) {
         // 仅有 URL 时按原逻辑直接展示
         showPanoramaUrl(panoramaUrl);
@@ -805,8 +806,43 @@ const PANO_LOOK_SPEED = 0.005;
 const PANO_SPHERE_RADIUS = 500;
 const PANO_DEFAULT_FOV = 75;
 const PANO_LOAD_TIMEOUT_MS = 12000; // 单源加载超时后自动尝试下一候选源（防 CDN 挂起卡死街景）
+const PANO_FLAT_BASE_HEIGHT = 800; // 平面模式基准高度（世界单位），距离 500 处 FOV 75 的视野约 767
+const PANO_FLAT_MIN_SCALE = 1;
+const PANO_FLAT_MAX_SCALE = 8;
+const PANO_FLAT_PAN_SPEED = 0.004;
+const PANO_FLAT_ZOOM_STEP = 0.0012;
+const PANO_EQUIRECT_ASPECT_MIN = 1.9; // 360 全景为 2:1, 宽高比低于该阈值视为平面照片
+const PANO_VIEW_STORAGE_KEY = 'mma_pano_view_settings';
+const PANO_VIEW_DEFAULTS = { mode: 'auto', invertX: false, invertY: false };
 
-let panoViewer = null; // { renderer, camera, sphere, animateId }
+let panoViewer = null; // { renderer, camera, scene, sphere, flatPlane, viewMode, invertX, invertY }
+
+function loadPanoSettings() {
+    const settings = { ...PANO_VIEW_DEFAULTS };
+    try {
+        const raw = localStorage.getItem(PANO_VIEW_STORAGE_KEY);
+        if (raw) Object.assign(settings, JSON.parse(raw));
+    } catch (e) {
+        /* 本地设置损坏时回退默认值 */
+    }
+    return settings;
+}
+
+function savePanoSettings(settings) {
+    try {
+        localStorage.setItem(PANO_VIEW_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+        /* 隐私模式等场景下 localStorage 不可用, 忽略 */
+    }
+}
+
+function updatePanoSettings(patch) {
+    const next = { ...loadPanoSettings(), ...patch };
+    savePanoSettings(next);
+    if (!panoViewer) return;
+    panoViewer.invertX = next.invertX;
+    panoViewer.invertY = next.invertY;
+}
 
 function showPanoramaFallback() {
     $('panorama-loading').style.display = 'none';
@@ -824,12 +860,7 @@ function resizePanoViewer() {
     panoViewer.renderer.setSize(width, height);
 }
 
-function initPanoViewer() {
-    const container = $('panorama-view');
-    if (!container) return;
-    const width = container.clientWidth || container.offsetWidth || 800;
-    const height = container.clientHeight || container.offsetHeight || 600;
-
+function createPanoramaScene(container, width, height) {
     const camera = new THREE.PerspectiveCamera(PANO_DEFAULT_FOV, width / height, 0.1, 1100);
     camera.rotation.order = 'YXZ';
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -839,17 +870,58 @@ function initPanoViewer() {
     renderer.domElement.style.height = '100%';
     container.appendChild(renderer.domElement);
 
+    const scene = new THREE.Scene();
     const sphere = new THREE.Mesh(
         new THREE.SphereGeometry(PANO_SPHERE_RADIUS, 64, 48),
         new THREE.MeshBasicMaterial({ side: THREE.BackSide })
     );
-    const scene = new THREE.Scene();
+    const flatPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(PANO_FLAT_BASE_HEIGHT, PANO_FLAT_BASE_HEIGHT),
+        new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })
+    );
+    flatPlane.position.z = -PANO_SPHERE_RADIUS;
     scene.add(sphere);
+    scene.add(flatPlane);
+    return { renderer, camera, scene, sphere, flatPlane };
+}
 
+function handlePanoDrag(dx, dy) {
+    const viewer = panoViewer;
+    if (!viewer) return;
+    const dirX = viewer.invertX ? 1 : -1;
+    const dirY = viewer.invertY ? 1 : -1;
+    if (viewer.viewMode === 'flat') {
+        const zoom = viewer.flatPlane.scale.x;
+        viewer.flatPlane.position.x += dx * dirX * PANO_FLAT_PAN_SPEED * zoom;
+        viewer.flatPlane.position.y -= dy * dirY * PANO_FLAT_PAN_SPEED * zoom;
+        return;
+    }
+    viewer.camera.rotation.y += dx * dirX * PANO_LOOK_SPEED;
+    viewer.camera.rotation.x = Math.max(
+        -Math.PI / 2,
+        Math.min(Math.PI / 2, viewer.camera.rotation.x + dy * dirY * PANO_LOOK_SPEED)
+    );
+}
+
+function handlePanoWheel(deltaY) {
+    const viewer = panoViewer;
+    if (!viewer) return;
+    if (viewer.viewMode === 'flat') {
+        const nextZoom = Math.max(
+            PANO_FLAT_MIN_SCALE,
+            Math.min(PANO_FLAT_MAX_SCALE, viewer.flatPlane.scale.x * Math.exp(-deltaY * PANO_FLAT_ZOOM_STEP))
+        );
+        viewer.flatPlane.scale.set(nextZoom, nextZoom, 1);
+        return;
+    }
+    viewer.camera.fov = Math.max(PANO_MIN_FOV, Math.min(PANO_MAX_FOV, viewer.camera.fov + deltaY * 0.05));
+    viewer.camera.updateProjectionMatrix();
+}
+
+function bindPanoMouseDrag(container) {
     let isDragging = false;
     let prevX = 0;
     let prevY = 0;
-
     container.addEventListener('mousedown', (e) => {
         isDragging = true;
         prevX = e.clientX;
@@ -858,25 +930,19 @@ function initPanoViewer() {
     });
     window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        const dx = e.clientX - prevX;
-        const dy = e.clientY - prevY;
+        handlePanoDrag(e.clientX - prevX, e.clientY - prevY);
         prevX = e.clientX;
         prevY = e.clientY;
-        camera.rotation.y -= dx * PANO_LOOK_SPEED;
-        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - dy * PANO_LOOK_SPEED));
     });
     window.addEventListener('mouseup', () => {
         isDragging = false;
     });
-    container.addEventListener(
-        'wheel',
-        (e) => {
-            e.preventDefault();
-            camera.fov = Math.max(PANO_MIN_FOV, Math.min(PANO_MAX_FOV, camera.fov + e.deltaY * 0.05));
-            camera.updateProjectionMatrix();
-        },
-        { passive: false }
-    );
+}
+
+function bindPanoTouchDrag(container) {
+    let isDragging = false;
+    let prevX = 0;
+    let prevY = 0;
     container.addEventListener(
         'touchstart',
         (e) => {
@@ -888,34 +954,155 @@ function initPanoViewer() {
         },
         { passive: true }
     );
-    window.addEventListener('touchmove', (e) => {
-        if (!isDragging || e.touches.length !== 1) return;
-        const dx = e.touches[0].clientX - prevX;
-        const dy = e.touches[0].clientY - prevY;
-        prevX = e.touches[0].clientX;
-        prevY = e.touches[0].clientY;
-        camera.rotation.y -= dx * PANO_LOOK_SPEED;
-        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x - dy * PANO_LOOK_SPEED));
-    });
+    window.addEventListener(
+        'touchmove',
+        (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            handlePanoDrag(e.touches[0].clientX - prevX, e.touches[0].clientY - prevY);
+            prevX = e.touches[0].clientX;
+            prevY = e.touches[0].clientY;
+        },
+        { passive: true }
+    );
     window.addEventListener('touchend', () => {
         isDragging = false;
     });
+}
 
-    let animateId = null;
+function bindPanoWheel(container) {
+    container.addEventListener(
+        'wheel',
+        (e) => {
+            e.preventDefault();
+            handlePanoWheel(e.deltaY);
+        },
+        { passive: false }
+    );
+}
+
+function resetSphereView() {
+    if (!panoViewer) return;
+    panoViewer.camera.rotation.set(0, 0, 0);
+    panoViewer.camera.fov = PANO_DEFAULT_FOV;
+    panoViewer.camera.updateProjectionMatrix();
+}
+
+function resetFlatView() {
+    if (!panoViewer) return;
+    panoViewer.flatPlane.position.set(0, 0, -PANO_SPHERE_RADIUS);
+    panoViewer.flatPlane.scale.set(PANO_FLAT_MIN_SCALE, PANO_FLAT_MIN_SCALE, 1);
+}
+
+function configureFlatPlane(imageAspect) {
+    const viewer = panoViewer;
+    if (!viewer) return;
+    if (viewer.flatGeometry) viewer.flatGeometry.dispose();
+    viewer.flatGeometry = new THREE.PlaneGeometry(PANO_FLAT_BASE_HEIGHT * imageAspect, PANO_FLAT_BASE_HEIGHT);
+    viewer.flatPlane.geometry = viewer.flatGeometry;
+}
+
+function applyPanoModeVisibility(mode) {
+    if (!panoViewer) return;
+    panoViewer.sphere.visible = mode === 'sphere';
+    panoViewer.flatPlane.visible = mode === 'flat';
+}
+
+function syncPanoControls() {
+    if (!panoViewer) return;
+    const settings = loadPanoSettings();
+    panoViewer.invertX = settings.invertX;
+    panoViewer.invertY = settings.invertY;
+    ['auto', 'sphere', 'flat'].forEach((mode) => {
+        const btn = $('pano-mode-' + mode);
+        if (btn) btn.classList.toggle('active', panoViewer.viewMode === mode);
+    });
+    const invertXInput = $('pano-invert-x');
+    const invertYInput = $('pano-invert-y');
+    if (invertXInput) invertXInput.checked = settings.invertX;
+    if (invertYInput) invertYInput.checked = settings.invertY;
+}
+
+// 自动模式在纹理加载后按类型决策; 手动模式固定渲染方式
+function setViewMode(mode) {
+    if (!panoViewer) return;
+    panoViewer.viewMode = mode === 'sphere' || mode === 'flat' ? mode : 'auto';
+    savePanoSettings({ ...loadPanoSettings(), mode: panoViewer.viewMode });
+    const texture = panoViewer.sphere.material.map;
+    if (panoViewer.viewMode === 'auto' && texture && texture.image && texture.image.width) {
+        const aspect = texture.image.width / texture.image.height;
+        applyPanoModeVisibility(aspect >= PANO_EQUIRECT_ASPECT_MIN ? 'sphere' : 'flat');
+    } else {
+        applyPanoModeVisibility(panoViewer.viewMode);
+    }
+    syncPanoControls();
+}
+
+function applyPanoramaTexture(texture, isPanoHint) {
+    const viewer = panoViewer;
+    if (!viewer) return;
+    texture.encoding = THREE.sRGBEncoding;
+    viewer.sphere.material.map = texture;
+    viewer.sphere.material.needsUpdate = true;
+    viewer.flatPlane.material.map = texture;
+    viewer.flatPlane.material.needsUpdate = true;
+    const imageAspect = texture.image && texture.image.width ? texture.image.width / texture.image.height : 2;
+    configureFlatPlane(imageAspect);
+    resetSphereView();
+    resetFlatView();
+    if (viewer.viewMode === 'auto') {
+        const decided = isPanoHint == null ? imageAspect >= PANO_EQUIRECT_ASPECT_MIN : isPanoHint;
+        applyPanoModeVisibility(decided ? 'sphere' : 'flat');
+    } else {
+        applyPanoModeVisibility(viewer.viewMode);
+    }
+}
+
+function startPanoRender() {
     function animate() {
-        animateId = requestAnimationFrame(animate);
-        renderer.render(scene, camera);
+        panoViewer.animateId = requestAnimationFrame(animate);
+        panoViewer.renderer.render(panoViewer.scene, panoViewer.camera);
     }
     animate();
+}
 
+function togglePanoSettingsPanel() {
+    const panel = $('pano-settings-panel');
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+}
+
+function initPanoViewer() {
+    const container = $('panorama-view');
+    if (!container) return;
+    const width = container.clientWidth || container.offsetWidth || 800;
+    const height = container.clientHeight || container.offsetHeight || 600;
+    const { renderer, camera, scene, sphere, flatPlane } = createPanoramaScene(container, width, height);
+    bindPanoMouseDrag(container);
+    bindPanoTouchDrag(container);
+    bindPanoWheel(container);
+
+    const settings = loadPanoSettings();
+    panoViewer = {
+        renderer,
+        camera,
+        scene,
+        sphere,
+        flatPlane,
+        flatGeometry: flatPlane.geometry,
+        viewMode: 'auto',
+        invertX: settings.invertX,
+        invertY: settings.invertY,
+        animateId: null,
+    };
+    startPanoRender();
+    setViewMode(settings.mode);
     window.addEventListener('resize', resizePanoViewer);
-    panoViewer = { renderer, camera, sphere, animateId };
+    $('pano-controls').style.display = 'flex';
 }
 
 // 优先用 Mapillary CDN 直链加载全景图（绕过后端代理，省带宽与缓存）；
 // 失败时回退到后端代理 /image/:id（该路径可解析任意 mapillaryId）。
 // 返回 promise，加载成功后 resolve，出错时 reject 并附带错误详情。
-function loadPanoramaTexture(imageId, panoramaUrl) {
+function loadPanoramaTexture(imageId, panoramaUrl, isPanoHint) {
     return new Promise((resolve, reject) => {
         let candidateUrls;
         if (panoramaUrl) {
@@ -948,12 +1135,7 @@ function loadPanoramaTexture(imageId, panoramaUrl) {
                     if (currentAttempt !== attempt) return;
                     clearTimeout(timer);
                     if (!panoViewer) return;
-                    texture.encoding = THREE.sRGBEncoding;
-                    panoViewer.sphere.material.map = texture;
-                    panoViewer.sphere.material.needsUpdate = true;
-                    panoViewer.camera.rotation.set(0, 0, 0);
-                    panoViewer.camera.fov = PANO_DEFAULT_FOV;
-                    panoViewer.camera.updateProjectionMatrix();
+                    applyPanoramaTexture(texture, isPanoHint);
                     resizePanoViewer();
                     resolve(url);
                 },
@@ -969,10 +1151,10 @@ function loadPanoramaTexture(imageId, panoramaUrl) {
     });
 }
 
-function setPanoImage(imageId, panoramaUrl) {
+function setPanoImage(imageId, panoramaUrl, isPanoHint) {
     if (!panoViewer) return;
     $('panorama-loading').style.display = 'flex';
-    loadPanoramaTexture(imageId, panoramaUrl)
+    loadPanoramaTexture(imageId, panoramaUrl, isPanoHint)
         .then(() => {
             $('panorama-loading').style.display = 'none';
         })
@@ -986,16 +1168,16 @@ function setPanoImage(imageId, panoramaUrl) {
         });
 }
 
-function showPanorama(imageId, panoramaUrl) {
+function showPanorama(imageId, panoramaUrl, isPanoHint) {
     $('panorama-loading').style.display = 'flex';
     $('panorama-fallback').style.display = 'none';
     try {
         if (!panoViewer) {
             initPanoViewer();
             // 容器刚由隐藏变为可见，尺寸就绪后再挂纹理，避免黑屏
-            setTimeout(() => setPanoImage(imageId, panoramaUrl), 300);
+            setTimeout(() => setPanoImage(imageId, panoramaUrl, isPanoHint), 300);
         } else {
-            setPanoImage(imageId, panoramaUrl);
+            setPanoImage(imageId, panoramaUrl, isPanoHint);
         }
     } catch (e) {
         streetViewError = {

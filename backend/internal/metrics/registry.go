@@ -18,6 +18,7 @@ var HTTPDurationBuckets = []float64{0.01, 0.05, 0.1, 0.5, 1, 2.5, 10}
 type Registry struct {
 	mu              sync.Mutex
 	startedAt       time.Time
+	version         string
 	counters        map[string]int64 // key: "method route status"
 	durationBuckets map[string][]int64
 	durationCounts  map[string]int64
@@ -26,12 +27,13 @@ type Registry struct {
 }
 
 // NewRegistry creates a registry with the given histogram bucket boundaries.
-func NewRegistry(buckets []float64) *Registry {
+func NewRegistry(version string, buckets []float64) *Registry {
 	if len(buckets) == 0 {
 		buckets = HTTPDurationBuckets
 	}
 	return &Registry{
 		startedAt:       time.Now(),
+		version:         version,
 		counters:        make(map[string]int64),
 		durationBuckets: make(map[string][]int64),
 		durationCounts:  make(map[string]int64),
@@ -99,7 +101,7 @@ func (r *Registry) Render(poolTotal, poolIdle, poolWaiting int64) string {
 
 	sb.WriteString("# HELP backend_info 后端版本信息\n")
 	sb.WriteString("# TYPE backend_info gauge\n")
-	fmt.Fprintf(&sb, "backend_info{version=%q} 1\n", "2.0.0")
+	fmt.Fprintf(&sb, "backend_info{version=%q} 1\n", r.version)
 
 	sb.WriteString("# HELP http_requests_total 处理的 HTTP 请求总数（按方法/路由/状态码）\n")
 	sb.WriteString("# TYPE http_requests_total counter\n")

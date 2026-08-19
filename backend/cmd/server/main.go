@@ -165,7 +165,7 @@ func main() {
 		oauthSvc = oauth.NewService(cfg.OAuthStateSecret, google)
 	}
 
-	registry := metrics.NewRegistry(nil)
+	registry := metrics.NewRegistry(cfg.Version(), nil)
 
 	services := server.Services{
 		Tokens:       tokens,
