@@ -19,13 +19,14 @@ async function refreshAccountPanel() {
     $('account-register-form').style.display = isUser ? 'none' : 'block';
     $('account-profile').style.display = isUser ? 'block' : 'none';
     $('account-logout-btn').style.display = isUser ? 'block' : 'none';
+    $('guest-enter-btn').style.display = isUser ? 'none' : 'block';
 
     const bindHint = $('account-bind-hint');
     bindHint.style.display = !isUser && MmaApi.isOnline() && MmaApi.getGuestToken() ? 'block' : 'none';
 
     if (isUser) {
         $('account-profile-name').textContent = '👤 ' + identity.user.username;
-        $('account-profile-email').textContent = identity.user.email;
+        $('account-profile-email').textContent = '🔒 邮箱作为账号标识, 已加密存储';
         $('account-profile-stats').textContent = await loadProfileStats();
         loadAchievements();
     } else {
@@ -132,7 +133,6 @@ function currentUserInput() {
         username: $('register-username').value.trim(),
         email: $('register-email').value.trim(),
         password: $('register-password').value,
-        code: $('register-code').value.trim(),
     };
 }
 
@@ -153,29 +153,15 @@ async function doLogin() {
     }
 }
 
-async function sendCode() {
-    const email = $('register-email').value.trim();
-    if (!email) {
-        showToast('请先填写邮箱');
-        return;
-    }
-    try {
-        await MmaApi.sendVerificationCode(email);
-        showToast('📮 验证码已发送（开发环境见后端控制台）');
-    } catch (e) {
-        showToast('❌ ' + (e.message || '验证码发送失败'));
-    }
-}
-
 async function doRegister() {
-    const { username, email, password, code } = currentUserInput();
-    if (!username || !email || !password || !code) {
+    const { username, email, password } = currentUserInput();
+    if (!username || !email || !password) {
         showToast('请填写完整注册信息');
         return;
     }
     try {
         // 携带游客令牌注册：服务端自动合并当前游客的游戏进度
-        await MmaApi.register({ username, email, password, code, guestToken: MmaApi.getGuestToken() });
+        await MmaApi.register({ username, email, password, guestToken: MmaApi.getGuestToken() });
         closeAccount();
         showToast('✅ 注册成功，游客进度已绑定');
         renderBests();

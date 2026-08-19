@@ -350,7 +350,12 @@ async function deleteHistory(key, isRemote) {
 window.onload = function () {
     initGuessMap();
     // 后台建立游客会话；游戏流程不等待后端，离线时立即以本地模式呈现最佳成绩
-    MmaApi.init().finally(renderBests);
+    MmaApi.init().finally(() => {
+        renderBests();
+        // 未登录时首屏弹出账号面板引导注册/登录, 游客可点击“游客进入”跳过
+        const identity = MmaApi.getIdentity();
+        if (!identity || identity.role !== 'user') openAccount();
+    });
 };
 
 function initGuessMap() {
@@ -799,6 +804,7 @@ const PANO_MAX_FOV = 100;
 const PANO_LOOK_SPEED = 0.005;
 const PANO_SPHERE_RADIUS = 500;
 const PANO_DEFAULT_FOV = 75;
+const PANO_LOAD_TIMEOUT_MS = 12000; // 单源加载超时后自动尝试下一候选源（防 CDN 挂起卡死街景）
 
 let panoViewer = null; // { renderer, camera, sphere, animateId }
 
@@ -927,15 +933,20 @@ function loadPanoramaTexture(imageId, panoramaUrl) {
             return;
         }
         let idx = 0;
+        let attempt = 0;
         const tryNext = () => {
             if (idx >= candidateUrls.length) {
                 reject({ message: '全景图加载失败' });
                 return;
             }
             const url = candidateUrls[idx++];
+            const currentAttempt = ++attempt;
+            const timer = setTimeout(() => tryNext(), PANO_LOAD_TIMEOUT_MS);
             new THREE.TextureLoader().load(
                 url,
                 (texture) => {
+                    if (currentAttempt !== attempt) return;
+                    clearTimeout(timer);
                     if (!panoViewer) return;
                     texture.encoding = THREE.sRGBEncoding;
                     panoViewer.sphere.material.map = texture;
@@ -947,7 +958,11 @@ function loadPanoramaTexture(imageId, panoramaUrl) {
                     resolve(url);
                 },
                 undefined,
-                () => tryNext()
+                () => {
+                    clearTimeout(timer);
+                    if (currentAttempt !== attempt) return;
+                    tryNext();
+                }
             );
         };
         tryNext();

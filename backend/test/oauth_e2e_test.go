@@ -136,8 +136,14 @@ func TestOAuthFullFlow(t *testing.T) {
 	if me.status != http.StatusOK {
 		t.Fatalf("me failed: %d %v", me.status, me.body)
 	}
-	if email := me.nestedStr("user", "email"); email != "fake-abc@oauth.local" {
-		t.Fatalf("expected the linked OAuth account, got email %q", email)
+	if userID := me.nestedStr("user", "id"); userID == "" {
+		t.Fatalf("expected a linked OAuth account, got %v", me.body)
+	}
+	if username := me.nestedStr("user", "username"); !strings.HasPrefix(username, "u") {
+		t.Fatalf("expected an OAuth-derived username, got %q", username)
+	}
+	if _, leaked := me.nestedMap("user")["email"]; leaked {
+		t.Fatal("user payload must not expose the account email")
 	}
 
 	// Step 4: repeating the callback with the same (now consumed) state must

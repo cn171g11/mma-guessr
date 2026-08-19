@@ -51,8 +51,8 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#err-close-btn', closeErrReport);
 
     bindClick('#login-submit-btn', doLogin);
-    bindClick('#send-code-btn', sendCode);
     bindClick('#register-submit-btn', doRegister);
+    bindClick('#guest-enter-btn', closeAccount);
     bindClick('#account-logout-btn', doLogout);
     bindClick('#lb-period-overall', () => switchLbPeriod('overall'));
     bindClick('#lb-period-daily', () => switchLbPeriod('daily'));

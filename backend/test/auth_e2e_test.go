@@ -61,8 +61,11 @@ func TestRegister(t *testing.T) {
 			t.Fatalf("expected 201, got %d", resp.status)
 		}
 		user := resp.nestedMap("user")
-		if user["username"] != "tester01" || user["email"] != email {
+		if user["username"] != "tester01" {
 			t.Fatalf("unexpected user: %v", user)
+		}
+		if _, leaked := user["email"]; leaked {
+			t.Fatal("user payload must not expose the account email")
 		}
 		if resp.nestedStr("tokenPair", "accessToken") == "" {
 			t.Fatal("expected accessToken")
@@ -93,38 +96,18 @@ func TestRegister(t *testing.T) {
 			"username": uniqueUsername("tester"),
 			"email":    email,
 			"password": validPassword,
-			"code":     "000000",
 		})
 		if duplicate.status != http.StatusConflict {
 			t.Fatalf("expected 409, got %d", duplicate.status)
 		}
 	})
 
-	t.Run("wrong code rejected", func(t *testing.T) {
-		email := randomEmail("reg")
-		e.primeCode(email)
-		resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
-			"username": uniqueUsername("tester"),
-			"email":    email,
-			"password": validPassword,
-			"code":     "000000",
-		})
-		if resp.status != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d", resp.status)
-		}
-		if !strings.Contains(resp.str("error"), "验证码") {
-			t.Fatalf("expected 验证码 error, got %q", resp.str("error"))
-		}
-	})
-
 	t.Run("invalid username rejected", func(t *testing.T) {
 		email := randomEmail("reg")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
 			"username": "x",
 			"email":    email,
 			"password": validPassword,
-			"code":     code,
 		})
 		if resp.status != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", resp.status)
@@ -133,12 +116,10 @@ func TestRegister(t *testing.T) {
 
 	t.Run("short password rejected", func(t *testing.T) {
 		email := randomEmail("reg")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
 			"username": uniqueUsername("tester"),
 			"email":    email,
 			"password": "123",
-			"code":     code,
 		})
 		if resp.status != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", resp.status)
@@ -223,12 +204,10 @@ func TestTokenLifecycle(t *testing.T) {
 	createSession := func(t *testing.T) (accessToken, refreshToken string) {
 		t.Helper()
 		email := randomEmail("token")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
 			"username": uniqueUsername("tester"),
 			"email":    email,
 			"password": validPassword,
-			"code":     code,
 		})
 		if resp.status != http.StatusCreated {
 			t.Fatalf("register failed: %d", resp.status)
@@ -325,12 +304,10 @@ func TestGuest(t *testing.T) {
 		seedProgress(t, e, "guest_progress", "guest_id", guestID, 12, 3450, 8900, 9)
 
 		email := randomEmail("bind")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/guest/bind", "", map[string]any{
 			"username":   "guestuser",
 			"email":      email,
 			"password":   validPassword,
-			"code":       code,
 			"guestToken": guestToken,
 		})
 		if resp.status != http.StatusCreated {
@@ -353,12 +330,10 @@ func TestGuest(t *testing.T) {
 		seedProgress(t, e, "guest_progress", "guest_id", guestID, 5, 1200, 2200, 3)
 
 		email := randomEmail("bind")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
 			"username":   "binduser",
 			"email":      email,
 			"password":   validPassword,
-			"code":       code,
 			"guestToken": guestToken,
 		})
 		if resp.status != http.StatusCreated {
@@ -375,12 +350,10 @@ func TestGuest(t *testing.T) {
 	t.Run("bind rejects a user token", func(t *testing.T) {
 		userAccess := registerUser(t, e, uniqueUsername("tester"), randomEmail("bind"), validPassword).nestedStr("tokenPair", "accessToken")
 		email := randomEmail("bind")
-		code := e.primeCode(email)
 		resp := e.request(t, http.MethodPost, "/api/auth/guest/bind", "", map[string]any{
 			"username":   "binduser",
 			"email":      email,
 			"password":   validPassword,
-			"code":       code,
 			"guestToken": userAccess,
 		})
 		if resp.status != http.StatusBadRequest {

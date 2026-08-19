@@ -50,7 +50,7 @@ var AppConstants = struct {
 	MPEventRateWindowMS           int
 	MPEventRateMax                int
 }{
-	ServiceVersion:                "2.0.0",
+	ServiceVersion:                "2.1.0",
 	BcryptRounds:                  12,
 	AccessTTLSeconds:              15 * 60,
 	RefreshTTLSeconds:             7 * 24 * 60 * 60,
@@ -99,6 +99,7 @@ const (
 	devRefreshSecret     = "dev-refresh-secret-change-me-0123456789abcdef"        // #nosec G101
 	devVerifyCodeSecret  = "dev-verify-code-secret-not-for-production-0123456789" // #nosec G101
 	devOAuthStateSecret  = "dev-oauth-state-secret-not-for-production-0123456789" // #nosec G101
+	devEmailHashSecret   = "dev-email-hash-secret-not-for-production-0123456789"  // #nosec G101
 	defaultSQLitePath    = "mma_guessr.db"
 	defaultSigningSecret = "dev-signing-secret-change-me" // #nosec G101
 )
@@ -112,6 +113,9 @@ type Config struct {
 	AccessSecret       string
 	RefreshSecret      string
 	VerifyCodeSecret   string
+	// EmailHashSecret keys the HMAC-SHA256 digest used to store account email
+	// addresses: emails are identifiers, never kept in plaintext at rest.
+	EmailHashSecret    string
 	SMTPHost           string
 	SMTPPort           int
 	SMTPUser           string
@@ -211,6 +215,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.VerifyCodeSecret, err = requiredSecret("VERIFY_CODE_SECRET", devVerifyCodeSecret, env); err != nil {
+		return nil, err
+	}
+	if cfg.EmailHashSecret, err = requiredSecret("EMAIL_HASH_SECRET", devEmailHashSecret, env); err != nil {
 		return nil, err
 	}
 

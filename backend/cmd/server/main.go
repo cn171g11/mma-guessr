@@ -114,7 +114,7 @@ func main() {
 		time.Duration(config.AppConstants.RefreshTTLSeconds)*time.Second,
 	)
 
-	store := auth.NewStore(conn)
+	store := auth.NewStore(conn, cfg.EmailHashSecret)
 	verifyStore := auth.NewVerificationStore(conn, cfg.VerifyCodeSecret)
 	refreshStore := auth.NewRefreshStore(conn)
 	loginGuard := auth.NewLoginGuard(

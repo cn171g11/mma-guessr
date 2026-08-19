@@ -535,6 +535,16 @@ button {
 .acc-submit:hover {
     transform: translateY(-1px);
 }
+.acc-guest {
+    margin-top: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: none;
+    font-weight: normal;
+}
+.acc-guest:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
 .oauth-divider {
     display: flex;
     align-items: center;

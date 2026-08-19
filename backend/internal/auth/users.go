@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
@@ -10,11 +13,12 @@ import (
 	"mma-guessr/backend/internal/util"
 )
 
-// User is a registered account record.
+// User is a registered account record. Email addresses are stored as an
+// HMAC-SHA256 digest (EmailHash), never in plaintext.
 type User struct {
 	ID            string  `json:"id"`
 	Username      string  `json:"username"`
-	Email         string  `json:"email"`
+	EmailHash     string  `json:"-"`
 	PasswordHash  string  `json:"-"`
 	EquippedTitle *string `json:"-"`
 	CreatedAt     string  `json:"createdAt"`
@@ -27,19 +31,59 @@ var (
 
 // Store provides data access for the auth domain.
 type Store struct {
-	conn *sql.DB
+	conn        *sql.DB
+	emailSecret []byte
 }
 
-// NewStore creates an auth Store backed by the given connection.
-func NewStore(conn *sql.DB) *Store {
-	return &Store{conn: conn}
+// NewStore creates an auth Store backed by the given connection. The email
+// secret keys the HMAC digest used to store account email identifiers; it is
+// also used to backfill digests for any legacy rows migrated from plaintext.
+func NewStore(conn *sql.DB, emailSecret string) *Store {
+	s := &Store{conn: conn, emailSecret: []byte(emailSecret)}
+	s.backfillEmailHashes()
+	return s
 }
 
-// PublicUser is the user shape returned to clients (no password hash).
+// hashEmail derives the stored digest for an account email identifier.
+func (s *Store) hashEmail(email string) string {
+	mac := hmac.New(sha256.New, s.emailSecret)
+	mac.Write([]byte(strings.ToLower(strings.TrimSpace(email))))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// backfillEmailHashes replaces any legacy plaintext email values left by the
+// email→email_hash column rename with their HMAC digest. It is idempotent:
+// digests never contain '@', so rows still holding plaintext are exactly the
+// ones that still need hashing.
+func (s *Store) backfillEmailHashes() {
+	rows, err := s.conn.Query(`SELECT id, email_hash FROM users WHERE email_hash LIKE '%@%'`)
+	if err != nil {
+		return
+	}
+	type legacy struct {
+		id    string
+		email string
+	}
+	var pending []legacy
+	for rows.Next() {
+		var l legacy
+		if err := rows.Scan(&l.id, &l.email); err != nil {
+			_ = rows.Close()
+			return
+		}
+		pending = append(pending, l)
+	}
+	_ = rows.Close()
+	for _, l := range pending {
+		_, _ = s.conn.Exec(`UPDATE users SET email_hash = ? WHERE id = ?`, s.hashEmail(l.email), l.id)
+	}
+}
+
+// PublicUser is the user shape returned to clients. The account email is an
+// identifier only and is never disclosed back to clients.
 type PublicUser struct {
 	ID        string `json:"id"`
 	Username  string `json:"username"`
-	Email     string `json:"email"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -48,7 +92,6 @@ func (u *User) ToPublic() PublicUser {
 	return PublicUser{
 		ID:        u.ID,
 		Username:  u.Username,
-		Email:     u.Email,
 		CreatedAt: u.CreatedAt,
 	}
 }
@@ -88,28 +131,16 @@ func ValidateLogin(identifier, password string) *httputil.HttpError {
 	return nil
 }
 
-// ValidateCode checks the 6-digit verification code format.
-func ValidateCode(code string) *httputil.HttpError {
-	if len(code) != 6 {
-		return httputil.BadRequest("验证码格式不正确")
-	}
-	for i := 0; i < len(code); i++ {
-		if code[i] < '0' || code[i] > '9' {
-			return httputil.BadRequest("验证码格式不正确")
-		}
-	}
-	return nil
-}
-
 // CreateUser inserts a new user and returns the created record. It returns an
-// HttpError 409 when username or email is already taken.
+// HttpError 409 when the username or email hash is already taken.
 func (s *Store) CreateUser(username, email, passwordHash string) (*User, error) {
 	id := util.NewUUID()
 	now := util.Now()
+	emailHash := s.hashEmail(email)
 	_, err := s.conn.Exec(
-		`INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+		`INSERT INTO users (id, username, email_hash, password_hash, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
-		id, username, strings.ToLower(email), passwordHash, now, now,
+		id, username, emailHash, passwordHash, now, now,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -120,15 +151,22 @@ func (s *Store) CreateUser(username, email, passwordHash string) (*User, error) 
 	return &User{
 		ID:           id,
 		Username:     username,
-		Email:        strings.ToLower(email),
+		EmailHash:    emailHash,
 		PasswordHash: passwordHash,
 		CreatedAt:    now,
 	}, nil
 }
 
-// FindByEmail looks up a user by normalized email.
+// IsEmailRegistered reports whether an email already belongs to an account.
+func (s *Store) IsEmailRegistered(email string) (bool, error) {
+	var exists int
+	err := s.conn.QueryRow(`SELECT COUNT(*) FROM users WHERE email_hash = ?`, s.hashEmail(email)).Scan(&exists)
+	return exists > 0, err
+}
+
+// FindByEmail looks up a user by its email identifier (digest lookup).
 func (s *Store) FindByEmail(email string) (*User, error) {
-	return s.findByField("email", strings.ToLower(email))
+	return s.findByField("email_hash", s.hashEmail(email))
 }
 
 // FindByUsername looks up a user by username.
@@ -153,12 +191,12 @@ func (s *Store) findByField(field, value string) (*User, error) {
 	// Only allow fields from a fixed allowlist so the column name can never
 	// be attacker-controlled (the rest of the query is parameterized).
 	switch field {
-	case "id", "email", "username":
+	case "id", "email_hash", "username":
 	default:
 		return nil, errors.New("invalid lookup field")
 	}
 	row := s.conn.QueryRow(
-		`SELECT id, username, email, password_hash, equipped_title, created_at
+		`SELECT id, username, email_hash, password_hash, equipped_title, created_at
 		 FROM users WHERE `+field+` = ?`, value) // #nosec G202 -- field is allowlisted above, value is parameterized
 	return scanUser(row)
 }
@@ -166,7 +204,7 @@ func (s *Store) findByField(field, value string) (*User, error) {
 func scanUser(row *sql.Row) (*User, error) {
 	var u User
 	var equipped sql.NullString
-	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &equipped, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.EmailHash, &u.PasswordHash, &equipped, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}

@@ -19,13 +19,13 @@ func newPacksService(t *testing.T) *Service {
 	}
 	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 	if _, err := conn.Exec(
-		`INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-		 VALUES ('u1', 'alice', 'a@x.com', 'h', ?, ?)`, now, now); err != nil {
+		`INSERT INTO users (id, username, email_hash, password_hash, created_at, updated_at)
+		 VALUES ('u1', 'alice', 'h1', 'h', ?, ?)`, now, now); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 	if _, err := conn.Exec(
-		`INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-		 VALUES ('u2', 'bob', 'b@x.com', 'h', ?, ?)`, now, now); err != nil {
+		`INSERT INTO users (id, username, email_hash, password_hash, created_at, updated_at)
+		 VALUES ('u2', 'bob', 'h2', 'h', ?, ?)`, now, now); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 	return NewService(NewStore(conn))

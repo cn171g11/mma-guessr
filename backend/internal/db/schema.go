@@ -2,23 +2,29 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 )
+
+// usersTableDDL is the users table definition. The email address is stored as
+// an HMAC-SHA256 digest (email_hash) so an account's identifier is never kept
+// in plaintext at rest; see auth.Store for the digest key.
+const usersTableDDL = `CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			username TEXT NOT NULL UNIQUE,
+			email_hash TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			equipped_title TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`
 
 // Migrate creates all tables if they do not yet exist. It is idempotent and
 // safe to run on every startup.
 func Migrate(conn *sql.DB) error {
 	statements := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id TEXT PRIMARY KEY,
-			username TEXT NOT NULL UNIQUE,
-			email TEXT NOT NULL UNIQUE,
-			password_hash TEXT NOT NULL,
-			equipped_title TEXT,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
+		usersTableDDL,
 
 		`CREATE TABLE IF NOT EXISTS locations (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -250,6 +256,9 @@ func Migrate(conn *sql.DB) error {
 		}
 	}
 
+	if err := migrateUsersEmailHash(conn); err != nil {
+		return err
+	}
 	if err := migrateGameResultsRounds(conn); err != nil {
 		return err
 	}
@@ -287,6 +296,27 @@ func backfillLeaderboardBest(conn *sql.DB) error {
 		 SELECT mode, substr(created_at, 1, 10), player_id, MAX(score), MAX(created_at) FROM scores
 		 WHERE player_type = 'user' AND substr(created_at, 1, 10) >= ?
 		 GROUP BY mode, substr(created_at, 1, 10), player_id`, boundary)
+	return err
+}
+
+// migrateUsersEmailHash renames the legacy plaintext email column to
+// email_hash so account identifiers are never kept in cleartext. SQLite
+// preserves the NOT NULL / UNIQUE constraints on rename. Existing rows keep
+// their legacy value until auth.Store backfills the digest on startup
+// (auth.Store has the digest secret; this layer only owns the schema).
+func migrateUsersEmailHash(conn *sql.DB) error {
+	var createSQL string
+	err := conn.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'`).Scan(&createSQL)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(createSQL, "email_hash") {
+		return nil
+	}
+	if !strings.Contains(createSQL, "email") {
+		return errors.New("users table schema is missing the email column")
+	}
+	_, err = conn.Exec(`ALTER TABLE users RENAME COLUMN email TO email_hash`)
 	return err
 }
 

@@ -65,13 +65,6 @@ func (v *VerificationStore) SendCode(email string, ttlSeconds, resendSeconds int
 	return code, nil
 }
 
-// IsEmailRegistered reports whether the email is already a user account.
-func (v *VerificationStore) IsEmailRegistered(email string) (bool, error) {
-	var exists int
-	err := v.conn.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email).Scan(&exists)
-	return exists > 0, err
-}
-
 // ConsumeCode validates a submitted code and deletes it on success. It
 // enforces the attempt cap and rejects expired codes.
 func (v *VerificationStore) ConsumeCode(email, code string, maxAttempts int) *httputil.HttpError {

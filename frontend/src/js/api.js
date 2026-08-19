@@ -307,7 +307,6 @@ const MmaApi = (() => {
         removeFriend: (userId) => request('/api/friends/' + userId, { method: 'DELETE' }),
         getSponsors: () => request('/api/sponsors'),
         getOAuthProviders: () => request('/api/oauth/providers'),
-        sendVerificationCode: (email) => request('/api/auth/verification-code', { method: 'POST', body: { email } }),
         login: (identifier, password) =>
             request('/api/auth/login', { method: 'POST', body: { identifier, password } }).then(afterAuth),
         register: (payload) => request('/api/auth/register', { method: 'POST', body: payload }).then(afterAuth),

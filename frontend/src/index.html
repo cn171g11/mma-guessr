@@ -109,7 +109,7 @@
             </div>
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-                <span class="ver-badge" id="home-version">版本 v1.16.0</span>
+                <span class="ver-badge" id="home-version">版本 v2.1.0</span>
                 <button class="changelog-btn" id="btn-changelog">📋 更新记录</button>
                 <a
                     class="notion-btn"
@@ -194,7 +194,7 @@
                 <div id="xp-bar-bg"><div id="xp-bar-fill"></div></div>
                 <div id="diff-stars">难度 ★☆☆☆☆</div>
             </div>
-            <div id="version-line">版本 v1.16.0</div>
+            <div id="version-line">版本 v2.1.0</div>
         </div>
 
         <div id="timer-box">
@@ -322,27 +322,19 @@
                     </div>
                     <input
                         id="register-username"
-                        placeholder="用户名（3-20 位字母/数字/下划线）"
+                        placeholder="昵称（3-20 位字母/数字/下划线）"
                         autocomplete="username"
                     />
-                    <input id="register-email" placeholder="邮箱" autocomplete="email" />
+                    <input id="register-email" placeholder="邮箱（作为账号标识，加密存储）" autocomplete="email" />
                     <input
                         id="register-password"
                         type="password"
                         placeholder="密码（至少 8 位）"
                         autocomplete="new-password"
                     />
-                    <div class="acc-code-row">
-                        <input
-                            id="register-code"
-                            placeholder="6 位验证码"
-                            inputmode="numeric"
-                            autocomplete="one-time-code"
-                        />
-                        <button class="acc-code-btn" id="send-code-btn">发送验证码</button>
-                    </div>
                     <button class="acc-submit" id="register-submit-btn">注册</button>
                 </div>
+                <button id="guest-enter-btn" class="acc-submit acc-guest" style="display: none">🎮 游客进入</button>
                 <button id="account-logout-btn" class="acc-logout" style="display: none">退出登录</button>
             </div>
         </div>

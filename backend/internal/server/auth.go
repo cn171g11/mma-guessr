@@ -17,7 +17,6 @@ type registerRequest struct {
 	Username   string `json:"username"`
 	Email      string `json:"email"`
 	Password   string `json:"password"`
-	Code       string `json:"code"`
 	GuestToken string `json:"guestToken"`
 }
 
@@ -25,7 +24,6 @@ type bindRequest struct {
 	Username   string `json:"username"`
 	Email      string `json:"email"`
 	Password   string `json:"password"`
-	Code       string `json:"code"`
 	GuestToken string `json:"guestToken"`
 }
 
@@ -102,7 +100,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		guestID = &id
 	}
 
-	session, err := s.services.Auth.RegisterAccount(req.Username, email, req.Password, req.Code, guestID)
+	session, err := s.services.Auth.RegisterAccount(req.Username, email, req.Password, guestID)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -140,7 +138,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.services.Auth.RegisterAccount(req.Username, email, req.Password, req.Code, &guestID)
+	session, err := s.services.Auth.RegisterAccount(req.Username, email, req.Password, &guestID)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

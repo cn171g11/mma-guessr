@@ -40,10 +40,11 @@ import (
 )
 
 const (
-	validPassword     = "secret123"
-	testAccessSecret  = "test-access-secret-0123456789abcdef"
-	testRefreshSecret = "test-refresh-secret-0123456789abcdef"
-	testVerifySecret  = "test-verify-secret-0123456789abcdef"
+	validPassword      = "secret123"
+	testAccessSecret   = "test-access-secret-0123456789abcdef"
+	testRefreshSecret  = "test-refresh-secret-0123456789abcdef"
+	testVerifySecret   = "test-verify-secret-0123456789abcdef"
+	testEmailHashSecret = "test-email-hash-secret-0123456789abcdef"
 )
 
 var uniqueCounter atomic.Int64
@@ -152,7 +153,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		testAccessSecret, testRefreshSecret,
 		15*time.Minute, 30*24*time.Hour, 7*24*time.Hour,
 	)
-	store := auth.NewStore(conn)
+	store := auth.NewStore(conn, testEmailHashSecret)
 	verifyStore := auth.NewVerificationStore(conn, testVerifySecret)
 	refreshStore := auth.NewRefreshStore(conn)
 	loginGuard := auth.NewLoginGuard(5, 15*time.Minute, 15*time.Minute)
@@ -326,12 +327,10 @@ func cookieValueOf(header http.Header, name string) string {
 
 func registerUser(t *testing.T, e *testEnv, username, email, password string) *response {
 	t.Helper()
-	code := e.primeCode(email)
 	resp := e.request(t, http.MethodPost, "/api/auth/register", "", map[string]any{
 		"username": username,
 		"email":    email,
 		"password": password,
-		"code":     code,
 	})
 	if resp.status != http.StatusCreated {
 		t.Fatalf("register failed: %d %v", resp.status, resp.body)

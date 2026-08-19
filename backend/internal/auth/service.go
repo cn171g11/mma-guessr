@@ -164,16 +164,14 @@ func (s *Service) UserProfile(userID string) (*PublicUser, error) {
 
 // IsEmailRegistered reports whether an email already belongs to an account.
 func (s *Service) IsEmailRegistered(email string) (bool, error) {
-	return s.verify.IsEmailRegistered(email)
+	return s.store.IsEmailRegistered(email)
 }
 
 // RegisterAccount creates a user, optionally merges guest progress, and
-// issues a token pair.
-func (s *Service) RegisterAccount(username, email, password, verificationCode string, guestID *string) (*AccountSession, error) {
+// issues a token pair. The email is an account identifier: it is validated
+// for shape and stored as a digest, never in plaintext.
+func (s *Service) RegisterAccount(username, email, password string, guestID *string) (*AccountSession, error) {
 	if err := ValidateRegistration(username, email, password); err != nil {
-		return nil, err
-	}
-	if err := s.verify.ConsumeCode(email, verificationCode, s.verifyMaxAttempts); err != nil {
 		return nil, err
 	}
 
