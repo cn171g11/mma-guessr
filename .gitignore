@@ -16,3 +16,4 @@ android/captures/
 # 系统
 .DS_Store
 Thumbs.db
+push_to_github.py

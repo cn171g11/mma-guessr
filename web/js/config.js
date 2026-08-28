@@ -5,11 +5,10 @@
 // ==========================================================
 // 【后端 API 地址】
 // ==========================================================
-// APK 版本当前「暂不接入后端」：APK_USE_BACKEND=false 时，APK 内 API_BASE 指向本地
-// 不可达地址（http://localhost:3000，安卓设备上无此服务），前端检测到后端不可达会自动
-// 降级为纯本地单机模式（历史记录/最佳成绩存 localStorage，单机游玩不受影响）。
-// 以后要接入后端时，把 APK_USE_BACKEND 改为 true 即可（APK 内 API_BASE 自动指向生产后端）。
-const APK_USE_BACKEND = false;
+// APK 通过 CapacitorHttp（原生 HTTP，绕过 WebView CORS）访问生产后端：
+// 街景搜索/全景解析必须经后端代理 /api/proxy/mapillary（Mapillary 密钥仅存服务端）。
+// 若后端不可达，前端自动降级为纯本地单机模式（单机游玩不受影响，但街景无法加载）。
+const APK_USE_BACKEND = true;
 const isCapacitor = typeof window.Capacitor !== 'undefined' && !!window.Capacitor.isNativePlatform?.();
 const isFileProtocol = window.location.protocol === 'file:';
 const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
