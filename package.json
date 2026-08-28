@@ -1,0 +1,11 @@
+{
+  "name": "mma-guessr-apk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MmaGuessr Android APK (Capacitor wrapper)",
+  "dependencies": {
+    "@capacitor/android": "7",
+    "@capacitor/cli": "7",
+    "@capacitor/core": "7"
+  }
+}
