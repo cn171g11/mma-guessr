@@ -360,10 +360,8 @@ window.onload = function () {
 
 function initGuessMap() {
     map = L.map('guess-map', { worldCopyJump: true }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 19,
-    }).addTo(map);
+    createBasemapLayer().addTo(map);
+    registerBasemapMap(map);
     map.on('click', function (e) {
         if (isSubmitting || state.finished) return;
         if (guessMarker) map.removeLayer(guessMarker);

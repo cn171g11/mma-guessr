@@ -55,6 +55,13 @@
     <body>
         <!-- ============ 主菜单 ============ -->
         <div id="home-screen">
+            <!-- ============ 首页公告（GFW 网络提示，可关闭并记忆） ============ -->
+            <div class="announcement-bar" id="announcement-bar" style="display: none">
+                <div class="announcement-text">
+                    ⚠️ 中国大陆地区因网络限制，可能无法正常加载地图与街景。请尝试开启代理 / VPN，或在主菜单「🗺️ 底图设置」切换地图底图作为备选方案。
+                </div>
+                <button class="announcement-close" id="announcement-close-btn" title="关闭公告">✕</button>
+            </div>
             <h1>🌍 MmaGuessr</h1>
             <div class="subtitle">观察街景线索，在地图上标记你认为的位置 · 数据源 Mapillary</div>
             <div class="mode-grid">
@@ -111,6 +118,7 @@
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
                 <span class="ver-badge" id="home-version">版本 v2.1.1</span>
                 <button class="changelog-btn" id="btn-changelog">📋 更新记录</button>
+                <button class="changelog-btn" id="btn-basemap">🗺️ 底图设置</button>
                 <a
                     class="notion-btn"
                     href="https://app.notion.com/p/3ac41ee86a0281a08b49cd7759af7b7f"
@@ -305,6 +313,18 @@
                     <button class="clog-close" id="changelog-close-btn">✕ 关闭</button>
                 </h2>
                 <div id="changelog-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ 底图设置弹窗 ============ -->
+        <div id="basemap-overlay">
+            <div id="basemap-box">
+                <h2>
+                    🗺️ 底图设置
+                    <button class="clog-close" id="basemap-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats">中国地区 OSM 官方节点可能被屏蔽，切换镜像底图可正常加载地图。</div>
+                <div class="basemap-list" id="basemap-list"></div>
             </div>
         </div>
 

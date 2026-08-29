@@ -265,10 +265,8 @@ let replayRounds = [];
 function ensureReplayMap() {
     if (replayMap) return;
     replayMap = L.map('replay-map', { worldCopyJump: true, zoomControl: true }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 19,
-    }).addTo(replayMap);
+    createBasemapLayer().addTo(replayMap);
+    registerBasemapMap(replayMap);
 }
 
 function clearReplayMarkers() {
