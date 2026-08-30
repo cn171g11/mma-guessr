@@ -1768,20 +1768,21 @@ function toggleMobileMap() {
     const btn = $('mobile-map-btn');
     const isOpen = mc.classList.toggle('mobile-open');
     btn.textContent = isOpen ? '✕ 收起地图' : '🗺️ 地图';
-    if (isOpen) setTimeout(() => {
-        map.invalidateSize();
-        // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
-        // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
-        // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
-        if (state.mode === 'china') {
-            map.setMaxBounds(CHINA_BOUNDS);
-            map.setMinZoom(3);
-            safeFly(
-                () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
-                () => map.setView(CHINA_CENTER, 4, { animate: false })
-            );
-        }
-    }, 300);
+    if (isOpen)
+        setTimeout(() => {
+            map.invalidateSize();
+            // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
+            // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
+            // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
+            if (state.mode === 'china') {
+                map.setMaxBounds(CHINA_BOUNDS);
+                map.setMinZoom(3);
+                safeFly(
+                    () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
+                    () => map.setView(CHINA_CENTER, 4, { animate: false })
+                );
+            }
+        }, 300);
 }
 
 function showHint() {
