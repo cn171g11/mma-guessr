@@ -39,8 +39,17 @@ const API_SIGNING_SECRET = '1b884038-d236df7c-0bc24825-cf9d6d14-54b95608-e747da2
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v2.1.1';
+const VERSION = 'v2.3.0';
 const CHANGELOG = [
+    {
+        version: 'v2.3.0',
+        date: '2026-08-29 20:00:00',
+        changes: [
+            '🗺️ 底图切换：新增「底图设置」，支持 OSM Carto / OSM France / OSM Germany / CartoDB Voyager 四种底图自由切换，解决部分地区 OSM 官方节点被屏蔽导致地图无法加载的问题；切换立即生效并本地记忆，瓦片加载失败自动降级回默认底图。',
+            '📢 首页公告：新增网络提示公告，说明中国地区因 GFW 限制可能需要开启代理/VPN 才能正常访问，并提示切换底图作为备选；公告支持一键关闭，已阅用户不再重复打扰。',
+            '版本号递增至 v2.3.0（Android 端，与网页端 v2.2.0 功能对齐）。',
+        ],
+    },
     {
         version: 'v2.1.1',
         date: '2026-08-19 18:00:00',
@@ -397,3 +406,145 @@ const SCORE_CONFIG = {
         oceania: { D: 1200, α: 2.5, dMin: 25 },
     },
 };
+
+// ==========================================================
+// 【地图底图配置】
+// 中国地区 OSM Carto 官方节点（tile.openstreetmap.org）常被 GFW 屏蔽，
+// 故提供多镜像底图自由切换；用户选择持久化到 localStorage。
+// · 瓦片 URL 模板中 {s} 为子域占位，{r} 为 Retina 标识（Carto 用）
+// · 加载失败时经 tileerror 计数，连续超阈值自动降级回默认底图
+// ==========================================================
+const BASEMAPS = {
+    'osm-carto': {
+        label: 'OSM Carto（标准）',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        attribution: '&copy; OpenStreetMap 贡献者',
+        maxZoom: 19,
+    },
+    'osm-france': {
+        label: 'OSM France（法国镜像）',
+        url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        attribution: '&copy; OpenStreetMap 贡献者',
+        maxZoom: 20,
+    },
+    'osm-germany': {
+        label: 'OSM Germany（德国镜像）',
+        url: 'https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        attribution: '&copy; OpenStreetMap 贡献者',
+        maxZoom: 19,
+    },
+    'carto-voyager': {
+        label: 'CartoDB Voyager（推荐）',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        subdomains: 'abcd',
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 20,
+    },
+};
+const BASEMAP_STORAGE_KEY = 'mma_basemap';
+const DEFAULT_BASEMAP = 'osm-carto';
+const BASEMAP_TILE_ERROR_THRESHOLD = 20; // 连续瓦片失败阈值，超过则降级
+
+// 已注册的 Leaflet map 实例（切换底图时统一刷新）
+const basemapMaps = [];
+
+function getBasemapId() {
+    try {
+        const id = localStorage.getItem(BASEMAP_STORAGE_KEY);
+        return id && BASEMAPS[id] ? id : DEFAULT_BASEMAP;
+    } catch (e) {
+        return DEFAULT_BASEMAP;
+    }
+}
+
+function setBasemapId(id) {
+    if (!BASEMAPS[id]) return;
+    try {
+        localStorage.setItem(BASEMAP_STORAGE_KEY, id);
+    } catch (e) {
+        /* localStorage 不可用时仅本次会话生效 */
+    }
+}
+
+// 创建指定底图的瓦片层；瓦片加载失败连续超阈值且非默认底图时自动降级
+function createBasemapLayer(id) {
+    const basemapId = id || getBasemapId();
+    const cfg = BASEMAPS[basemapId] || BASEMAPS[DEFAULT_BASEMAP];
+    const layer = L.tileLayer(cfg.url, {
+        attribution: cfg.attribution,
+        maxZoom: cfg.maxZoom,
+        subdomains: cfg.subdomains,
+    });
+
+    let errCount = 0;
+    let degraded = false;
+    layer.on('tileerror', function () {
+        errCount++;
+        if (!degraded && errCount >= BASEMAP_TILE_ERROR_THRESHOLD && basemapId !== DEFAULT_BASEMAP) {
+            degraded = true;
+            setBasemapId(DEFAULT_BASEMAP);
+            showToast('⚠️ ' + cfg.label + ' 加载失败，已自动切回 OSM Carto');
+            refreshAllBasemaps();
+        }
+    });
+
+    return layer;
+}
+
+// 将 Leaflet map 实例登记到注册表，切换底图时统一刷新
+function registerBasemapMap(mapObj) {
+    if (mapObj && !basemapMaps.includes(mapObj)) basemapMaps.push(mapObj);
+}
+
+// 替换指定 map 的瓦片层为当前底图，并给出加载进度提示
+function applyBasemapTo(mapObj, id) {
+    if (!mapObj) return;
+    mapObj.eachLayer(function (layer) {
+        if (layer instanceof L.TileLayer) mapObj.removeLayer(layer);
+    });
+    const cfg = BASEMAPS[id] || BASEMAPS[getBasemapId()];
+    const newLayer = createBasemapLayer(id);
+    newLayer.on('loading', function () {
+        showToast('🗺️ 正在加载 ' + cfg.label + ' ...');
+    });
+    newLayer.on('load', function () {
+        showToast('✅ ' + cfg.label + ' 加载完成');
+    });
+    newLayer.addTo(mapObj);
+}
+
+// 统一刷新所有已注册地图的底图
+function refreshAllBasemaps(id) {
+    basemapMaps.forEach(function (m) {
+        applyBasemapTo(m, id);
+    });
+}
+
+// 切换底图：持久化 + 立即刷新所有地图
+function switchBasemap(id) {
+    if (!BASEMAPS[id]) return;
+    setBasemapId(id);
+    refreshAllBasemaps(id);
+}
+
+// ==========================================================
+// 【首页公告】中国地区 GFW 网络提示，可关闭（localStorage 记忆已阅）
+// ==========================================================
+const ANNOUNCEMENT_STORAGE_KEY = 'mma_announcement_dismissed';
+function isAnnouncementDismissed() {
+    try {
+        return localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY) === '1';
+    } catch (e) {
+        return false;
+    }
+}
+function dismissAnnouncement() {
+    try {
+        localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, '1');
+    } catch (e) {
+        /* 忽略 */
+    }
+}

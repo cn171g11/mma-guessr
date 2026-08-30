@@ -83,4 +83,75 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindOverlayDismiss('err-overlay', closeErrReport);
     bindOverlayDismiss('packs-overlay', closePacksPanel);
     bindOverlayDismiss('packedit-overlay', closePackEditor);
+    bindOverlayDismiss('basemap-overlay', closeBasemap);
+
+    // 底图设置
+    bindClick('#btn-basemap', openBasemap);
+    bindClick('#basemap-close-btn', closeBasemap);
+    bindClick('#basemap-list .basemap-option', (event) => selectBasemap(event.currentTarget.dataset.basemap));
+
+    // 首页公告关闭
+    bindClick('#announcement-close-btn', closeAnnouncement);
+
+    // 页面加载：未关闭过则显示公告
+    initAnnouncement();
 })();
+
+// ==========================================================
+// 【底图设置】渲染底图列表 / 打开 / 关闭 / 切换
+// ==========================================================
+function renderBasemapList() {
+    const list = $('basemap-list');
+    if (!list) return;
+    const current = getBasemapId();
+    list.innerHTML = Object.keys(BASEMAPS)
+        .map(function (id) {
+            const cfg = BASEMAPS[id];
+            const active = id === current;
+            return (
+                '<button class="basemap-option' +
+                (active ? ' active' : '') +
+                '" data-basemap="' +
+                id +
+                '">' +
+                '<span class="basemap-name">' +
+                cfg.label +
+                '</span>' +
+                '<span class="basemap-check">' +
+                (active ? '✓' : '') +
+                '</span>' +
+                '</button>'
+            );
+        })
+        .join('');
+}
+
+function openBasemap() {
+    renderBasemapList();
+    $('basemap-overlay').classList.add('show');
+}
+
+function closeBasemap() {
+    $('basemap-overlay').classList.remove('show');
+}
+
+function selectBasemap(id) {
+    switchBasemap(id);
+    renderBasemapList();
+}
+
+// ==========================================================
+// 【首页公告】显示 / 关闭
+// ==========================================================
+function initAnnouncement() {
+    const bar = $('announcement-bar');
+    if (bar && !isAnnouncementDismissed()) {
+        bar.style.display = 'flex';
+    }
+}
+
+function closeAnnouncement() {
+    dismissAnnouncement();
+    const bar = $('announcement-bar');
+    if (bar) bar.style.display = 'none';
+}

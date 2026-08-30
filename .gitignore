@@ -13,7 +13,12 @@ android/captures/
 # APK（走 GitHub Release 附件，不提交到仓库）
 *.apk
 
+# Gradle 用户目录（本机构建缓存，避免 native 锁问题）
+.gradle-home*/
+.gradle-home*/
+
 # 系统
 .DS_Store
 Thumbs.db
 push_to_github.py
+push_web.py

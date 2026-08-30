@@ -1,15 +1,15 @@
 # MmaGuessr Android APK 构建说明
 
-将纯前端 HTML 项目（MmaGuessr v2.2.1）通过 **Capacitor 7** 封装为可安装的安卓 APK。
+将纯前端 HTML 项目（MmaGuessr v2.3.0）通过 **Capacitor 7** 封装为可安装的安卓 APK。
 
 ## 一、构建产物
 
 | 项目 | 值 |
 |---|---|
-| APK 文件 | `MmaGuessr-v2.2.1-release.apk`（约 3.5 MB，正式签名） |
+| APK 文件 | `MmaGuessr-v2.3.0-release.apk`（约 3.4 MB，正式签名） |
 | 包名 | `cn.mmaguessr.game` |
 | 应用名 | MmaGuessr |
-| 版本 | versionName `2.2.1` / versionCode `23` |
+| 版本 | versionName `2.3.0` / versionCode `24` |
 | SDK | minSdk `23`（Android 6.0+）/ targetSdk `35` |
 | 后端 | 接入生产后端（CapacitorHttp 原生 HTTP 绕过 WebView CORS，街景经 `/api/proxy` 代理） |
 
@@ -35,9 +35,11 @@ bash build.sh release  # release（未签名）
 | 文件 | 改动 |
 |---|---|
 | `web/index.html` | 3 个 CDN 库（Leaflet/Three/Socket.IO）本地化到 `vendor/`，移除 SRI，CSP 去掉 CDN 域名 |
-| `web/js/config.js` | `APK_USE_BACKEND=true`：APK 内 API_BASE 指向生产后端 `https://tuxun.edu-group.cn` |
+| `web/js/config.js` | `APK_USE_BACKEND=true`：APK 内 API_BASE 指向生产后端 `https://tuxun.edu-group.cn`；新增 `BASEMAPS` 底图配置（OSM Carto / OSM France / OSM Germany / CartoDB Voyager） |
 | `web/vendor/` | 新增本地化的 leaflet.js/css + 图标、three.min.js、socket.io.min.js |
-| `android/app/build.gradle` | versionCode 23 / versionName 2.2.1 + release 签名配置 |
+| `web/index.html` / `web/js/events.js` | 新增「底图设置」弹窗 + 首页 GFW 公告条（可关闭、localStorage 记忆） |
+| `web/js/game.js` / `features.js` / `packs.js` | 三处地图初始化改为读取当前底图偏好，失败自动降级 |
+| `android/app/build.gradle` | versionCode 24 / versionName 2.3.0 + release 签名配置 |
 | `android/build.gradle` | 仓库增加阿里云 Maven 镜像（google/central/gradle-plugin） |
 | 图标 | 基于精修版 App 图标生成全部 mipmap（方形/圆形/自适应前景），背景色 `#0a1428` |
 
@@ -54,11 +56,11 @@ APK 已启用 **CapacitorHttp**（`capacitor.config.json` 的 `plugins.Capacitor
 
 ## 七、本地安装测试
 
-1. 将 `MmaGuessr-v2.2.1-release.apk` 传到安卓手机（微信/数据线/网盘）
+1. 将 `MmaGuessr-v2.3.0-release.apk` 传到安卓手机（微信/数据线/网盘）
 2. 手机允许「安装未知来源应用」
 3. 安装并启动，即可游玩（街景需联网，前端资源已全部离线打包）
 
 命令行安装（设备已连接且开启 USB 调试）：
 ```bash
-adb install -r E:\Desktop\mma-guessr-apk\MmaGuessr-v2.2.1-release.apk
+adb install -r E:\Desktop\mma-guessr-apk\MmaGuessr-v2.3.0-release.apk
 ```
