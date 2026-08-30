@@ -1980,7 +1980,9 @@ button {
     color: #e8eef7;
     font-size: 15px;
     text-align: left;
-    transition: border-color 0.15s, background 0.15s;
+    transition:
+        border-color 0.15s,
+        background 0.15s;
 }
 .basemap-option:hover {
     background: rgba(255, 255, 255, 0.1);
