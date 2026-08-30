@@ -88,7 +88,12 @@ function bindOverlayDismiss(overlayId, closeFn) {
     // 底图设置
     bindClick('#btn-basemap', openBasemap);
     bindClick('#basemap-close-btn', closeBasemap);
-    bindClick('#basemap-list .basemap-option', (event) => selectBasemap(event.currentTarget.dataset.basemap));
+    // 列表项是 openBasemap 时才动态渲染的，直接绑定会失败（页面加载时列表为空），
+    // 必须用事件委托绑定到父容器，通过 closest 命中动态生成的选项
+    bindClick('#basemap-list', (event) => {
+        const option = event.target.closest('.basemap-option');
+        if (option) selectBasemap(option.dataset.basemap);
+    });
 
     // 首页公告关闭
     bindClick('#announcement-close-btn', closeAnnouncement);
