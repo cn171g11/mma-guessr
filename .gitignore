@@ -29,7 +29,10 @@ Desktop.ini
 *.log
 *.tmp
 
-.workbuddy/
+# .workbuddy 是 WorkBuddy 项目数据目录，默认不入库；
+# 但 .workbuddy/skills/ 是项目级 AI Skill，需随仓库共享，单独放行
+.workbuddy/*
+!.workbuddy/skills/
 backups/
 
 COMPACTION.md
@@ -44,6 +47,9 @@ AGENTS.md
 CLAUDE.md
 SKILL.md
 COMPACTION.md
+
+# 放行项目级 AI Skill（需在 SKILL.md 规则之后才生效）
+!.workbuddy/skills/**/SKILL.md
 
 # Redis
 *.rdb
