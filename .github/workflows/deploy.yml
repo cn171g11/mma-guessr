@@ -35,7 +35,11 @@ jobs:
             - name: Reject hardcoded Mapillary tokens
               working-directory: ${{ github.workspace }}
               run: |
-                  if grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git --exclude-dir=_site --exclude-dir=release 'MLY\|[0-9]{10,}\|[0-9A-Za-z]{20,}' .; then
+                  # 只匹配 Mapillary token 特征：MLY| 前缀 + 20 位以上 token 字符（现行唯一有效格式）。
+                  # 不再使用裸 [0-9]{10,} / [0-9A-Za-z]{20,} —— 它们会误伤所有 base64、JWT、
+                  # 哈希、长数字常数（如 WGS84 偏心率 0.00669342162296594323），
+                  # 导致前端合法的公开密钥（底图 api_key）根本无法提交。
+                  if grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git --exclude-dir=_site --exclude-dir=release 'MLY\|[0-9A-Za-z._-]{20,}' .; then
                       echo "::error::Hardcoded Mapillary token detected. Rejecting commit. Use the environment variable MAPILLARY_TOKEN (server-side only) instead."
                       exit 1
                   fi
