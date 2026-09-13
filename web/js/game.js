@@ -489,6 +489,7 @@ function backHome() {
     $('game-container').classList.remove('show');
     $('info-bar').classList.remove('show');
     $('minimap-container').classList.remove('show');
+    resetMapVisibility();
     $('submit-btn').classList.remove('show');
     $('quit-btn').classList.remove('show');
     $('timer-box').classList.remove('show');
@@ -1776,27 +1777,76 @@ function toggleMapSize() {
     setTimeout(() => map.invalidateSize(), 350);
 }
 
-/* 移动端：展开/收起小地图 */
-function toggleMobileMap() {
-    const mc = $('minimap-container');
-    const btn = $('mobile-map-btn');
-    const isOpen = mc.classList.toggle('mobile-open');
-    btn.textContent = isOpen ? '✕ 收起地图' : '🗺️ 地图';
-    if (isOpen)
-        setTimeout(() => {
-            map.invalidateSize();
-            // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
-            // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
-            // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
-            if (state.mode === 'china') {
-                map.setMaxBounds(CHINA_BOUNDS);
-                map.setMinZoom(3);
-                safeFly(
-                    () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
-                    () => map.setView(CHINA_CENTER, 4, { animate: false })
-                );
-            }
-        }, 300);
+/* 当前是否处于「移动端地图布局」（窄屏，或高度受限的横屏手机）。
+   条件与 style.css 里两个媒体查询保持一致，否则按钮文案与实际显隐会不同步。 */
+function isMobileMapLayout() {
+    return (
+        window.matchMedia('(max-width: 768px)').matches ||
+        (window.matchMedia('(orientation: landscape)').matches && window.innerHeight <= 500)
+    );
+}
+
+/* 地图展开后刷新尺寸：容器从 0 尺寸变为可见时，Leaflet 必须重新量一次才能正确铺满 */
+function refreshMapAfterToggle() {
+    setTimeout(() => {
+        if (!map) return;
+        map.invalidateSize();
+        // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
+        // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
+        // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
+        if (state.mode === 'china') {
+            map.setMaxBounds(CHINA_BOUNDS);
+            map.setMinZoom(3);
+            safeFly(
+                () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
+                () => map.setView(CHINA_CENTER, 4, { animate: false })
+            );
+        }
+    }, 300);
+}
+
+/* 统一的地图显隐控制（PC 与移动端共用）。
+   · 用独立的 .map-collapsed 表达「用户主动收起」，不去碰游戏流程维护的 .show，
+     这样退出/重开一局时地图的默认显示逻辑不受影响；
+   · 移动端额外用 .mobile-open 覆盖「小地图默认隐藏」的媒体查询。 */
+function setMapVisible(visible) {
+    const container = $('minimap-container');
+    const btn = $('map-visibility-btn');
+    if (!container) return;
+    container.classList.toggle('map-collapsed', !visible);
+    if (isMobileMapLayout()) container.classList.toggle('mobile-open', visible);
+    if (btn) btn.textContent = visible ? '✕ 收起地图' : '🗺️ 地图';
+    if (visible) refreshMapAfterToggle();
+}
+
+/* 地图当前是否可见（收起态优先判定） */
+function isMapVisible() {
+    const container = $('minimap-container');
+    if (!container || container.classList.contains('map-collapsed')) return false;
+    if (isMobileMapLayout()) return container.classList.contains('mobile-open');
+    return container.classList.contains('show');
+}
+
+/* 地图开关按钮：展开 <-> 收起 */
+function toggleMapVisibility() {
+    setMapVisible(!isMapVisible());
+}
+
+/* 地图内 ✕ 按钮：只负责收起，作为「地图关不掉」的兜底入口 */
+function closeMap() {
+    setMapVisible(false);
+}
+
+/* 重置地图显隐到该端的默认状态（退出游戏时调用，避免收起状态残留到下一局） */
+function resetMapVisibility() {
+    const container = $('minimap-container');
+    if (!container) return;
+    container.classList.remove('map-collapsed', 'mobile-open', 'enlarged');
+    isMapEnlarged = false;
+    const sizeBtn = $('map-toggle-btn');
+    if (sizeBtn) sizeBtn.textContent = '⛶';
+    const visibilityBtn = $('map-visibility-btn');
+    if (visibilityBtn) visibilityBtn.textContent = '🗺️ 地图';
 }
 
 function showHint() {

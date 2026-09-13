@@ -1183,6 +1183,32 @@ button {
     justify-content: center;
 }
 
+/* 地图内「收起地图」按钮：放左上角，与右上角的放大按钮分开避免互相遮挡。
+   z-index 高于 Leaflet 控件层（800）与瓦片层，确保地图铺满时也一定点得到 —— 
+   这是「地图关不掉」的兜底入口，只要地图可见就永远有一个可点的关闭键。 */
+#map-close-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    line-height: 1;
+    border: none;
+    border-radius: 50%;
+    background: rgba(220, 53, 69, 0.88);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#map-close-btn:hover {
+    background: rgba(220, 53, 69, 1);
+}
+
 #submit-btn {
     position: fixed;
     bottom: 270px;
@@ -1213,29 +1239,31 @@ button {
     box-shadow: none;
 }
 
-/* 移动端地图呼出按钮（桌面端隐藏） */
-#mobile-map-btn {
-    display: none;
+/* 地图显隐开关（PC 与移动端通用）。
+   z-index 必须高于 #minimap-container 展开时的 1500，否则地图铺满屏幕时这个按钮会被
+   盖在下面点不到 —— 这正是此前「地图关不掉」的主因之一（原按钮仅 1002）。 */
+#map-visibility-btn {
+    display: block;
     position: fixed;
     bottom: 20px;
     left: 20px;
-    z-index: 1002;
-    padding: 12px 20px;
+    z-index: 2000;
+    padding: 10px 18px;
     background: linear-gradient(135deg, #3498db, #2980b9);
     color: #fff;
     border: none;
     border-radius: 25px;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: bold;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
     transition: all 0.25s ease;
 }
-#mobile-map-btn:hover {
+#map-visibility-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(52, 152, 219, 0.6);
 }
-#mobile-map-btn:active {
+#map-visibility-btn:active {
     transform: translateY(0);
 }
 
@@ -1496,10 +1524,16 @@ button {
     }
     #map-toggle-btn {
         display: none;
-    } /* 旧放大按钮移动端隐藏 */
-    #mobile-map-btn {
+    } /* 放大按钮移动端隐藏（宽度受限，放大意义不大） */
+    /* 地图开关上移，避开左下角计时器 #timer-box（bottom:12px 起，高约 40px）
+       —— 原来的按钮就压在计时器上，被盖住后点不到，导致「地图关不掉」 */
+    #map-visibility-btn {
         display: block;
-    } /* 呼出/收起按钮 */
+        bottom: 72px;
+        left: 14px;
+        padding: 10px 16px;
+        font-size: 13px;
+    }
     #submit-btn {
         bottom: 20px;
         right: 20px;
@@ -1566,12 +1600,12 @@ button {
     #map-toggle-btn {
         display: none;
     }
-    #mobile-map-btn {
+    #map-visibility-btn {
         display: block;
-        bottom: 18px;
-        left: 18px;
-        padding: 10px 18px;
-        font-size: 14px;
+        bottom: 58px;
+        left: 14px;
+        padding: 9px 16px;
+        font-size: 13px;
     }
     #submit-btn {
         bottom: 18px;
@@ -1980,7 +2014,9 @@ button {
     color: #e8eef7;
     font-size: 15px;
     text-align: left;
-    transition: border-color 0.15s, background 0.15s;
+    transition:
+        border-color 0.15s,
+        background 0.15s;
 }
 .basemap-option:hover {
     background: rgba(255, 255, 255, 0.1);
@@ -1997,4 +2033,17 @@ button {
     color: #2f81ff;
     font-weight: 700;
     font-size: 16px;
+}
+
+/* ============ 地图「用户主动收起」状态（必须放在所有媒体查询之后） ============
+   收起由用户点击 ✕ / 地图开关触发。这里必须把所有 class 组合都显式列出来：
+   移动端展开态的 `#minimap-container.mobile-open.show` 特异性是 120，
+   而单写 `#minimap-container.map-collapsed` 只有 110 —— 同为 !important 时
+   特异性高者胜，收起规则就会被压掉，表现为「移动端地图收不起来」。
+   逐组合枚举后最高特异性达 130，任何组合下都能稳定收起。 */
+#minimap-container.map-collapsed,
+#minimap-container.map-collapsed.show,
+#minimap-container.map-collapsed.mobile-open,
+#minimap-container.map-collapsed.mobile-open.show {
+    display: none !important;
 }
