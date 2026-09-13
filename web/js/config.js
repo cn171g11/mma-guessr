@@ -39,8 +39,18 @@ const API_SIGNING_SECRET = '1b884038-d236df7c-0bc24825-cf9d6d14-54b95608-e747da2
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v2.3.2';
+const VERSION = 'v2.3.3';
 const CHANGELOG = [
+    {
+        version: 'v2.3.3',
+        date: '2026-09-13 23:50:00',
+        changes: [
+            '🔄 拖动反转默认常开：水平 / 垂直拖动反转改为默认开启，更贴合「抓住画面拖动」的直觉；仍可在街景右上角 ⚙ 中按需关闭。',
+            '🎚️ 拖动灵敏度下调：360° 全景与平面照片的拖动速度降低约 40%，避免轻轻一动画面就大幅偏移。',
+            '🔇 去掉底图加载提示：切换底图不再弹出「正在加载 / 加载完成」提示，改为静默切换。',
+            '版本号递增至 v2.3.3（Android 端，与网页端 v2.2.2 功能对齐）。',
+        ],
+    },
     {
         version: 'v2.3.2',
         date: '2026-09-13 23:30:00',
@@ -518,21 +528,13 @@ function registerBasemapMap(mapObj) {
     if (mapObj && !basemapMaps.includes(mapObj)) basemapMaps.push(mapObj);
 }
 
-// 替换指定 map 的瓦片层为当前底图，并给出加载进度提示
+// 替换指定 map 的瓦片层为当前底图（静默替换，不弹加载提示）
 function applyBasemapTo(mapObj, id) {
     if (!mapObj) return;
     mapObj.eachLayer(function (layer) {
         if (layer instanceof L.TileLayer) mapObj.removeLayer(layer);
     });
-    const cfg = BASEMAPS[id] || BASEMAPS[getBasemapId()];
-    const newLayer = createBasemapLayer(id);
-    newLayer.on('loading', function () {
-        showToast('🗺️ 正在加载 ' + cfg.label + ' ...');
-    });
-    newLayer.on('load', function () {
-        showToast('✅ ' + cfg.label + ' 加载完成');
-    });
-    newLayer.addTo(mapObj);
+    createBasemapLayer(id).addTo(mapObj);
 }
 
 // 统一刷新所有已注册地图的底图

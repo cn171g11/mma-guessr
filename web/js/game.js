@@ -807,18 +807,21 @@ function skipLocation() {
 const PANO_IMAGE_WIDTH = 2048;
 const PANO_MIN_FOV = 30;
 const PANO_MAX_FOV = 100;
-const PANO_LOOK_SPEED = 0.005;
+const PANO_LOOK_SPEED = 0.003; // 360 全景拖动灵敏度（数值越小越稳，0.005 偏快）
 const PANO_SPHERE_RADIUS = 500;
 const PANO_DEFAULT_FOV = 75;
 const PANO_LOAD_TIMEOUT_MS = 12000; // 单源加载超时后自动尝试下一候选源（防 CDN 挂起卡死街景）
 const PANO_FLAT_BASE_HEIGHT = 800; // 平面模式基准高度（世界单位），距离 500 处 FOV 75 的视野约 767
 const PANO_FLAT_MIN_SCALE = 1;
 const PANO_FLAT_MAX_SCALE = 8;
-const PANO_FLAT_PAN_SPEED = 0.004;
+const PANO_FLAT_PAN_SPEED = 0.0024; // 平面照片拖动灵敏度（与 360 全景同步下调）
 const PANO_FLAT_ZOOM_STEP = 0.0012;
 const PANO_EQUIRECT_ASPECT_MIN = 1.9; // 360 全景为 2:1, 宽高比低于该阈值视为平面照片
 const PANO_VIEW_STORAGE_KEY = 'mma_pano_view_settings';
-const PANO_VIEW_DEFAULTS = { mode: 'auto', invertX: false, invertY: false };
+// 拖动反转默认常开（v2.2.2 起）：水平/垂直方向均按「抓住画面拖动」的直觉方向
+const PANO_VIEW_DEFAULTS = { mode: 'auto', invertX: true, invertY: true };
+// 设置结构版本：升级时旧存储值作废并回落到新默认值，否则老用户读到的仍是旧的 false
+const PANO_VIEW_SETTINGS_VERSION = 2;
 
 let panoViewer = null; // { renderer, camera, scene, sphere, flatPlane, viewMode, invertX, invertY }
 
@@ -826,7 +829,15 @@ function loadPanoSettings() {
     const settings = { ...PANO_VIEW_DEFAULTS };
     try {
         const raw = localStorage.getItem(PANO_VIEW_STORAGE_KEY);
-        if (raw) Object.assign(settings, JSON.parse(raw));
+        if (raw) {
+            const stored = JSON.parse(raw);
+            // 仅当存储的结构版本与当前一致时才沿用用户设置。
+            // 版本升级（如本次拖动反转改为默认常开）时旧值作废、回落到新默认值，
+            // 否则老用户浏览器里存着 invertX/Y = false，改了默认值也看不到变化。
+            if (stored && stored.version === PANO_VIEW_SETTINGS_VERSION) {
+                Object.assign(settings, stored);
+            }
+        }
     } catch (e) {
         /* 本地设置损坏时回退默认值 */
     }
@@ -835,7 +846,10 @@ function loadPanoSettings() {
 
 function savePanoSettings(settings) {
     try {
-        localStorage.setItem(PANO_VIEW_STORAGE_KEY, JSON.stringify(settings));
+        localStorage.setItem(
+            PANO_VIEW_STORAGE_KEY,
+            JSON.stringify({ ...settings, version: PANO_VIEW_SETTINGS_VERSION })
+        );
     } catch (e) {
         /* 隐私模式等场景下 localStorage 不可用, 忽略 */
     }
@@ -1768,20 +1782,21 @@ function toggleMobileMap() {
     const btn = $('mobile-map-btn');
     const isOpen = mc.classList.toggle('mobile-open');
     btn.textContent = isOpen ? '✕ 收起地图' : '🗺️ 地图';
-    if (isOpen) setTimeout(() => {
-        map.invalidateSize();
-        // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
-        // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
-        // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
-        if (state.mode === 'china') {
-            map.setMaxBounds(CHINA_BOUNDS);
-            map.setMinZoom(3);
-            safeFly(
-                () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
-                () => map.setView(CHINA_CENTER, 4, { animate: false })
-            );
-        }
-    }, 300);
+    if (isOpen)
+        setTimeout(() => {
+            map.invalidateSize();
+            // 中国模式: 移动端小地图默认隐藏(0 尺寸), startGame 时的锁定逻辑在零尺寸下
+            // 无法正确计算边界(Leaflet 的 maxBounds 约束在 0 尺寸下纬度不修正),
+            // 展开后需重新应用锁定并把视角拉回中国中心, 否则地图会停留在错误的锁定位置
+            if (state.mode === 'china') {
+                map.setMaxBounds(CHINA_BOUNDS);
+                map.setMinZoom(3);
+                safeFly(
+                    () => map.flyTo(CHINA_CENTER, 4, { duration: 0.8 }),
+                    () => map.setView(CHINA_CENTER, 4, { animate: false })
+                );
+            }
+        }, 300);
 }
 
 function showHint() {
