@@ -6,9 +6,9 @@ agent_created: true
 
 # MmaGuessr GitHub 推送与部署
 
-## 为什么不用 `git push`
+## 推送方式：按分支选策略
 
-**GFW 干扰 git HTTPS**，直推经常超时或中途失败。本项目统一用 GitHub REST API 脚本推送：
+**GFW 干扰 git HTTPS**，所以 `main` / `android` 两个发布分支统一用 GitHub REST API 脚本推送：
 
 | 脚本 | 位置 | 作用 |
 |---|---|---|
@@ -16,6 +16,19 @@ agent_created: true
 | `push_to_github.py` | `E:\Desktop\mma-guessr-apk\push_to_github.py` | 更新 `android` 分支 + 创建 release + 上传 APK 附件 |
 
 两者都用 Python 标准库 `urllib` 直连 `api.github.com`（不依赖 git、不走系统代理）。
+
+**`go` 分支（开发主分支）例外** —— 它与远程同源、是 fast-forward，**直接用 `git push` 即可**：
+
+```bash
+cd E:/Desktop/geoguesser
+export GIT_TERMINAL_PROMPT=0      # 避免无凭据时挂起
+timeout 60 git push origin go
+```
+
+> 2026-09-13 实测 `git push origin go` 直连（不挂代理）推送 12 个提交成功。
+> 不必为 go 分支写 REST API 脚本 —— 它没有 `push_web.py` 那种"远程与本地不同源、
+> 需手动列变更文件"的问题，git 自己就能算差异。
+> 输出里若出现 `git-credential-manager.exe: No such file or directory`，是无害噪音，不影响推送。
 
 ## PAT 处理（安全红线）
 
@@ -120,6 +133,32 @@ changed = [ "android/app/build.gradle", "web/js/config.js", ... ]            # �
 ## 推送后必验
 
 **不要只看 push 返回 200。** 必须确认 Actions 真的跑成功了：
+
+### ⚠️ 本地 git 引用可能是过期的 —— 一律以 GitHub API 为准
+
+沙箱环境下 `.git` 的文件视图可能停留在会话开始时刻，表现为：
+
+- `git push` 明明输出 `ba9b75c..e7df4fd  go -> go`（成功）
+- 但紧接着 `git fetch` 后 `git rev-parse origin/go` 仍返回**旧值**
+- `git rev-list --left-right --count origin/go...HEAD` 也仍显示「有 N 个未推」
+- 甚至同一次命令里 `fetch` 提示更新了 ref、`rev-parse` 却还是旧值（自相矛盾）
+
+**这时不要重推，也不要以为失败** —— 直接用 API 查权威状态：
+
+```python
+import json, urllib.request
+def api(p):
+    req = urllib.request.Request("https://api.github.com/repos/cn171g11/mma-guessr" + p)
+    req.add_header("Authorization", "token " + TOKEN)
+    with urllib.request.urlopen(req) as r: return json.loads(r.read().decode())
+
+for br in ("go", "main", "android"):
+    sha = api("/git/ref/heads/" + br)["object"]["sha"]
+    msg = api("/commits/" + sha)["commit"]["message"].splitlines()[0][:58]
+    print(br, sha[:10], msg)
+```
+
+用本地 `git rev-parse HEAD` 与 API 返回的分支 SHA 比对，一致才算推送成功。
 
 ```bash
 export GITHUB_TOKEN=<PAT>
