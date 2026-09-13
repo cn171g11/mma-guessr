@@ -39,8 +39,17 @@ const API_SIGNING_SECRET = '1b884038-d236df7c-0bc24825-cf9d6d14-54b95608-e747da2
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v2.3.0';
+const VERSION = 'v2.3.2';
 const CHANGELOG = [
+    {
+        version: 'v2.3.2',
+        date: '2026-09-13 23:30:00',
+        changes: [
+            '🗺️ CartoDB Voyager 底图接入官方 API Key，瓦片请求带上身份标识，提升配额内可用性与加载稳定性。',
+            '🔧 底图配置支持 apiKey 字段，后续为其他底图接入密钥无需改动瓦片层创建逻辑。',
+            '版本号递增至 v2.3.2（Android 端，与网页端 v2.2.1 功能对齐）。',
+        ],
+    },
     {
         version: 'v2.3.0',
         date: '2026-08-29 20:00:00',
@@ -442,6 +451,9 @@ const BASEMAPS = {
         subdomains: 'abcd',
         attribution: '&copy; OpenStreetMap &copy; CARTO',
         maxZoom: 20,
+        // CartoDB 公开 API Key：仅用于标识底图调用来源、计量配额，不含写权限。
+        // 前端是静态站，该值必然公开，故不作为机密对待。
+        apiKey: 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfdmU2ZXU1MDciLCJqdGkiOiI0MzViMjA4MCJ9.9re63w7prHQxtqPI6kcSbmJMoyGIxW-NCOFKo8TPRSg',
     },
 };
 const BASEMAP_STORAGE_KEY = 'mma_basemap';
@@ -469,11 +481,18 @@ function setBasemapId(id) {
     }
 }
 
+// 拼接底图瓦片 URL：配置了 apiKey 的底图追加 api_key 查询参数
+function buildBasemapUrl(cfg) {
+    if (!cfg.apiKey) return cfg.url;
+    const separator = cfg.url.includes('?') ? '&' : '?';
+    return cfg.url + separator + 'api_key=' + encodeURIComponent(cfg.apiKey);
+}
+
 // 创建指定底图的瓦片层；瓦片加载失败连续超阈值且非默认底图时自动降级
 function createBasemapLayer(id) {
     const basemapId = id || getBasemapId();
     const cfg = BASEMAPS[basemapId] || BASEMAPS[DEFAULT_BASEMAP];
-    const layer = L.tileLayer(cfg.url, {
+    const layer = L.tileLayer(buildBasemapUrl(cfg), {
         attribution: cfg.attribution,
         maxZoom: cfg.maxZoom,
         subdomains: cfg.subdomains,
