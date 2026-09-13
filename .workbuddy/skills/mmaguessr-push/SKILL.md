@@ -17,18 +17,28 @@ agent_created: true
 
 两者都用 Python 标准库 `urllib` 直连 `api.github.com`（不依赖 git、不走系统代理）。
 
-**`go` 分支（开发主分支）例外** —— 它与远程同源、是 fast-forward，**直接用 `git push` 即可**：
+**`go` 分支（开发主分支）例外** —— 它与远程同源、是 fast-forward，**用 `git push` 即可**：
 
 ```bash
 cd E:/Desktop/geoguesser
 export GIT_TERMINAL_PROMPT=0      # 避免无凭据时挂起
-timeout 60 git push origin go
+
+# 先试直连；失败立即改走 Clash 代理（本机 127.0.0.1:7890）
+timeout 60 git push origin go ||
+  timeout 90 git -c http.proxy=http://127.0.0.1:7890 \
+               -c https.proxy=http://127.0.0.1:7890 push origin go
 ```
 
-> 2026-09-13 实测 `git push origin go` 直连（不挂代理）推送 12 个提交成功。
-> 不必为 go 分支写 REST API 脚本 —— 它没有 `push_web.py` 那种"远程与本地不同源、
-> 需手动列变更文件"的问题，git 自己就能算差异。
-> 输出里若出现 `git-credential-manager.exe: No such file or directory`，是无害噪音，不影响推送。
+> **⚠️ 直连不稳定，不要因为它偶发失败就改方案**：
+> 2026-09-13 直连成功；2026-09-14 同一命令报
+> `schannel: failed to receive handshake, SSL/TLS connection failed`，
+> 紧接着又报 `CONNECT tunnel failed, response 502`，
+> 而 `git -c http.proxy=http://127.0.0.1:7890 push origin go` **立即成功**。
+> 所以直连失败时换代理重试即可，**不需要**为 go 分支改走 REST API。
+>
+> go 分支也不适合用 REST API：它没有 `push_web.py` 那种「远程与本地不同源、
+> 需手动列变更文件」的问题，git 自己就能算差异；用 API 反而要手工重建每个提交。
+> 输出里若出现 `git-credential-manager.exe: No such file or directory`，是无害噪音。
 
 ## PAT 处理（安全红线）
 
