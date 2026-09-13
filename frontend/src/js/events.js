@@ -36,7 +36,8 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#streetview-error-btn', exportStreetViewError);
     bindClick('#map-toggle-btn', toggleMapSize);
     bindClick('#submit-btn', routeSubmit);
-    bindClick('#mobile-map-btn', toggleMobileMap);
+    bindClick('#map-visibility-btn', toggleMapVisibility);
+    bindClick('#map-close-btn', closeMap);
     bindClick('#pano-mode-auto', () => setViewMode('auto'));
     bindClick('#pano-mode-sphere', () => setViewMode('sphere'));
     bindClick('#pano-mode-flat', () => setViewMode('flat'));
