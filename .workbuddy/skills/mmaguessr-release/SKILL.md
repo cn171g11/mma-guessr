@@ -73,8 +73,56 @@ crypto.createHash('sha256').update(key).digest('hex').slice(0, 12)
 > 排查时若看到两端"显示值不同"，先算长度和哈希 —— 2026-09-13 就因脱敏显示差点误判
 > 网页端密钥被改坏，实测长度 113、哈希一致，文件其实完全正确。
 
-**3. 行尾不同**：网页端是 LF、App 端 `web/` 是 CRLF。改完要确认行尾没被翻转
-（`apk` 分支没有 prettier 门禁，但保持原样更安全）。
+**3. 行尾转换必须「先规范再转换」，否则内容被静默损坏**（2026-09-14 实测踩坑）
+
+网页端各文件行尾**并不统一**：实测 `index.html` / `style.css` / `game.js` 是 LF，
+而 `events.js` 是 **CRLF**。同步脚本若直接 `split(LF).join(CRLF)`，对 CRLF 源文件
+会做**双重转换**（`\r\n` → `\r\r\n`）—— 脚本报告"同步成功"，实则每行多出一个 CR：
+
+```js
+// ❌ 错误：CRLF 源文件会被转坏（实测 events.js 的 CR 数 163 → 326）
+let c = fs.readFileSync(src, 'utf8').split(LF).join(CRLF);
+
+// ✅ 正确：先统一规范为 LF，再转目标行尾
+let c = fs.readFileSync(src, 'utf8');
+c = c.split(CRLF).join(LF).split(CR).join(LF); // 规范为 LF
+c = c.split(LF).join(CRLF); // 再转 CRLF
+```
+
+**同步后必须逐文件 diff（忽略行尾）确认差异为 0**，别只看脚本的成功输出。
+
+**4. 先判断能否整体覆盖**：把 App 端文件与 `git show HEAD:<path>`（网页端上次提交）
+做 diff（忽略行尾）—— 若为 0，说明 App 端正好等于上次提交的状态，本次差异全部来自
+新改动，可安全整体覆盖；若不为 0，说明 App 端有独有内容，必须逐处定点改。
+（`config.js` 永远属于后者，它有 `APK_USE_BACKEND` 等 App 专属逻辑。）
+
+## 验证前端 UI 显隐改动（CSS 层叠）
+
+纯 CSS 的显示/隐藏问题（元素关不掉、按钮点不到、被遮挡）**无法靠读代码确认**，
+层叠规则（`!important` + 特异性 + 定义顺序）极其容易出现"看起来加了规则、实际被压掉"。
+
+项目已内置回归脚本：
+
+```bash
+cd frontend && node tools/verify-map-toggle.js
+# 覆盖 PC / 移动端 / 横屏手机 × 展开/收起 共 9 个场景 + 2 项 z-index 断言
+# 退出码非零 = 回归，可直接接 CI
+```
+
+原理：用 prettier 自带的 CSS 解析器（`prettier.__debug.parse(text, { parser: 'css' })`）
+取权威 AST（能正确识别 `@media` 嵌套与规则边界），再按
+`!important > 特异性 > 定义顺序` 求解每个「视口 × class 组合」的最终 `display`。
+
+> ⚠️ 别用手写正则解析 CSS —— 注释与括号会让解析错位，得出错误结论
+> （本方法第一版就因此误报，换 prettier AST 后才抓到真缺陷）。
+> 也别指望 `agent-browser`：要下载 ~500MB Chromium，受限网络下不划算。
+
+**同类问题排查顺序**：
+
+1. 元素当前有哪些 class？谁在维护它们（游戏流程 vs 用户操作）？
+2. 每条相关规则的 `display` 值、是否 `!important`、特异性各是多少？
+3. 目标状态下**哪条规则胜出**？把它打印出来看，不要猜。
+4. 按钮点不到时同时查 `z-index`：**触发按钮的层级必须高于被展开的容器**。
 
 ## 发版步骤
 
