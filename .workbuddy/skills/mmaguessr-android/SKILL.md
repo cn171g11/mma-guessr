@@ -71,8 +71,38 @@ bash build.sh release
 
 `build.sh` 内部依次：`npx cap sync android` → `gradle assembleRelease --no-daemon`。
 
-**耗时预期**：依赖已缓存约 **7~8 分钟**（116 tasks）。
+**耗时预期**：依赖已缓存约 **3~8 分钟**（116 tasks；缓存热时约 3m19s，冷时约 7m41s）。
 首次或缓存失效会更久。**不要中途改到后台，会前功尽弃。**
+
+### ⚠️ 产物是 `app-release.apk`（已签名），不是 `-unsigned`
+
+`build.gradle` 里配了 `signingConfigs.release`（用 `android/app/mma-release.keystore`），
+所以 `assembleRelease` **直接产出已签名包**，文件名是 `app-release.apk`。
+
+> `build.sh` 结尾 echo 的路径 `app-release-unsigned.apk` 是**过时提示**，实际不存在该文件 ——
+> 别照着它去找产物，直接看 `android/app/build/outputs/apk/release/` 目录。
+
+验证签名（步骤不可省）：
+
+```bash
+"C:/Users/Administrator/.workbuddy/android/sdk/build-tools/35.0.0/apksigner.bat" \
+  verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+# 期望：Signer #1 certificate DN: CN=MmaGuessr, OU=Games, O=MmaGuessr, ...
+```
+
+### ⚠️ 构建成功 ≠ APK 内容正确，必须验证打包内容
+
+Gradle 报 BUILD SUCCESSFUL 只说明编译通过，**不代表新代码进了包**（可能忘了 `cap sync`）。
+用 python 直接读 APK 内的资源做校验：
+
+```python
+import zipfile, hashlib
+z = zipfile.ZipFile("android/app/build/outputs/apk/release/app-release.apk")
+body = z.read("assets/public/js/config.js").decode("utf-8")   # Capacitor 资源在 assets/public/
+# 校验 VERSION、关键函数、关键字段是否为新值
+```
+
+APK 内资源路径是 `assets/public/`（webDir 被整体拷入），不是 `js/` 开头。
 
 ## 发布前清单
 
