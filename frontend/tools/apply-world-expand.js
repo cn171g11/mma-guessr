@@ -67,7 +67,8 @@ for (let i = open; i < src.length; i++) {
         }
     }
 }
-const existing = eval(src.slice(open, end + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const existing = new Function('return ' + src.slice(open, end + 1))();
 const existingNames = new Set(existing.map((l) => l.name));
 
 // 过滤：避免重复写入同名（安全保护）

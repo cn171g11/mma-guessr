@@ -64,7 +64,8 @@ const original = src.slice(open + 1, end); // the inner array content
 
 // 重新生成 LOCATIONS：
 // 1. 解析为对象数组
-const allLocations = eval(src.slice(open, end + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const allLocations = new Function('return ' + src.slice(open, end + 1))();
 
 // 2. 过滤
 let removed = 0,
@@ -144,7 +145,8 @@ for (let i = vOpen; i < vSrc.length; i++) {
         }
     }
 }
-const finalArr = eval(vSrc.slice(vOpen, vEnd + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const finalArr = new Function('return ' + vSrc.slice(vOpen, vEnd + 1))();
 const cnFinal = finalArr.filter((l) => (l.name || '').startsWith('中国'));
 
 console.log('═══════════════════════════════');

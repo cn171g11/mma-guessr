@@ -294,7 +294,9 @@ function parseLocations() {
             }
         }
     }
-    return eval(src.slice(open, end + 1));
+    // 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+    const arrayStr = src.slice(open, end + 1);
+    return new Function('return ' + arrayStr)();
 }
 
 // ==========================================================

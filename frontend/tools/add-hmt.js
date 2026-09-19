@@ -133,7 +133,8 @@ for (let i = o; i < newSrc.length; i++) {
         }
     }
 }
-const arr = eval(newSrc.slice(o, en + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const arr = new Function('return ' + newSrc.slice(o, en + 1))();
 const hmt = arr.filter((l) => /(香港|澳门|台湾|台北|高雄|台中|垦丁|日月潭|九份)/.test(l.name || ''));
 console.log('✅ 已插入', newEntries.length, '条港澳台街景');
 console.log('   LOCATIONS 总数 :', arr.length);

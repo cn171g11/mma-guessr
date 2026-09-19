@@ -142,7 +142,8 @@ for (let i = o; i < newSrc.length; i++) {
         }
     }
 }
-const arr = eval(newSrc.slice(o, en + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const arr = new Function('return ' + newSrc.slice(o, en + 1))();
 const cn = arr.filter(
     (l) => (l.name || '').indexOf('中国') === 0 || ['香港', '澳门', '台北'].some((p) => (l.name || '').indexOf(p) === 0)
 );

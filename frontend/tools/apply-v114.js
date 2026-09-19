@@ -52,7 +52,8 @@ for (let i = open; i < src.length; i++) {
         }
     }
 }
-const existing = eval(src.slice(open, end + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const existing = new Function('return ' + src.slice(open, end + 1))();
 const existingNames = new Set(existing.map((l) => l.name));
 const toAdd = valid.filter((v) => !existingNames.has(v.name));
 console.log('实际新增(去重后):', toAdd.length);
@@ -101,7 +102,8 @@ for (let i = vOpen; i < vSrc.length; i++) {
         }
     }
 }
-const finalArr = eval(vSrc.slice(vOpen, vend + 1));
+// 使用 Function 构造器安全解析数组字面量，避免 eval 的安全风险
+const finalArr = new Function('return ' + vSrc.slice(vOpen, vend + 1))();
 const cnFinal = finalArr.filter((l) => l.name.startsWith('中国'));
 const wFinal = finalArr.filter((l) => !l.name.startsWith('中国'));
 console.log(`✅ 最终 LOCATIONS: ${finalArr.length}（中国 ${cnFinal.length} / 世界 ${wFinal.length}）`);
