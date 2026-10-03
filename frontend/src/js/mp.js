@@ -12,6 +12,7 @@ let mpState = {
     currentLocation: null,
     myId: null,
     myScore: 0,
+    swapPending: false, // 已发出换题请求，等待对手确认
     timerId: null,
 };
 
@@ -115,6 +116,12 @@ async function createMpSocket() {
     socket.on('mp:round', (data) => mpStartRound(data));
     socket.on('mp:roundEnd', (data) => mpShowRoundEnd(data));
     socket.on('mp:finished', (data) => mpShowFinished(data));
+    socket.on('mp:swapRequested', (data) => mpHandleSwapRequest(data));
+    socket.on('mp:swapDeclined', (data) => {
+        mpState.swapPending = false;
+        updateSwapButton();
+        showToast('❌ ' + (data && data.reason ? data.reason : '对手拒绝了换题'));
+    });
     socket.on('mp:opponentLeft', () => {
         showToast('👋 对方已退出，对局中止');
         mpCleanup();
@@ -214,9 +221,11 @@ function enterMatch(data) {
     $('minimap-container').classList.add('show');
     $('submit-btn').classList.add('show');
     $('quit-btn').classList.add('show');
+    $('swap-btn').classList.add('show');
     $('level-panel').classList.remove('show');
     $('mode-tag').textContent = '⚔️ 对战 · vs ' + mpState.opponentUsername;
     $('total-score').textContent = '0';
+    updateSwapButton();
     showToast('🎮 匹配成功！对战 ' + mpState.opponentUsername);
 }
 
@@ -224,7 +233,10 @@ function mpStartRound(data) {
     mpState.roundIndex = data.roundIndex;
     mpState.currentLocation = data.location || null;
     mpState.waitingResult = false;
+    mpState.swapPending = false;
     const location = mpState.currentLocation;
+    updateSwapButton();
+    if (data.swapped) showToast('🔄 题目已更换，重新计时');
 
     $('round-info').innerHTML =
         '第 <span class="round" id="round-num">' +
@@ -293,11 +305,38 @@ function mpSubmitGuess() {
     mpState.waitingResult = true;
     $('submit-btn').disabled = true;
     $('submit-btn').textContent = '已提交，等待对方...';
+    // 本回合已提交后不可再换题（服务端同样拒绝）
+    $('swap-btn').disabled = true;
     mpStopTimer();
     // 答案坐标仅由服务端权威持有，本端只提交猜测点坐标，距离与得分由服务端计算
     mpState.socket.emit('mp:answer', {
         guessLat: guessPoint.lat,
         guessLng: guessPoint.lng,
+        roundIndex: mpState.roundIndex,
+    });
+}
+
+// 请求换题：一方发起，服务端转发给对手，双方都同意后由服务端重抽本题
+function mpRequestSwap() {
+    if (!mpState.inMatch || !mpState.socket || !mpState.socket.connected) return;
+    if (mpState.waitingResult || $('result-overlay').classList.contains('show')) return;
+    if (mpState.swapPending) {
+        showToast('⏳ 换题请求已发出，正在等待对方确认');
+        return;
+    }
+    mpState.swapPending = true;
+    $('swap-btn').disabled = true;
+    mpState.socket.emit('mp:swap', { action: 'request', roundIndex: mpState.roundIndex });
+    showToast('🔄 已请求换题，等待对方同意...');
+}
+
+// 对手请求换题：由本端玩家确认，同意后本题重抽并重新计时
+function mpHandleSwapRequest(data) {
+    if (!mpState.inMatch || !mpState.socket || !mpState.socket.connected) return;
+    const name = (data && data.username) || mpState.opponentUsername || '对手';
+    const agreed = confirm('🔄 ' + name + ' 请求更换本题，是否同意？（同意后本题重新计时）');
+    mpState.socket.emit('mp:swap', {
+        action: agreed ? 'accept' : 'decline',
         roundIndex: mpState.roundIndex,
     });
 }
@@ -400,6 +439,7 @@ function mpCleanup() {
     mpState.currentLocation = null;
     mpState.myId = null;
     mpState.myScore = 0;
+    mpState.swapPending = false;
     mpActive = false;
 }
 

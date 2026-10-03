@@ -69,6 +69,10 @@ type playerState struct {
 	RoundScore      int      `json:"roundScore"`
 	RoundDistanceKm *float64 `json:"roundDistanceKm"`
 	HasAnswered     bool     `json:"hasAnswered"`
+	// SwapAsked caps question-swap requests at one per player per round: a
+	// request pops a confirm dialog on the opponent, so an unbounded asker
+	// could nag the other side instead of playing. Reset on every new draw.
+	SwapAsked bool `json:"-"`
 }
 
 type roundResult struct {
@@ -93,6 +97,9 @@ type room struct {
 	roundEndsAt time.Time
 	rounds      []roundHistory
 	timer       *time.Timer
+	// swapBy is the playerID that asked for a new question this round; the
+	// redraw only happens once the opponent agrees. Cleared on every new draw.
+	swapBy string
 
 	mu sync.Mutex
 }
@@ -266,6 +273,8 @@ func (s *Service) handleEvent(sid, payload string) {
 		s.handleLeave(sid)
 	case "mp:answer":
 		s.handleAnswer(sid, args)
+	case "mp:swap":
+		s.handleSwap(sid, args)
 	}
 }
 
@@ -416,7 +425,7 @@ func (s *Service) joinPrivateRoom(sid string, state *socketState, code string) {
 	matchedGuest, _ := json.Marshal(map[string]any{"roomId": host.id, "mode": "duel", "opponentUsername": hostUsername})
 	s.engine.Send(hostSID, "42"+`["mp:matched",`+string(matchedHost)+`]`)
 	s.engine.Send(sid, "42"+`["mp:matched",`+string(matchedGuest)+`]`)
-	s.startRound(host.id)
+	s.startRound(host.id, false)
 }
 
 // findWaitingRoom returns a waiting private room matching the code.
@@ -531,7 +540,7 @@ func (s *Service) createRoom(entryA, entryB queueEntry) {
 	matchedB, _ := json.Marshal(map[string]any{"roomId": roomID, "mode": "duel", "opponentUsername": entryA.Username})
 	s.engine.Send(entryA.SID, "42"+`["mp:matched",`+string(matchedA)+`]`)
 	s.engine.Send(entryB.SID, "42"+`["mp:matched",`+string(matchedB)+`]`)
-	s.startRound(roomID)
+	s.startRound(roomID, false)
 }
 
 func toPlayerState(entry queueEntry) playerState {
@@ -541,7 +550,10 @@ func toPlayerState(entry queueEntry) playerState {
 	}
 }
 
-func (s *Service) startRound(roomID string) {
+// startRound draws the question for the current round index. swapped marks a
+// redraw agreed by both duelists so the client can tell it apart from a new
+// round (the round index and both totals stay untouched either way).
+func (s *Service) startRound(roomID string, swapped bool) {
 	current := s.roomOf(roomID)
 	if current == nil || current.status != "playing" {
 		return
@@ -551,30 +563,39 @@ func (s *Service) startRound(roomID string) {
 	if current.status != "playing" {
 		return
 	}
+	// A swap redraws mid-round, so the previous deadline must be cancelled here
+	// instead of relying on endRound having stopped it already.
+	if current.timer != nil {
+		current.timer.Stop()
+		current.timer = nil
+	}
 
-	drawn, err := s.locations.GetRandomLocations(locations.RandomLocationsQuery{Count: 1})
-	if err != nil || len(drawn) == 0 {
+	location, err := s.drawLocation(current.location)
+	if err != nil || location == nil {
 		s.abortRoom(roomID, "题目池为空，对局中止")
 		return
 	}
-	location := drawn[0]
-	current.location = &location
+	current.location = location
+	current.swapBy = ""
 	current.roundEndsAt = time.Now().Add(roundSeconds * time.Second)
 	for i := range current.players {
 		current.players[i].RoundScore = 0
 		current.players[i].RoundDistanceKm = nil
 		current.players[i].HasAnswered = false
+		current.players[i].SwapAsked = false
 	}
 
 	roundPayload := struct {
-		RoundIndex  int `json:"roundIndex"`
-		TotalRounds int `json:"totalRounds"`
-		TimeLimitMs int `json:"timeLimitMs"`
-		Location    any `json:"location"`
+		RoundIndex  int  `json:"roundIndex"`
+		TotalRounds int  `json:"totalRounds"`
+		TimeLimitMs int  `json:"timeLimitMs"`
+		Swapped     bool `json:"swapped"`
+		Location    any  `json:"location"`
 	}{
 		RoundIndex:  current.roundIndex,
 		TotalRounds: 5,
 		TimeLimitMs: roundSeconds * 1000,
+		Swapped:     swapped,
 		Location: map[string]any{
 			"panoramaUrl": location.PanoramaURL,
 			"mapillaryId": location.MapillaryID,
@@ -586,6 +607,23 @@ func (s *Service) startRound(roomID string) {
 	current.timer = time.AfterFunc(roundSeconds*time.Second, func() {
 		s.endRound(roomID)
 	})
+}
+
+// drawLocation draws one random question, retrying while it repeats exclude so
+// a redraw never re-serves the question that was just on screen.
+func (s *Service) drawLocation(exclude *locations.LocationRecord) (*locations.LocationRecord, error) {
+	var last *locations.LocationRecord
+	for attempt := 0; attempt < 3; attempt++ {
+		drawn, err := s.locations.GetRandomLocations(locations.RandomLocationsQuery{Count: 1})
+		if err != nil || len(drawn) == 0 {
+			return nil, err
+		}
+		last = &drawn[0]
+		if exclude == nil || last.ID != exclude.ID {
+			break
+		}
+	}
+	return last, nil
 }
 
 func (s *Service) handleAnswer(sid string, payload any) {
@@ -655,6 +693,140 @@ func (s *Service) handleAnswer(sid string, payload any) {
 	if found && allAnswered {
 		s.endRound(state.roomID)
 	}
+}
+
+// handleSwap implements question swapping in a duel. One player asks for a new
+// question and the round is only redrawn once the opponent agrees, so neither
+// side can unilaterally re-roll a question it dislikes.
+func (s *Service) handleSwap(sid string, payload any) {
+	state := s.socketOf(sid)
+	if state == nil || state.identity == nil {
+		return
+	}
+	if !s.enforceEventRate(state) {
+		return
+	}
+	if state.roomID == "" {
+		s.sendError(sid, "你不在对局中")
+		return
+	}
+	body, ok := payload.(map[string]any)
+	if !ok {
+		return
+	}
+	action, _ := body["action"].(string)
+	claimedRound := int(-1)
+	if index, ok := body["roundIndex"].(float64); ok {
+		claimedRound = int(index)
+	}
+
+	current := s.roomOf(state.roomID)
+	if current == nil || current.status != "playing" {
+		return
+	}
+	me := state.identity.id
+
+	current.mu.Lock()
+	if current.status != "playing" || current.location == nil ||
+		(claimedRound != -1 && claimedRound != current.roundIndex) {
+		current.mu.Unlock()
+		s.sendError(sid, "换题请求已失效")
+		return
+	}
+	// A round where somebody already committed a guess never swaps: the agreed
+	// redraw would silently throw that submission away. A swap therefore only
+	// happens before either side submits, which each action checks below.
+	switch action {
+	case "request":
+		if anyAnswered(current) {
+			current.mu.Unlock()
+			s.sendError(sid, "本回合已有人提交，无法换题")
+			return
+		}
+		if current.swapBy != "" {
+			current.mu.Unlock()
+			s.sendError(sid, "已有一份换题请求等待对方确认")
+			return
+		}
+		asker := playerByID(current, me)
+		if asker == nil {
+			current.mu.Unlock()
+			return
+		}
+		if asker.SwapAsked {
+			current.mu.Unlock()
+			s.sendError(sid, "本回合你已发起过换题请求，每题仅限一次")
+			return
+		}
+		asker.SwapAsked = true
+		current.swapBy = me
+		target := opponentSocketID(current, me)
+		current.mu.Unlock()
+		raw, _ := json.Marshal(map[string]any{"playerId": me, "username": state.identity.username})
+		s.engine.Send(target, "42"+`["mp:swapRequested",`+string(raw)+`]`)
+	case "accept":
+		requester := current.swapBy
+		if requester == "" || requester == me {
+			current.mu.Unlock()
+			s.sendError(sid, "没有待确认的换题请求")
+			return
+		}
+		if anyAnswered(current) {
+			current.mu.Unlock()
+			s.sendError(sid, "本回合已有人提交，无法换题")
+			return
+		}
+		current.mu.Unlock()
+		// Both sides agreed: only the question is redrawn. The round index and
+		// both totals survive, so in round 1 (nothing scored yet) this is the
+		// same as restarting the match.
+		s.startRound(state.roomID, true)
+	case "decline":
+		requester := current.swapBy
+		current.swapBy = ""
+		target := playerSocketID(current, requester)
+		current.mu.Unlock()
+		if target != "" {
+			raw, _ := json.Marshal(map[string]string{"reason": "对手拒绝了换题"})
+			s.engine.Send(target, "42"+`["mp:swapDeclined",`+string(raw)+`]`)
+		}
+	default:
+		current.mu.Unlock()
+	}
+}
+
+func playerByID(current *room, playerID string) *playerState {
+	for i := range current.players {
+		if current.players[i].PlayerID == playerID {
+			return &current.players[i]
+		}
+	}
+	return nil
+}
+
+func playerSocketID(current *room, playerID string) string {
+	if player := playerByID(current, playerID); player != nil {
+		return player.SocketID
+	}
+	return ""
+}
+
+func opponentSocketID(current *room, playerID string) string {
+	for _, player := range current.players {
+		if player.PlayerID != playerID {
+			return player.SocketID
+		}
+	}
+	return ""
+}
+
+func anyAnswered(current *room) bool {
+	for _, player := range current.players {
+		if player.HasAnswered {
+			return true
+		}
+	}
+	return false
 }
 
 // HaversineDuel mirrors games.HaversineKm for duel scoring.
@@ -731,7 +903,7 @@ func (s *Service) endRound(roomID string) {
 		current.mu.Lock()
 		current.roundIndex = nextIndex
 		current.mu.Unlock()
-		s.startRound(roomID)
+		s.startRound(roomID, false)
 		return
 	}
 	s.finishRoom(roomID)

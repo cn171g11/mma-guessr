@@ -1239,6 +1239,37 @@ button {
     box-shadow: none;
 }
 
+/* 换题按钮：压在提交按钮上方。单人对局每局有限次数，对战改为「请求换题」并需双方同意 */
+#swap-btn {
+    position: fixed;
+    bottom: 330px;
+    right: 20px;
+    padding: 12px 26px;
+    background: linear-gradient(135deg, #ff9f43, #ee5253);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(238, 82, 83, 0.35);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    display: none;
+}
+#swap-btn.show {
+    display: block;
+}
+#swap-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(238, 82, 83, 0.55);
+}
+#swap-btn:disabled {
+    background: #999;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
 /* 地图显隐开关（PC 与移动端通用）。
    z-index 必须高于 #minimap-container 展开时的 1500，否则地图铺满屏幕时这个按钮会被
    盖在下面点不到 —— 这正是此前「地图关不掉」的主因之一（原按钮仅 1002）。 */
@@ -1540,6 +1571,12 @@ button {
         padding: 12px 22px;
         font-size: 14px;
     }
+    #swap-btn {
+        bottom: 72px;
+        right: 20px;
+        padding: 10px 18px;
+        font-size: 13px;
+    }
     #info-bar {
         top: 10px;
         left: 10px;
@@ -1611,6 +1648,12 @@ button {
         bottom: 18px;
         right: 18px;
         padding: 10px 20px;
+        font-size: 13px;
+    }
+    #swap-btn {
+        bottom: 64px;
+        right: 18px;
+        padding: 9px 16px;
         font-size: 13px;
     }
     #timer-box {
