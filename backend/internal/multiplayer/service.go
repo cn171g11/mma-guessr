@@ -720,8 +720,10 @@ func (s *Service) handleSwap(sid string, payload any) {
 		claimedRound = int(index)
 	}
 
+	// status is checked under the room lock below: reading it here would race
+	// with the writers that mutate it while holding current.mu.
 	current := s.roomOf(state.roomID)
-	if current == nil || current.status != "playing" {
+	if current == nil {
 		return
 	}
 	me := state.identity.id
