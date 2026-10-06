@@ -438,6 +438,53 @@
 
 Prometheus 文本暴露格式；请求需带 `Authorization: Bearer <METRICS_TOKEN>`（未配置该变量时接口整体返回 `503`）。指标含请求计数/延迟桶、`games_submitted`、`rest_host_up`（DB 探针）等。
 
+## 多人对战（Socket.IO）
+
+传输层是自研的 Engine.IO v4（**polling-only**，握手 `GET /socket.io/?EIO=4&transport=polling` 返回 `upgrades:[]`），
+与前端 socket.io 4.8.1 客户端**字节兼容**；事件名与载荷形状以本节 + `frontend/src/js/mp.js` 为准。
+
+连接时用 `auth.token`（`accessToken` 或 `guestToken`）认证；缺令牌或令牌非法一律以 `44{"message":"..."}` 拒绝并断开。
+
+### 客户端 → 服务端
+
+| 事件 | 载荷 | 说明 |
+| ---- | ---- | ---- |
+| `mp:join` | `{ mode?: "duel" \| "private", roomCode?: string }` | `duel`（默认）进入匹配队列；`private` 需带 6 位房间码 |
+| `mp:createPrivate` | — | 创建私房并返回房间码 |
+| `mp:leave` | — | 退出匹配队列 |
+| `mp:answer` | `{ guessLat, guessLng, roundIndex }` | 提交本回合猜测；距离与得分由服务端按答案坐标重算 |
+| `mp:swap` | `{ action: "request" \| "accept" \| "decline", roundIndex }` | 换题，规则见下 |
+
+### 服务端 → 客户端
+
+| 事件 | 载荷 | 说明 |
+| ---- | ---- | ---- |
+| `mp:queued` | `{ position }` | 已入队及队列位置 |
+| `mp:leftQueue` | — | 已退出队列 |
+| `mp:privateCreated` | `{ roomCode }` | 私房已创建（10 分钟未开局自动回收） |
+| `mp:matched` | `{ roomId, mode, opponentUsername }` | 配对成功，随即下发第一回合 |
+| `mp:round` | `{ roundIndex, totalRounds, timeLimitMs, swapped, location: { panoramaUrl, mapillaryId } }` | 新回合题目；**不含答案坐标**；`swapped: true` 表示这份题是换题重抽的结果 |
+| `mp:roundEnd` | `{ roundIndex, answer: { name, lat, lng }, results: [{ playerId, distanceKm, score }] }` | 本回合结算，此时才下发答案 |
+| `mp:finished` | `{ rankings: [{ playerId, username, totalScore }] }` | 5 回合结束，按总分降序 |
+| `mp:opponentLeft` | `{ reason }` | 对手掉线或退出，对局中止 |
+| `mp:error` | `{ message }` | 参数或状态非法 |
+| `mp:swapRequested` | `{ playerId, username }` | 对手请求换题，**只发给被请求方** |
+| `mp:swapDeclined` | `{ reason }` | 换题被拒，**只发给请求方** |
+
+### 换题规则
+
+对局为 5 回合、每回合 60 秒。重抽只发生在**双方都同意**之后：任一方都无法单方面换掉一道不想答的题。
+
+1. `request`：本回合**每人最多发起一次**（重抽或进入下一回合后重置），且同一时刻只允许一份待确认请求；
+   服务端向对手单发 `mp:swapRequested`。
+2. `accept`：对手同意 → 服务端重抽本题：`roundIndex` 与双方总分**都不变**，只更换地点（不与上一题重复）、
+   清空双方本回合提交状态并重置 60 秒计时，随后向两端广播 `mp:round`（`swapped: true`）。
+   第 1 回合双方均为 0 分且无历史，故第 1 回合换题等价于重开本局。
+3. `decline`：原题保持不变，`mp:swapDeclined` 回请求方。
+4. 本回合**已有人提交**后，`request` 与 `accept` 都会被拒（否则同意重抽会静默作废那次提交）。
+
+`roundIndex` 与当前回合不匹配时一律拒绝，避免旧回合的请求打到新回合。
+
 ## 令牌约定
 
 | 令牌 | 签发对象 | 有效期 |
