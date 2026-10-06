@@ -18,6 +18,8 @@ const state = {
     drawBag: [], // 洗牌后的地点牌堆，抽完才允许重复，保证各地区均衡出现
     timerId: null,
     timeLeft: 0,
+    swapsUsed: 0, // 本局已用掉的换题次数（无限模式按等级重置）
+    swapReadyAt: 0, // 换题冷却结束的时间戳，0 表示当前可换
     endless: { level: 1, xp: 0, totalXp: 0, roundsPlayed: 0 },
     finished: false,
 };
@@ -73,6 +75,14 @@ function routeQuit() {
         mpQuit();
     } else {
         quitGame();
+    }
+}
+// 换题：单人对局直接重抽当前题目，多人对战改为向对手发起请求（见 mp.js）
+function routeSwap() {
+    if (mpActive) {
+        mpRequestSwap();
+    } else {
+        swapQuestion();
     }
 }
 
@@ -419,6 +429,8 @@ function startGame(mode, region) {
     state.finished = false;
     state.drawKey = null;
     state.drawBag = [];
+    state.swapsUsed = 0;
+    state.swapReadyAt = 0;
     state.endless = { level: 1, xp: 0, totalXp: 0, roundsPlayed: 0 };
 
     $('home-screen').style.display = 'none';
@@ -427,6 +439,9 @@ function startGame(mode, region) {
     $('minimap-container').classList.add('show');
     $('submit-btn').classList.add('show');
     $('quit-btn').classList.add('show');
+    // 每日挑战 / 图包题单由服务端签发，不提供换题入口
+    $('swap-btn').classList.toggle('show', mode !== 'daily' && mode !== 'pack');
+    updateSwapButton();
 
     const cfg = MODES[mode];
     const tagName =
@@ -492,6 +507,7 @@ function backHome() {
     resetMapVisibility();
     $('submit-btn').classList.remove('show');
     $('quit-btn').classList.remove('show');
+    $('swap-btn').classList.remove('show');
     $('timer-box').classList.remove('show');
     $('home-screen').style.display = 'flex';
     clearMapLayers();
@@ -726,6 +742,7 @@ async function loadRound() {
     $('round-num').textContent = state.round;
     $('submit-btn').disabled = true;
     $('submit-btn').textContent = '🎯 提交选择';
+    updateSwapButton();
     clearMapLayers();
     guessPoint = null;
 
@@ -794,6 +811,61 @@ async function loadRound() {
 
 function skipLocation() {
     $('panorama-fallback').style.display = 'none';
+    state.round--;
+    loadRound();
+}
+
+// ==========================================================
+// 【换题】重新抽取当前题目（不计入轮次、不影响已有成绩）
+// · 单人对局：每局有限次数 + 冷却，点一下直接重抽
+// · 多人对战：需对手同意，走 mp.js 的 mp:swap 事件，由服务端重抽
+// · 第一轮换题等价于重开本局：此时总分为 0、历史为空，换掉题目即等于重开
+// ==========================================================
+function swapBudget() {
+    if (state.mode === 'endless') return SWAP_CONFIG.endlessPerLevel;
+    const rounds = roundsFor();
+    if (!Number.isFinite(rounds)) return SWAP_CONFIG.maxPerGame;
+    return Math.max(1, Math.min(SWAP_CONFIG.maxPerGame, Math.round(rounds * SWAP_CONFIG.ratio)));
+}
+
+function swapsLeft() {
+    return Math.max(0, swapBudget() - state.swapsUsed);
+}
+
+// 按钮文案与可用状态：对战下显示为「请求换题」（由对手决定是否同意）
+function updateSwapButton() {
+    const btn = $('swap-btn');
+    if (!btn) return;
+    if (mpActive) {
+        btn.textContent = '🔄 请求换题';
+        btn.disabled = false;
+        return;
+    }
+    const left = swapsLeft();
+    btn.textContent = '🔄 换题 (' + left + ')';
+    btn.disabled = left <= 0;
+}
+
+function swapQuestion() {
+    if (state.finished || isSubmitting) return;
+    if (state.mode === 'daily' || state.mode === 'pack') {
+        showToast('❌ 该模式题单由服务端签发，不支持换题');
+        return;
+    }
+    if (swapsLeft() <= 0) {
+        showToast('❌ 本局换题次数已用完');
+        return;
+    }
+    const waitMs = state.swapReadyAt - Date.now();
+    if (waitMs > 0) {
+        showToast('⏳ 换题冷却中，还需 ' + Math.ceil(waitMs / 1000) + ' 秒');
+        return;
+    }
+    state.swapsUsed++;
+    state.swapReadyAt = Date.now() + SWAP_CONFIG.cooldownMs;
+    updateSwapButton();
+    showToast('🔄 已换题，剩余 ' + swapsLeft() + ' 次');
+    // round-- 抵掉 loadRound 的自增：轮号不变，本局历史与总分也不变
     state.round--;
     loadRound();
 }
@@ -1449,6 +1521,7 @@ function submitGuess() {
     isSubmitting = true;
     $('submit-btn').disabled = true;
     $('submit-btn').textContent = '📏 测量中...';
+    $('swap-btn').disabled = true;
 
     if (state.mode === 'daily' || state.mode === 'pack') {
         completeDeferredRound();
@@ -1507,6 +1580,11 @@ function submitGuess() {
             state.endless.xp -= xpNeeded(state.endless.level);
             state.endless.level++;
             leveledUp = true;
+        }
+        // 无限模式没有固定轮数，换题机会改为每升一级重新发放
+        if (leveledUp) {
+            state.swapsUsed = 0;
+            updateSwapButton();
         }
         // 回合经验随成绩上报，供服务端还原无限模式的累计经验展示
         const lastRound = state.history[state.history.length - 1];

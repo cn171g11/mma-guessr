@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>🔬 腾讯街景接入测试 · MmaGuessr Labs</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="icon" href="data:," />
+        <style>
+            :root {
+                --bg: #0a1428;
+                --bg-2: #0e1c34;
+                --panel: rgba(255, 255, 255, 0.045);
+                --panel-strong: rgba(255, 255, 255, 0.075);
+                --border: rgba(255, 255, 255, 0.11);
+                --text: #e6edf3;
+                --muted: #8b9bb4;
+                --blue: #58a6ff;
+                --gold: #ffd700;
+                --ok: #4ade80;
+                --warn: #fbbf24;
+                --err: #f87171;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+            }
+
+            body {
+                background: radial-gradient(circle at 12% 8%, #16305a 0%, var(--bg) 45%, #050b16 100%);
+                color: var(--text);
+                font: 14px/1.6 system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                overflow: hidden;
+            }
+
+            code,
+            .mono {
+                font-family: ui-monospace, 'SFMono-Regular', Consolas, 'Courier New', monospace;
+            }
+
+            /* ---------- 顶栏 ---------- */
+            header {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                flex-wrap: wrap;
+                padding: 12px 20px;
+                border-bottom: 1px solid var(--border);
+                background: rgba(10, 20, 40, 0.72);
+                backdrop-filter: blur(14px);
+            }
+
+            header h1 {
+                margin: 0;
+                font-size: 17px;
+                letter-spacing: 0.4px;
+            }
+
+            header .tag {
+                padding: 2px 9px;
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                font-size: 12px;
+                color: var(--muted);
+            }
+
+            header .tag--gold {
+                color: var(--gold);
+                border-color: rgba(255, 215, 0, 0.35);
+            }
+
+            header .spacer {
+                flex: 1;
+            }
+
+            /* ---------- 布局 ---------- */
+            .layout {
+                display: grid;
+                grid-template-columns: 330px minmax(0, 1fr) 390px;
+                gap: 14px;
+                padding: 14px;
+                height: calc(100% - 59px);
+            }
+
+            @media (max-width: 1360px) {
+                .layout {
+                    grid-template-columns: 300px minmax(0, 1fr);
+                    grid-template-rows: minmax(0, 1fr) 260px;
+                }
+
+                .panel--right {
+                    grid-column: 1 / -1;
+                }
+            }
+
+            @media (max-width: 900px) {
+                body {
+                    overflow: auto;
+                }
+
+                .layout {
+                    grid-template-columns: minmax(0, 1fr);
+                    grid-template-rows: none;
+                    height: auto;
+                }
+
+                .panel--right {
+                    grid-column: auto;
+                }
+
+                .stage {
+                    height: 62vh;
+                }
+            }
+
+            .panel {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 14px;
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                background: var(--panel);
+                backdrop-filter: blur(14px);
+                overflow: auto;
+            }
+
+            .panel h2 {
+                margin: 0 0 2px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--gold);
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+            }
+
+            .card {
+                padding: 11px 12px;
+                border: 1px solid var(--border);
+                border-radius: 11px;
+                background: var(--panel-strong);
+            }
+
+            .card h3 {
+                margin: 0 0 8px;
+                font-size: 13px;
+                color: var(--blue);
+            }
+
+            /* ---------- 表单 ---------- */
+            .field {
+                display: grid;
+                grid-template-columns: 62px minmax(0, 1fr);
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+
+            .field label {
+                font-size: 12px;
+                color: var(--muted);
+            }
+
+            input[type='text'],
+            input[type='number'],
+            select {
+                width: 100%;
+                padding: 7px 9px;
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.28);
+                color: var(--text);
+                font: inherit;
+                font-size: 13px;
+            }
+
+            input:focus,
+            select:focus {
+                outline: none;
+                border-color: var(--blue);
+                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.16);
+            }
+
+            input[type='range'] {
+                width: 100%;
+                accent-color: var(--blue);
+            }
+
+            .row {
+                display: flex;
+                gap: 8px;
+            }
+
+            button {
+                flex: 1;
+                padding: 9px 12px;
+                border: 1px solid var(--border);
+                border-radius: 9px;
+                background: rgba(255, 255, 255, 0.06);
+                color: var(--text);
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+                transition:
+                    background 0.15s,
+                    border-color 0.15s,
+                    transform 0.08s;
+            }
+
+            button:hover:not(:disabled) {
+                background: rgba(88, 166, 255, 0.16);
+                border-color: rgba(88, 166, 255, 0.5);
+            }
+
+            button:active:not(:disabled) {
+                transform: translateY(1px);
+            }
+
+            button:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            button.primary {
+                background: linear-gradient(135deg, rgba(88, 166, 255, 0.9), rgba(60, 130, 220, 0.9));
+                border-color: rgba(88, 166, 255, 0.7);
+                color: #fff;
+                font-weight: 600;
+            }
+
+            button.gold {
+                background: linear-gradient(135deg, rgba(255, 215, 0, 0.85), rgba(230, 170, 0, 0.85));
+                border-color: rgba(255, 215, 0, 0.6);
+                color: #241c00;
+                font-weight: 600;
+            }
+
+            /* ---------- 舞台 ---------- */
+            .stage {
+                position: relative;
+                min-height: 320px;
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                overflow: hidden;
+                background: #070c16;
+            }
+
+            #viewer {
+                position: absolute;
+                inset: 0;
+            }
+
+            .overlay {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                padding: 24px;
+                text-align: center;
+                background: rgba(5, 11, 22, 0.86);
+                backdrop-filter: blur(6px);
+                z-index: 5;
+            }
+
+            .overlay.hidden {
+                display: none;
+            }
+
+            .overlay .big {
+                font-size: 34px;
+            }
+
+            .overlay .msg {
+                max-width: 520px;
+                color: var(--muted);
+                font-size: 13px;
+            }
+
+            .progress {
+                width: min(360px, 80%);
+                height: 6px;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.12);
+                overflow: hidden;
+            }
+
+            .progress > i {
+                display: block;
+                height: 100%;
+                width: 0;
+                background: linear-gradient(90deg, var(--blue), var(--gold));
+                transition: width 0.15s;
+            }
+
+            .hud {
+                position: absolute;
+                left: 12px;
+                top: 12px;
+                z-index: 4;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                max-width: calc(100% - 130px);
+                pointer-events: none;
+            }
+
+            .hud span {
+                padding: 4px 9px;
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                background: rgba(5, 11, 22, 0.72);
+                backdrop-filter: blur(8px);
+                font-size: 12px;
+                font-family: ui-monospace, Consolas, monospace;
+            }
+
+            .hud .hl {
+                color: var(--gold);
+            }
+
+            .compass {
+                position: absolute;
+                right: 12px;
+                top: 12px;
+                width: 92px;
+                height: 92px;
+                z-index: 4;
+                pointer-events: none;
+                opacity: 0.92;
+            }
+
+            /* 结果提示条：只占底部一条，不遮挡查看器，也不拦截拖拽 */
+            .toast {
+                position: absolute;
+                left: 50%;
+                bottom: 16px;
+                transform: translateX(-50%) translateY(14px);
+                z-index: 6;
+                max-width: min(720px, calc(100% - 32px));
+                padding: 10px 16px;
+                border: 1px solid var(--border);
+                border-radius: 11px;
+                background: rgba(5, 11, 22, 0.93);
+                backdrop-filter: blur(10px);
+                font-size: 12.5px;
+                line-height: 1.7;
+                white-space: pre-line;
+                opacity: 0;
+                pointer-events: none;
+                transition:
+                    opacity 0.25s,
+                    transform 0.25s;
+            }
+
+            .toast.show {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            .toast.ok {
+                border-color: rgba(74, 222, 128, 0.5);
+            }
+
+            .toast.warn {
+                border-color: rgba(251, 191, 36, 0.5);
+            }
+
+            .toast.err {
+                border-color: rgba(248, 113, 113, 0.5);
+            }
+
+            /* ---------- 诊断日志 ---------- */
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+
+            .stat {
+                padding: 8px 10px;
+                border: 1px solid var(--border);
+                border-radius: 9px;
+                background: rgba(0, 0, 0, 0.22);
+            }
+
+            .stat .k {
+                font-size: 11px;
+                color: var(--muted);
+            }
+
+            .stat .v {
+                font-size: 16px;
+                font-family: ui-monospace, Consolas, monospace;
+                color: var(--blue);
+            }
+
+            .stat .v.ok {
+                color: var(--ok);
+            }
+
+            .stat .v.err {
+                color: var(--err);
+            }
+
+            #log {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                font-size: 12px;
+            }
+
+            .entry {
+                padding: 7px 9px;
+                border-left: 3px solid var(--muted);
+                border-radius: 6px;
+                background: rgba(0, 0, 0, 0.24);
+            }
+
+            .entry.ok {
+                border-left-color: var(--ok);
+            }
+
+            .entry.warn {
+                border-left-color: var(--warn);
+            }
+
+            .entry.empty {
+                border-left-color: var(--blue);
+            }
+
+            .entry.error {
+                border-left-color: var(--err);
+            }
+
+            .entry .head {
+                display: flex;
+                justify-content: space-between;
+                gap: 8px;
+                align-items: baseline;
+            }
+
+            .entry .label {
+                font-weight: 600;
+            }
+
+            .entry .timing {
+                color: var(--muted);
+                font-family: ui-monospace, Consolas, monospace;
+                font-size: 11px;
+                white-space: nowrap;
+            }
+
+            .entry .url {
+                margin-top: 2px;
+                color: var(--muted);
+                font-family: ui-monospace, Consolas, monospace;
+                font-size: 11px;
+                word-break: break-all;
+            }
+
+            .entry .note {
+                margin-top: 3px;
+                color: #b8c6da;
+                font-size: 11.5px;
+                word-break: break-word;
+            }
+
+            .checks {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .check {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 6px 9px;
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.22);
+                font-size: 12.5px;
+            }
+
+            .check .badge {
+                padding: 1px 8px;
+                border-radius: 999px;
+                font-size: 11px;
+                font-weight: 700;
+                white-space: nowrap;
+            }
+
+            .badge.pass {
+                background: rgba(74, 222, 128, 0.16);
+                color: var(--ok);
+                border: 1px solid rgba(74, 222, 128, 0.4);
+            }
+
+            .badge.fail {
+                background: rgba(248, 113, 113, 0.16);
+                color: var(--err);
+                border: 1px solid rgba(248, 113, 113, 0.4);
+            }
+
+            .badge.skip {
+                background: rgba(139, 155, 180, 0.16);
+                color: var(--muted);
+                border: 1px solid rgba(139, 155, 180, 0.35);
+            }
+
+            .nearby {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .nearby button {
+                flex: none;
+                width: 100%;
+                text-align: left;
+                padding: 6px 9px;
+                font-size: 11.5px;
+                font-family: ui-monospace, Consolas, monospace;
+            }
+
+            details summary {
+                cursor: pointer;
+                color: var(--blue);
+                font-size: 12.5px;
+                margin-bottom: 6px;
+            }
+
+            .muted {
+                color: var(--muted);
+                font-size: 12px;
+            }
+
+            .thumb-wrap {
+                margin-top: 8px;
+                border-radius: 9px;
+                overflow: hidden;
+                border: 1px solid var(--border);
+            }
+
+            .thumb-wrap img {
+                display: block;
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>🔬 腾讯街景接入测试</h1>
+            <span class="tag">MmaGuessr Labs</span>
+            <span class="tag tag--gold">仅连通性验证 · 未接入游戏</span>
+            <span class="tag">数据源 sv.map.qq.com</span>
+            <span class="spacer"></span>
+            <span class="tag" id="env-info">—</span>
+        </header>
+
+        <div class="layout">
+            <!-- ==================== 左：控制 ==================== -->
+            <aside class="panel panel--left">
+                <h2>① 取景参数</h2>
+
+                <div class="card">
+                    <h3>坐标</h3>
+                    <div class="field">
+                        <label for="in-lat">纬度 lat</label>
+                        <input type="text" id="in-lat" value="31.2397" inputmode="decimal" />
+                    </div>
+                    <div class="field">
+                        <label for="in-lng">经度 lng</label>
+                        <input type="text" id="in-lng" value="121.49" inputmode="decimal" />
+                    </div>
+                    <div class="field">
+                        <label for="in-radius">搜索半径</label>
+                        <select id="in-radius">
+                            <option value="50">50 米</option>
+                            <option value="200" selected>200 米</option>
+                            <option value="1000">1 公里</option>
+                            <option value="5000">5 公里</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="in-level">瓦片层级</label>
+                        <select id="in-level">
+                            <option value="0" selected>L0 · 4096×2048（32 块）</option>
+                            <option value="1">L1 · 8192×4096（128 块）</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>预设点位</h3>
+                    <select id="in-preset">
+                        <option value="">— 选择已实测点位 —</option>
+                    </select>
+                    <p class="muted" style="margin: 8px 0 0">
+                        天安门、杭州西湖为<strong>已知无覆盖</strong>对照点，用于验证「无街景」分支。
+                    </p>
+                </div>
+
+                <div class="row">
+                    <button class="primary" id="btn-load">▶ 载入街景</button>
+                </div>
+                <div class="row">
+                    <button class="gold" id="btn-selftest">🧪 全链路自检</button>
+                    <button id="btn-clear">清空日志</button>
+                </div>
+
+                <h2 style="margin-top: 6px">② 朝向校正</h2>
+                <div class="card">
+                    <div class="field" style="grid-template-columns: 74px minmax(0, 1fr)">
+                        <label for="in-correction">校正角 R</label>
+                        <input type="range" id="in-correction" min="-360" max="360" step="1" value="0" />
+                    </div>
+                    <div class="mono muted" id="correction-readout">R = —</div>
+                    <p class="muted" style="margin: 8px 0 0">
+                        默认取推导值 <code>R = -(dir + 90)</code>。若画面里的道路走向与下方相邻点方位对不上，拖动本滑块微调。
+                    </p>
+                </div>
+
+                <h2 style="margin-top: 6px">③ 全景元数据</h2>
+                <div class="card">
+                    <div id="meta" class="muted">尚未载入。</div>
+                    <div class="thumb-wrap" id="thumb-wrap" style="display: none">
+                        <img id="thumb" alt="全景缩略图（0° 方向）" />
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>相邻采集点（用于核对朝向）</h3>
+                    <div class="nearby" id="nearby">
+                        <span class="muted">尚未载入。</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- ==================== 中：查看器 ==================== -->
+            <main class="stage">
+                <div id="viewer"></div>
+
+                <svg class="compass" viewBox="0 0 100 100" aria-hidden="true">
+                    <circle cx="50" cy="50" r="46" fill="rgba(5,11,22,0.72)" stroke="rgba(255,255,255,0.18)" />
+                    <text x="50" y="20" text-anchor="middle" fill="#f87171" font-size="13" font-weight="700">N</text>
+                    <text x="50" y="90" text-anchor="middle" fill="#8b9bb4" font-size="13">S</text>
+                    <text x="12" y="55" text-anchor="middle" fill="#8b9bb4" font-size="13">W</text>
+                    <text x="88" y="55" text-anchor="middle" fill="#8b9bb4" font-size="13">E</text>
+                    <g id="compass-needle">
+                        <line x1="50" y1="50" x2="50" y2="16" stroke="#ffd700" stroke-width="3" stroke-linecap="round" />
+                        <circle cx="50" cy="50" r="4" fill="#ffd700" />
+                    </g>
+                </svg>
+
+                <div class="hud" id="hud"></div>
+
+                <div class="overlay" id="overlay">
+                    <div class="big">🧭</div>
+                    <div class="msg" id="overlay-msg">
+                        点击左侧「载入街景」或「全链路自检」开始。首次载入需从腾讯 CDN 拉取 32 张瓦片。
+                    </div>
+                    <div class="progress" id="progress-wrap" style="display: none"><i id="progress"></i></div>
+                    <button id="overlay-close" style="display: none; flex: none; padding: 7px 18px">关闭提示，查看街景</button>
+                </div>
+
+                <div class="toast" id="toast"></div>
+            </main>
+
+            <!-- ==================== 右：诊断 ==================== -->
+            <aside class="panel panel--right">
+                <h2>诊断结果</h2>
+                <div class="checks" id="checks">
+                    <div class="check"><span>等待测试</span><span class="badge skip">—</span></div>
+                </div>
+
+                <h2 style="margin-top: 4px">请求统计</h2>
+                <div class="stats">
+                    <div class="stat"><div class="k">请求数</div><div class="v" id="st-req">0</div></div>
+                    <div class="stat"><div class="k">成功</div><div class="v ok" id="st-ok">0</div></div>
+                    <div class="stat"><div class="k">失败</div><div class="v err" id="st-fail">0</div></div>
+                    <div class="stat"><div class="k">总耗时</div><div class="v" id="st-ms">0 ms</div></div>
+                    <div class="stat"><div class="k">下载流量</div><div class="v" id="st-bytes">0 KB</div></div>
+                    <div class="stat"><div class="k">瓦片成功率</div><div class="v" id="st-tile">—</div></div>
+                </div>
+
+                <h2 style="margin-top: 4px">请求日志</h2>
+                <div id="log"></div>
+            </aside>
+        </div>
+
+        <script
+            src="https://unpkg.com/three@0.149.0/build/three.min.js"
+            integrity="sha384-RRHfJ6w1mTlKUBMYT/hvnRiOzEB/vyRV3DrQOseb6oYfvaZSfdd0byS4bHps0k2R"
+            crossorigin="anonymous"
+        ></script>
+        <script src="qq-sv.js"></script>
+        <script src="pano-viewer.js"></script>
+        <script src="app.js"></script>
+    </body>
+</html>

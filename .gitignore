@@ -28,14 +28,19 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Compiled files
-*.o
-*.obj
-*.so
-*.a
-*.dll
-*.exe
-*.out
+COMPACTION.md
+p.md
+p.txt
+
+/.claude
+/.opencode
+/.codex
+/.pi
+
+AGENTS.md
+CLAUDE.md
+SKILL.md
+COMPACTION.md
 
 # Coverage
 coverage/
