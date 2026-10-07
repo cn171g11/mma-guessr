@@ -138,10 +138,15 @@ func TestProvidersListAndLookup(t *testing.T) {
 }
 
 func TestExchangeCodeFailsOnTransportError(t *testing.T) {
-	// A provider pointed at an unreachable endpoint must surface a clean 500
-	// instead of leaking a transport-level error to the client.
+	// A provider whose upstream endpoints are unreachable must surface a clean
+	// 500 instead of leaking a transport-level error to the client. The
+	// endpoints are injected because the production defaults are the real
+	// Google URLs, which would make this test depend on network reachability
+	// (and thus fail differently on runners that can reach Google).
 	p := NewGoogleProvider("c", "s", "https://127.0.0.1:1/cb")
 	p.client = &http.Client{Timeout: 200 * time.Millisecond}
+	p.tokenURL = "https://127.0.0.1:1/token"
+	p.userInfoURL = "https://127.0.0.1:1/userinfo"
 	_, err := p.ExchangeCode(t.Context(), "code")
 	if err == nil {
 		t.Fatal("expected an error for an unreachable token endpoint")

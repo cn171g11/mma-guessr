@@ -31,8 +31,18 @@ const API_SIGNING_SECRET = '1b884038-d236df7c-0bc24825-cf9d6d14-54b95608-e747da2
 // 【版本号 & 更新记录】统一语义化版本号格式：v主版本.次版本.修订号
 // CHANGELOG 按时间倒序排列（最新在上），每条含版本号、日期、更新内容
 // ==========================================================
-const VERSION = 'v2.3.0';
+const VERSION = 'v2.4.0';
 const CHANGELOG = [
+    {
+        version: 'v2.4.0',
+        date: '2026-10-07 12:00:00',
+        changes: [
+            '🎓 练习模式：主菜单新增入口，支持「错题回顾」（从历史对局挑出得分偏低 / 超时的题目重练）与「附近随机」（以地图选点为中心，半径内随机抽题）。练习成绩本地保存，不计入排行榜 / 天梯。',
+            '📥 图包批量导入：图包编辑器支持粘贴 Mapillary 图片 ID / 链接 与 腾讯街景 svid / 链接，前端自动获取坐标与缩略图并批量加入，无需逐个地图选点。',
+            '🔀 图包图源标记：自定义题目新增来源字段（Mapillary / 腾讯街景），游玩时按来源加载对应街景。',
+            '版本号递增至 v2.4.0。',
+        ],
+    },
     {
         version: 'v2.3.0',
         date: '2026-10-03 09:20:00',
@@ -379,6 +389,7 @@ const MODES = {
     daily: { label: '📅 每日挑战', rounds: 10, timer: 0, scale: 2000, diffPool: [1, 2, 3, 4, 5] },
     landmark: { label: '🗼 地标模式', rounds: 5, timer: 0, scale: 2000, diffPool: [1, 2] },
     pack: { label: '📦 图包', rounds: 5, timer: 0, scale: 2000, diffPool: null },
+    practice: { label: '🎓 练习模式', rounds: 10, timer: 0, scale: 2000, diffPool: null },
 };
 const REGION_NAMES = {
     asia: '亚洲',

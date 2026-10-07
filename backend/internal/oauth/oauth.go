@@ -49,9 +49,9 @@ const (
 	stateTTL = 10 * time.Minute
 
 	// Google public API endpoints; the tokens below are never embedded.
-	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"       // #nosec G101 -- public endpoint, not a credential
-	googleTokenURL    = "https://oauth2.googleapis.com/token"                 // #nosec G101 -- public endpoint, not a credential
-	googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"    // #nosec G101 -- public endpoint, not a credential
+	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"     // #nosec G101 -- public endpoint, not a credential
+	googleTokenURL    = "https://oauth2.googleapis.com/token"              // #nosec G101 -- public endpoint, not a credential
+	googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo" // #nosec G101 -- public endpoint, not a credential
 )
 
 // GoogleProvider implements the authorization-code flow for Google.
@@ -60,6 +60,11 @@ type GoogleProvider struct {
 	clientSecret string
 	redirectURI  string
 	client       *http.Client
+	// tokenURL and userInfoURL are the upstream endpoints hit during the code
+	// exchange. They default to the public Google endpoints and are only
+	// overridden by tests to exercise transport failures deterministically.
+	tokenURL    string
+	userInfoURL string
 }
 
 // NewGoogleProvider creates a Google OAuth provider. The redirect URI is the
@@ -71,6 +76,8 @@ func NewGoogleProvider(clientID, clientSecret, redirectURI string) *GoogleProvid
 		clientSecret: clientSecret,
 		redirectURI:  redirectURI,
 		client:       &http.Client{Timeout: 10 * time.Second},
+		tokenURL:     googleTokenURL,
+		userInfoURL:  googleUserInfoURL,
 	}
 }
 
@@ -110,7 +117,7 @@ func (p *GoogleProvider) fetchToken(ctx context.Context, code string) (string, e
 	form.Set("redirect_uri", p.redirectURI)
 	form.Set("grant_type", "authorization_code")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, googleTokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", httputil.New(500, "OAuth 服务暂不可用")
 	}
@@ -137,7 +144,7 @@ func (p *GoogleProvider) fetchToken(ctx context.Context, code string) (string, e
 }
 
 func (p *GoogleProvider) fetchUserInfo(ctx context.Context, accessToken string) (*Identity, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserInfoURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
 	if err != nil {
 		return nil, httputil.New(500, "OAuth 服务暂不可用")
 	}

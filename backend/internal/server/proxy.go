@@ -80,6 +80,23 @@ func (s *Server) handleMapillaryMedia(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
+// handleMapillaryMetadata resolves an image ID to its coordinates and public
+// thumbnail URL, so pack owners can import existing Mapillary images by ID
+// without first searching a bbox.
+func (s *Server) handleMapillaryMetadata(w http.ResponseWriter, r *http.Request) {
+	imageID := r.PathValue("imageId")
+	if !proxyImageIDPattern.MatchString(imageID) {
+		httputil.WriteError(w, http.StatusBadRequest, "imageId 不合法")
+		return
+	}
+	meta, err := s.services.Mapillary.ResolveMetadata(imageID, 1024)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, meta)
+}
+
 // handleImagerySearch routes to the source provider's search.
 func (s *Server) handleImagerySearch(w http.ResponseWriter, r *http.Request) {
 	source := r.PathValue("source")

@@ -90,6 +90,8 @@ func routeLabel(path string) string {
 		return "/api/proxy/mapillary/media/:imageId"
 	case strings.HasPrefix(trimmed, "/api/proxy/mapillary/image/"):
 		return "/api/proxy/mapillary/image/:imageId"
+	case strings.HasPrefix(trimmed, "/api/proxy/mapillary/metadata/"):
+		return "/api/proxy/mapillary/metadata/:imageId"
 	case strings.HasPrefix(trimmed, "/api/proxy/imagery/"):
 		if strings.Contains(trimmed, "/image/") {
 			return "/api/proxy/imagery/:source/image/:imageId"

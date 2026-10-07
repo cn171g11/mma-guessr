@@ -63,6 +63,7 @@ jobs:
                   node --check src/js/config.js
                   node --check src/js/data.js
                   node --check src/js/api.js
+                  node --check src/js/qq-sv.js
                   node --check src/js/game.js
                   node --check src/js/auth.js
                   node --check src/js/lb.js
@@ -70,6 +71,8 @@ jobs:
                   node --check src/js/mp.js
                   node --check src/js/features.js
                   node --check src/js/packs.js
+                  node --check src/js/practice.js
+                  node --check src/sw.js
                   for f in tools/*.js; do node --check "$f"; done
 
             - name: Location data validation

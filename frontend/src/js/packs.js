@@ -4,10 +4,14 @@
 
 let packsTab = 'public'; // 'public' | 'mine'
 let editingPack = null; // 正在编辑的图包元数据
-let editLocations = []; // 编辑器地点集合 [{ name, lat, lng, difficulty, region, imageId, panoramaUrl }]
+let editLocations = []; // 编辑器地点集合 [{ name, lat, lng, difficulty, region, imageId, panoramaUrl, source }]
 let editorMap = null;
 let editorMarker = null;
-let pendingPick = null; // 地图上解析出的候选街景 { imageId, panoramaUrl, lat, lng }
+let pendingPick = null; // 地图上解析出的候选街景 { imageId, panoramaUrl, lat, lng, source }
+let packImportSource = 'auto'; // 批量导入来源：'auto' | 'mapillary' | 'tencent'
+let packImportBusy = false;
+
+const SOURCE_LABELS = { mapillary: 'Mapillary', tencent: '腾讯街景' };
 
 // ==========================================================
 // 【面板开关】
@@ -159,10 +163,15 @@ async function openPackEditor(packId) {
             region: l.region,
             imageId: l.imageId || null,
             panoramaUrl: l.panoramaUrl || null,
+            source: l.source || 'mapillary',
         }));
         pendingPick = null;
-        $('packedit-name').textContent = '📦 ' + editingPack.name + '（' + editLocations.length + ' / 50 题）';
+        updatePackEditCount();
         $('packedit-preview').innerHTML = '';
+        const importInput = $('packedit-import-input');
+        if (importInput) importInput.value = '';
+        const importStatus = $('packedit-import-status');
+        if (importStatus) importStatus.textContent = '';
         renderPackEditList();
         initPackEditorMap();
         $('packedit-overlay').classList.add('show');
@@ -200,7 +209,13 @@ async function onEditorMapClick(e) {
             '<div class="lb-empty">⚠️ 该位置暂无街景覆盖，请换一个位置再试（或拖动地图缩放后重新选点）。</div>';
         return;
     }
-    pendingPick = { imageId: found.imageId, panoramaUrl: found.panoramaUrl, lat: found.lat, lng: found.lng };
+    pendingPick = {
+        imageId: found.imageId,
+        panoramaUrl: found.panoramaUrl,
+        lat: found.lat,
+        lng: found.lng,
+        source: 'mapillary',
+    };
     const img = found.panoramaUrl
         ? `<img src="${found.panoramaUrl}" alt="街景预览" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px" />`
         : '';
@@ -243,29 +258,41 @@ function addPickedLocation() {
         region: $('pick-region').value,
         imageId: pendingPick.imageId,
         panoramaUrl: pendingPick.panoramaUrl,
+        source: pendingPick.source || 'mapillary',
     });
-    $('packedit-name').textContent = '📦 ' + editingPack.name + '（' + editLocations.length + ' / 50 题）';
+    updatePackEditCount();
     $('packedit-preview').innerHTML = '';
     pendingPick = null;
     renderPackEditList();
     showToast('✅ 已添加，继续选点或点击保存');
 }
 
+function updatePackEditCount() {
+    if (!editingPack) return;
+    $('packedit-name').textContent = '📦 ' + editingPack.name + '（' + editLocations.length + ' / 50 题）';
+}
+
 function renderPackEditList() {
     const list = $('packedit-list');
     if (!editLocations.length) {
-        list.innerHTML = '<div class="lb-empty">📍 点击上方地图选点，自动解析街景后添加</div>';
+        list.innerHTML = '<div class="lb-empty">📍 点击上方地图选点，或使用「批量导入」添加街景</div>';
         return;
     }
     list.innerHTML = editLocations
-        .map(
-            (l, i) => `<div class="lb-row">
+        .map((l, i) => {
+            const source = l.source || 'mapillary';
+            const badge =
+                source === 'tencent'
+                    ? '<span class="pack-src pack-src-tencent">腾讯</span>'
+                    : '<span class="pack-src pack-src-mly">Mapillary</span>';
+            return `<div class="lb-row">
                 <div class="lb-name">${escapeHtml(l.name)}</div>
                 <span style="color:#8899bb;font-size:12px">${l.lat.toFixed(4)}, ${l.lng.toFixed(4)}</span>
                 <span style="color:#8899bb;font-size:12px">${'★'.repeat(l.difficulty)} · ${REGION_NAMES[l.region] || '世界'}</span>
+                ${badge}
                 <button class="acc-code-btn" data-remove="${i}">🗑</button>
-            </div>`
-        )
+            </div>`;
+        })
         .join('');
 }
 
@@ -279,7 +306,7 @@ function ensurePackEditDelegation() {
         const index = Number(button.dataset.remove);
         if (Number.isInteger(index) && index >= 0 && index < editLocations.length) {
             editLocations.splice(index, 1);
-            $('packedit-name').textContent = '📦 ' + editingPack.name + '（' + editLocations.length + ' / 50 题）';
+            updatePackEditCount();
             renderPackEditList();
         }
     });
@@ -303,6 +330,159 @@ async function savePackLocations() {
     } catch (e) {
         showToast('❌ 保存失败：' + (e.message || '请稍后再试'));
     }
+}
+
+// ==========================================================
+// 【批量导入街景】粘贴 Mapillary / 腾讯街景 ID 或链接，前端自动获取坐标元数据
+// ==========================================================
+function togglePackImport() {
+    const box = $('packedit-import-body');
+    if (!box) return;
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function setPackImportSource(value) {
+    packImportSource = value === 'mapillary' || value === 'tencent' ? value : 'auto';
+}
+
+// 从一行文本解析出 { source, id }；无法识别返回 null
+function parseImportLine(line) {
+    let value = String(line || '').trim();
+    if (!value || value.startsWith('#')) return null;
+    // 去掉包裹的引号/方括号/逗号
+    value = value.replace(/^[\s"'[,(]+/, '').replace(/[\s"'\]),]+$/, '');
+    if (!value) return null;
+
+    const lower = value.toLowerCase();
+    let source;
+    let id;
+    if (lower.includes('mapillary.com')) {
+        source = 'mapillary';
+        id = extractMapillaryId(value);
+    } else if (lower.includes('map.qq.com') || lower.includes('qq.com')) {
+        source = 'tencent';
+        id = extractTencentId(value);
+    } else if (packImportSource !== 'auto') {
+        source = packImportSource;
+        id = value;
+    } else {
+        // 裸 ID 自动判断：纯 23 位数字按腾讯 svid 处理，其余按 Mapillary
+        source = /^\d{23}$/.test(value) ? 'tencent' : 'mapillary';
+        id = value;
+    }
+    if (!id || !/^[0-9A-Za-z_-]{1,64}$/.test(id)) return null;
+    return { source, id };
+}
+
+function extractMapillaryId(url) {
+    let match = url.match(/[?&]pKey=([0-9A-Za-z_-]+)/i);
+    if (match) return match[1];
+    match = url.match(/\/im\/([0-9A-Za-z_-]+)/i);
+    if (match) return match[1];
+    match = url.match(/[?&]image_key=([0-9A-Za-z_-]+)/i);
+    if (match) return match[1];
+    match = url.match(/\/([0-9]{10,})(?:[/?#]|$)/);
+    return match ? match[1] : '';
+}
+
+function extractTencentId(url) {
+    let match = url.match(/[?&]svid=([0-9A-Za-z_-]+)/i);
+    if (match) return match[1];
+    match = url.match(/\/([0-9]{10,})(?:[/?#]|$)/);
+    return match ? match[1] : '';
+}
+
+// 通过后端代理按 ID 解析 Mapillary 图片坐标与缩略图
+async function fetchMapillaryMeta(id) {
+    const response = await fetch(`${API_BASE}/api/proxy/mapillary/metadata/${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    if (!Number.isFinite(data.lat) || !Number.isFinite(data.lng) || (data.lat === 0 && data.lng === 0)) {
+        throw new Error('未返回坐标');
+    }
+    return data;
+}
+
+// 通过腾讯街景接口按 svid 解析坐标与缩略图
+async function fetchTencentMeta(id) {
+    if (!window.QQSv) throw new Error('腾讯街景客户端未加载');
+    const detail = await window.QQSv.getPano(id);
+    if (!detail || !detail.svid) throw new Error('该 svid 无街景');
+    const addr = detail.addr || {};
+    const basic = detail.basic || {};
+    let lat = typeof addr.y_lat === 'number' ? addr.y_lat : null;
+    let lng = typeof addr.x_lng === 'number' ? addr.x_lng : null;
+    if ((lat == null || lng == null) && basic.x != null && basic.y != null) {
+        const pos = window.QQSv.mercatorToLngLat(basic.x, basic.y);
+        lat = pos.lat;
+        lng = pos.lng;
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('无法解析坐标');
+    return { lat, lng, url: window.QQSv.thumbUrl(id), isPano: true };
+}
+
+async function importPackLocations() {
+    if (packImportBusy || !editingPack) return;
+    const input = $('packedit-import-input');
+    const status = $('packedit-import-status');
+    const button = $('packedit-import-btn');
+    const lines = String(input.value || '').split(/\r?\n/);
+
+    const seen = new Set();
+    const parsed = [];
+    for (const line of lines) {
+        const item = parseImportLine(line);
+        if (!item) continue;
+        const key = item.source + ':' + item.id;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        parsed.push(item);
+    }
+    if (!parsed.length) {
+        showToast('⚠️ 未识别到有效的街景 ID / 链接');
+        return;
+    }
+    const remaining = 50 - editLocations.length;
+    if (remaining <= 0) {
+        showToast('⚠️ 图包已满 50 个地点');
+        return;
+    }
+    const targets = parsed.slice(0, remaining);
+    if (parsed.length > remaining) showToast(`⚠️ 仅剩 ${remaining} 个空位，只导入前 ${remaining} 条`);
+
+    packImportBusy = true;
+    if (button) button.disabled = true;
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < targets.length; i++) {
+        const item = targets[i];
+        const label = SOURCE_LABELS[item.source] || item.source;
+        if (status) status.textContent = `⏳ 正在解析 ${i + 1}/${targets.length}（${label} ${item.id}）...`;
+        try {
+            const meta =
+                item.source === 'tencent' ? await fetchTencentMeta(item.id) : await fetchMapillaryMeta(item.id);
+            editLocations.push({
+                name: label + ' ' + item.id.slice(-8),
+                lat: meta.lat,
+                lng: meta.lng,
+                difficulty: 3,
+                region: 'world',
+                imageId: item.id,
+                panoramaUrl: meta.url || null,
+                source: item.source,
+            });
+            ok++;
+            updatePackEditCount();
+            renderPackEditList();
+        } catch (e) {
+            fail++;
+        }
+    }
+    packImportBusy = false;
+    if (button) button.disabled = false;
+    if (status) status.textContent = `✅ 导入完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`;
+    input.value = '';
+    showToast(`✅ 已导入 ${ok} 个地点${fail ? `（${fail} 条失败）` : ''}`);
 }
 
 ensurePackListDelegation();
