@@ -108,6 +108,12 @@
                     <p>聚焦全球最著名地标（难度 1-2），5 轮速刷，新手入门与高分冲刺两相宜。</p>
                     <div class="best" id="best-landmark">历史最佳：--</div>
                 </div>
+                <div class="mode-card" data-mode="practice">
+                    <div class="icon">🎓</div>
+                    <h3>练习模式</h3>
+                    <p>针对薄弱环节反复练习：错题回顾，或以地图选点为中心半径内随机出题。</p>
+                    <div class="best">本地练习 · 不计榜</div>
+                </div>
                 <div class="mode-card" data-mode="pack">
                     <div class="icon">📦</div>
                     <h3>图包工坊</h3>
@@ -543,6 +549,32 @@
                 </h2>
                 <div class="acc-stats" id="packedit-name"></div>
                 <div class="acc-stats">点击地图选点 → 自动解析最近街景 → 命名后添加（最多 50 题）</div>
+                <div id="packedit-import">
+                    <button class="acc-code-btn" id="packedit-import-toggle">
+                        📥 批量导入街景（Mapillary / 腾讯）
+                    </button>
+                    <div id="packedit-import-body" style="display: none">
+                        <div class="acc-stats">
+                            每行一个：Mapillary 图片 ID / 链接，或 腾讯街景 svid / 链接。自动识别来源并获取坐标。
+                        </div>
+                        <div class="acc-code-row">
+                            <select id="packedit-import-source">
+                                <option value="auto">自动识别来源</option>
+                                <option value="mapillary">按 Mapillary 解析</option>
+                                <option value="tencent">按腾讯街景解析</option>
+                            </select>
+                        </div>
+                        <textarea
+                            id="packedit-import-input"
+                            rows="5"
+                            placeholder="粘贴街景 ID / 链接，每行一个"
+                        ></textarea>
+                        <div class="acc-code-row">
+                            <button class="acc-code-btn" id="packedit-import-btn">⬇️ 解析并添加</button>
+                        </div>
+                        <div class="acc-stats" id="packedit-import-status"></div>
+                    </div>
+                </div>
                 <div id="packedit-map"></div>
                 <div id="packedit-preview"></div>
                 <div id="packedit-list"></div>
@@ -550,15 +582,64 @@
             </div>
         </div>
 
+        <!-- ============ 练习模式弹窗 ============ -->
+        <div id="practice-overlay">
+            <div id="practice-box">
+                <h2>
+                    🎓 练习模式
+                    <button class="clog-close" id="practice-close-btn">✕ 关闭</button>
+                </h2>
+                <div class="acc-stats">
+                    针对薄弱环节反复练习：错题回顾 · 附近随机。练习成绩仅本地保存，不计入排行榜 / 天梯 / 成就。
+                </div>
+                <div class="lb-tabs">
+                    <button class="lb-tab active" id="practice-tab-wrong">🔁 错题回顾</button>
+                    <button class="lb-tab" id="practice-tab-nearby">📍 附近随机</button>
+                </div>
+                <div id="practice-wrong">
+                    <div class="acc-stats">从最近对局中挑选得分偏低或超时的题目，勾选后开始复习。</div>
+                    <div id="practice-wrong-list"></div>
+                    <button class="acc-submit" id="practice-wrong-start-btn">🚀 开始复习选中题目</button>
+                </div>
+                <div id="practice-nearby" style="display: none">
+                    <div class="acc-stats">在地图上点击选择中心点，设置半径与题量，随机抽取该范围内的题库地点。</div>
+                    <div id="practice-map"></div>
+                    <div class="acc-code-row">
+                        <input id="practice-lat" placeholder="纬度" autocomplete="off" />
+                        <input id="practice-lng" placeholder="经度" autocomplete="off" />
+                    </div>
+                    <div class="acc-code-row">
+                        <select id="practice-radius">
+                            <option value="50">半径 50 km</option>
+                            <option value="100">半径 100 km</option>
+                            <option value="200" selected>半径 200 km</option>
+                            <option value="500">半径 500 km</option>
+                            <option value="1000">半径 1000 km</option>
+                        </select>
+                        <select id="practice-count">
+                            <option value="5" selected>5 题</option>
+                            <option value="10">10 题</option>
+                            <option value="15">15 题</option>
+                            <option value="20">20 题</option>
+                        </select>
+                        <button class="acc-code-btn" id="practice-nearby-start-btn">🚀 开始练习</button>
+                    </div>
+                    <div class="acc-stats" id="practice-nearby-hint"></div>
+                </div>
+            </div>
+        </div>
+
         <script src="js/config.js"></script>
         <script src="js/data.js"></script>
         <script src="js/api.js"></script>
+        <script src="js/qq-sv.js"></script>
         <script src="js/game.js"></script>
         <script src="js/auth.js"></script>
         <script src="js/lb.js"></script>
         <script src="js/daily.js"></script>
         <script src="js/mp.js"></script>
         <script src="js/packs.js"></script>
+        <script src="js/practice.js"></script>
         <script src="js/features.js"></script>
         <script src="js/events.js"></script>
         <script src="js/sw-register.js"></script>

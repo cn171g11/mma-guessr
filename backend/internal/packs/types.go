@@ -4,6 +4,10 @@ package packs
 // a location without a specific continent so the UI can still show a hint.
 var RegionValues = []string{"asia", "europe", "northamerica", "southamerica", "africa", "oceania", "world"}
 
+// SourceValues are the supported street view providers a pack location may
+// reference. "mapillary" is the default for legacy rows and picked points.
+var SourceValues = []string{"mapillary", "tencent"}
+
 // Pack is one user-created question pack.
 type Pack struct {
 	ID            int64  `json:"id"`
@@ -29,6 +33,7 @@ type Location struct {
 	Region      string  `json:"region"`
 	ImageID     *string `json:"imageId"`
 	PanoramaURL *string `json:"panoramaUrl"`
+	Source      string  `json:"source"`
 }
 
 // PublicLocation is what a player may see before submitting: never the answer
@@ -40,6 +45,7 @@ type PublicLocation struct {
 	Region      string  `json:"region"`
 	MapillaryID *string `json:"mapillaryId"`
 	PanoramaURL *string `json:"panoramaUrl"`
+	Source      string  `json:"source"`
 }
 
 // LocationInput is one location payload sent by a pack owner.
@@ -51,6 +57,7 @@ type LocationInput struct {
 	Region      string  `json:"region"`
 	ImageID     *string `json:"imageId"`
 	PanoramaURL *string `json:"panoramaUrl"`
+	Source      string  `json:"source"`
 }
 
 // ListQuery filters the pack listing.

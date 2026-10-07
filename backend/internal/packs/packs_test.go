@@ -194,6 +194,51 @@ func TestFetchPackLocationsForSettlement(t *testing.T) {
 	}
 }
 
+func TestPackLocationSourcePersisted(t *testing.T) {
+	svc := newPacksService(t)
+
+	pack, err := svc.CreatePack("u1", "图源", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svid := "10021130140720140157400" // 23 位腾讯 svid
+	if err := svc.ReplaceLocations(owner(), pack.ID, []LocationInput{
+		{Name: "腾讯点", Lat: 31.2, Lng: 121.4, Difficulty: 3, Region: "asia", ImageID: strPtr(svid), Source: "tencent"},
+		{Name: "地图点", Lat: 40.0, Lng: -74.0, Difficulty: 2, Region: "northamerica"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	locations, err := svc.ListLocations(owner(), pack.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locations) != 2 {
+		t.Fatalf("expected 2 locations, got %d", len(locations))
+	}
+	if locations[0].Source != "tencent" {
+		t.Fatalf("expected tencent source, got %q", locations[0].Source)
+	}
+	// 未显式指定来源时回落为 mapillary
+	if locations[1].Source != "mapillary" {
+		t.Fatalf("empty source should default to mapillary, got %q", locations[1].Source)
+	}
+
+	_, playable, err := svc.GetPlayablePack(stranger(), pack.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if playable[0].Source != "tencent" {
+		t.Fatalf("playable should expose source, got %q", playable[0].Source)
+	}
+
+	// 未知来源被拒绝
+	bad := LocationInput{Name: "坏源", Lat: 1, Lng: 1, Difficulty: 1, Region: "asia", Source: "bogus"}
+	if err := svc.ReplaceLocations(owner(), pack.ID, []LocationInput{bad}); err == nil {
+		t.Fatal("expected error for unknown source")
+	}
+}
+
 func strPtr(value string) *string {
 	return &value
 }

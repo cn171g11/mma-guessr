@@ -188,7 +188,12 @@ function saveGameHistory(options = {}) {
         id: Date.now(),
         date: new Date().toLocaleString('zh-CN', { hour12: false }),
         mode: state.mode,
-        modeLabel: state.mode === 'pack' ? '📦 图包 · ' + (packChallenge.name || '') : MODES[state.mode].label,
+        modeLabel:
+            state.mode === 'pack'
+                ? '📦 图包 · ' + (packChallenge.name || '')
+                : state.mode === 'practice'
+                  ? '🎓 ' + (practiceChallenge.label || '练习')
+                  : MODES[state.mode].label,
         region: state.region || null,
         regionName: state.region ? REGION_NAMES[state.region] : null,
         totalScore: state.totalScore,
@@ -398,6 +403,18 @@ function startPackGame(challenge) {
     startGame('pack', null);
 }
 
+// 练习题单：由 practice.js 生成（错题回顾 / 附近随机），practice 模式固定使用该题单。
+// 题目带答案坐标，走本地判分；成绩仅本地保存，不上报服务端。
+let practiceChallenge = { key: null, label: null, locations: [] };
+function startPractice(challenge) {
+    practiceChallenge = {
+        key: Date.now(),
+        label: challenge.label || '练习',
+        locations: challenge.locations || [],
+    };
+    startGame('practice', null);
+}
+
 function chooseMode(mode) {
     if (mode === 'region') {
         $('region-screen').classList.add('show');
@@ -409,6 +426,10 @@ function chooseMode(mode) {
     }
     if (mode === 'pack') {
         openPacksPanel();
+        return;
+    }
+    if (mode === 'practice') {
+        openPracticePanel();
         return;
     }
     startGame(mode, null);
@@ -447,7 +468,9 @@ function startGame(mode, region) {
     const tagName =
         mode === 'pack'
             ? '📦 ' + (packChallenge.name || '图包')
-            : cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
+            : mode === 'practice'
+              ? '🎓 ' + (practiceChallenge.label || '练习')
+              : cfg.label + (region ? ' · ' + REGION_NAMES[region] : '');
     $('mode-tag').textContent = tagName;
     $('total-score').textContent = '0';
 
@@ -456,7 +479,7 @@ function startGame(mode, region) {
         $('level-panel').classList.add('show');
         updateLevelPanel();
     } else {
-        const rounds = mode === 'pack' ? Math.min(packChallenge.locations.length, MODES.pack.rounds) : cfg.rounds;
+        const rounds = mode === 'pack' || mode === 'practice' ? roundsFor() : cfg.rounds;
         $('round-info').innerHTML =
             '第 <span class="round" id="round-num">1</span> 轮 / 共 <span id="total-rounds">' + rounds + '</span> 轮';
         $('level-panel').classList.remove('show');
@@ -482,9 +505,11 @@ function startGame(mode, region) {
     }
 }
 
-// 当前模式实际轮数（图包由题单长度决定，上限 5）
+// 当前模式实际轮数（图包/练习由题单长度决定）
 function roundsFor() {
     if (state.mode === 'pack') return Math.min(packChallenge.locations.length, MODES.pack.rounds);
+    if (state.mode === 'practice')
+        return Math.max(1, Math.min(practiceChallenge.locations.length, MODES.practice.rounds));
     return MODES[state.mode].rounds;
 }
 
@@ -569,6 +594,7 @@ function poolKeyFor() {
     if (state.mode === 'china') return 'china';
     if (state.mode === 'daily') return 'daily:' + dailyChallenge.date;
     if (state.mode === 'pack') return 'pack:' + state.packId;
+    if (state.mode === 'practice') return 'practice:' + practiceChallenge.key;
     return 'mode:' + state.mode;
 }
 
@@ -581,6 +607,9 @@ function buildPool() {
     } else if (state.mode === 'pack') {
         // 图包由服务端下发可玩题单（不含答案坐标），仅含该图包地点
         pool = packChallenge.locations.slice();
+    } else if (state.mode === 'practice') {
+        // 练习题单由前端生成，仅含本次练习选中的地点
+        pool = practiceChallenge.locations.slice();
     } else if (state.mode === 'endless') {
         const d = currentDifficulty();
         const world = WORLD_LOCATIONS.filter((l) => l.difficulty === d);
@@ -763,9 +792,29 @@ async function loadRound() {
         roundTried.add(loc.name);
         if (state.mode === 'daily' || state.mode === 'pack') {
             // 每日挑战 / 图包由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
-            if (loc.mapillaryId)
+            const source = loc.source || 'mapillary';
+            if (source === 'tencent' && loc.mapillaryId) {
+                // 腾讯街景：svid 存于 mapillaryId，缩略图存于 panoramaUrl
+                found = {
+                    imageId: null,
+                    panoramaUrl: loc.panoramaUrl || null,
+                    lat: null,
+                    lng: null,
+                    tencent: true,
+                    tencentId: loc.mapillaryId,
+                };
+            } else if (loc.mapillaryId) {
                 found = { imageId: loc.mapillaryId, panoramaUrl: loc.panoramaUrl || null, lat: null, lng: null };
-            else if (loc.panoramaUrl) found = { imageId: null, panoramaUrl: loc.panoramaUrl, lat: null, lng: null };
+            } else if (loc.panoramaUrl) {
+                found = { imageId: null, panoramaUrl: loc.panoramaUrl, lat: null, lng: null };
+            }
+        } else if (state.mode === 'practice') {
+            // 练习题单由前端生成并自带坐标；若来自错题回放还带图片标识，则直接复用
+            if (loc.imageId) {
+                found = { imageId: loc.imageId, panoramaUrl: loc.panoramaUrl || null, lat: loc.lat, lng: loc.lng };
+            } else {
+                found = await findMapillaryImage(loc.lat, loc.lng);
+            }
         } else {
             found = await findMapillaryImage(loc.lat, loc.lng);
         }
@@ -796,7 +845,10 @@ async function loadRound() {
         locationId: loc.id != null ? loc.id : null,
     };
     isSubmitting = false; // 【修复2】新街景答案就绪后才解锁交互，杜绝延迟窗口误判
-    if (imageId) {
+    if (found.tencent) {
+        // 腾讯街景：按 svid 拉取瓦片拼接后渲染
+        showTencentPanorama(found.tencentId);
+    } else if (imageId) {
         // 优先 CDN 直连；无 CDN URL 时走代理兜底
         showPanorama(imageId, panoramaUrl, found.isPano);
     } else if (panoramaUrl) {
@@ -1300,6 +1352,55 @@ function showPanoramaUrl(url) {
     container.appendChild(img);
 }
 
+// 腾讯街景：按 svid 拉取全景详情，拼接 level0 瓦片为 equirect 贴图，
+// 复用同一球面查看器渲染（接口客户端见 src/js/qq-sv.js，CORS 已实测开放）。
+function showTencentPanorama(svid) {
+    if (!svid || !window.QQSv) {
+        showPanoramaFallback();
+        return;
+    }
+    $('panorama-loading').style.display = 'flex';
+    $('panorama-fallback').style.display = 'none';
+    const render = () => {
+        window.QQSv.getPano(svid)
+            .then((detail) => {
+                const basic = (detail && detail.basic) || {};
+                const grid = window.QQSv.parseGrid(basic.level0, 4, 8);
+                return window.QQSv.buildMosaic(svid, {
+                    level: 0,
+                    grid: grid,
+                    tileSize: basic.tile_width || 512,
+                });
+            })
+            .then((result) => {
+                if (!panoViewer) return;
+                const texture = new THREE.CanvasTexture(result.canvas);
+                applyPanoramaTexture(texture, true);
+                resizePanoViewer();
+                $('panorama-loading').style.display = 'none';
+            })
+            .catch(() => {
+                streetViewError = { stage: 'viewer', imageId: svid, viewerError: '腾讯街景加载失败' };
+                showPanoramaFallback();
+            });
+    };
+    try {
+        if (!panoViewer) {
+            initPanoViewer();
+            setTimeout(render, 300);
+        } else {
+            render();
+        }
+    } catch (e) {
+        streetViewError = {
+            stage: 'exception',
+            imageId: svid,
+            viewerError: e && e.message ? e.message : String(e),
+        };
+        showPanoramaFallback();
+    }
+}
+
 function clearMapLayers() {
     if (guessMarker) {
         map.removeLayer(guessMarker);
@@ -1742,7 +1843,7 @@ async function showFinalScore() {
                     : pct >= 30
                       ? '📚 继续学习~'
                       : '🌍 下次更好！';
-        if (state.mode !== 'pack') {
+        if (state.mode !== 'pack' && state.mode !== 'practice') {
             isRecord = saveBestIfHigher(
                 state.mode,
                 { score: state.totalScore, region: state.region, date: Date.now() },
@@ -1763,8 +1864,10 @@ async function showFinalScore() {
     $('share-btn').style.display = 'inline-block';
     $('home-btn2').style.display = 'inline-block';
     $('result-overlay').classList.add('show');
-    // 每日挑战 / 图包已在 applyAuthoritativeResult 中完成上报，此处避免重复提交
-    saveGameHistory({ skipSubmit: state.mode === 'daily' || state.mode === 'pack' });
+    // 每日挑战 / 图包已在 applyAuthoritativeResult 中完成上报；练习模式仅本地保存，均跳过提交
+    saveGameHistory({
+        skipSubmit: state.mode === 'daily' || state.mode === 'pack' || state.mode === 'practice',
+    });
 }
 
 function buildShareText() {

@@ -75,6 +75,15 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindClick('#pack-tab-mine', () => switchPacksTab('mine'));
     bindClick('#packedit-close-btn', closePackEditor);
     bindClick('#packedit-save-btn', savePackLocations);
+    bindClick('#packedit-import-toggle', togglePackImport);
+    bindClick('#packedit-import-btn', importPackLocations);
+    $('packedit-import-source').addEventListener('change', (e) => setPackImportSource(e.target.value));
+
+    bindClick('#practice-close-btn', closePracticePanel);
+    bindClick('#practice-tab-wrong', () => switchPracticeTab('wrong'));
+    bindClick('#practice-tab-nearby', () => switchPracticeTab('nearby'));
+    bindClick('#practice-wrong-start-btn', startWrongPractice);
+    bindClick('#practice-nearby-start-btn', startNearbyPractice);
 
     bindOverlayDismiss('changelog-overlay', closeChangelog);
     bindOverlayDismiss('history-overlay', closeHistory);
@@ -85,6 +94,7 @@ function bindOverlayDismiss(overlayId, closeFn) {
     bindOverlayDismiss('err-overlay', closeErrReport);
     bindOverlayDismiss('packs-overlay', closePacksPanel);
     bindOverlayDismiss('packedit-overlay', closePackEditor);
+    bindOverlayDismiss('practice-overlay', closePracticePanel);
     bindOverlayDismiss('basemap-overlay', closeBasemap);
 
     // 底图设置

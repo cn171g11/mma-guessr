@@ -144,7 +144,7 @@ func (s *Store) DeletePack(id int64, ownerID string) error {
 // ListLocations returns all locations of a pack, in insertion order.
 func (s *Store) ListLocations(packID int64) ([]Location, error) {
 	rows, err := s.conn.Query(
-		`SELECT id, pack_id, name, lat, lng, difficulty, region, image_id, panorama_url
+		`SELECT id, pack_id, name, lat, lng, difficulty, region, image_id, panorama_url, source
 		 FROM pack_locations WHERE pack_id = ? ORDER BY id`, packID)
 	if err != nil {
 		return nil, err
@@ -165,11 +165,15 @@ func (s *Store) ReplaceLocations(packID int64, inputs []LocationInput) error {
 		return err
 	}
 	for _, input := range inputs {
+		source := input.Source
+		if source == "" {
+			source = "mapillary"
+		}
 		if _, err := tx.Exec(
-			`INSERT INTO pack_locations (pack_id, name, lat, lng, difficulty, region, image_id, panorama_url, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO pack_locations (pack_id, name, lat, lng, difficulty, region, image_id, panorama_url, source, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			packID, input.Name, input.Lat, input.Lng, input.Difficulty, input.Region,
-			input.ImageID, input.PanoramaURL, util.Now(), util.Now()); err != nil {
+			input.ImageID, input.PanoramaURL, source, util.Now(), util.Now()); err != nil {
 			return err
 		}
 	}
@@ -179,7 +183,7 @@ func (s *Store) ReplaceLocations(packID int64, inputs []LocationInput) error {
 // FetchPlayableLocations returns the public view of a pack's locations.
 func (s *Store) FetchPlayableLocations(packID int64) ([]PublicLocation, error) {
 	rows, err := s.conn.Query(
-		`SELECT id, name, difficulty, region, image_id, panorama_url
+		`SELECT id, name, difficulty, region, image_id, panorama_url, source
 		 FROM pack_locations WHERE pack_id = ? ORDER BY id`, packID)
 	if err != nil {
 		return nil, err
@@ -191,7 +195,7 @@ func (s *Store) FetchPlayableLocations(packID int64) ([]PublicLocation, error) {
 		var location PublicLocation
 		var imageID, panoramaURL sql.NullString
 		if err := rows.Scan(&location.ID, &location.Name, &location.Difficulty,
-			&location.Region, &imageID, &panoramaURL); err != nil {
+			&location.Region, &imageID, &panoramaURL, &location.Source); err != nil {
 			return nil, err
 		}
 		if imageID.Valid {
@@ -221,7 +225,7 @@ func (s *Store) FetchByIDs(ids []int64) ([]Location, error) {
 		args = append(args, id)
 	}
 	rows, err := s.conn.Query(
-		`SELECT id, pack_id, name, lat, lng, difficulty, region, image_id, panorama_url
+		`SELECT id, pack_id, name, lat, lng, difficulty, region, image_id, panorama_url, source
 		 FROM pack_locations WHERE id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, err
@@ -244,7 +248,7 @@ func scanLocations(rows *sql.Rows) ([]Location, error) {
 		var location Location
 		var imageID, panoramaURL sql.NullString
 		if err := rows.Scan(&location.ID, &location.PackID, &location.Name, &location.Lat,
-			&location.Lng, &location.Difficulty, &location.Region, &imageID, &panoramaURL); err != nil {
+			&location.Lng, &location.Difficulty, &location.Region, &imageID, &panoramaURL, &location.Source); err != nil {
 			return nil, err
 		}
 		if imageID.Valid {

@@ -5,7 +5,7 @@
 //   · 本域静态资源（js/css/svg/webmanifest）：缓存优先，未命中走网络
 //   · 本域 /api 与 /socket.io：绝不缓存（动态数据/鉴权请求）
 //   · 跨域静态（Leaflet/unpkg/CDN、街景缩略、OSM 瓦片）：缓存优先，支持离线地图瓦片
-const CACHE_VERSION = '2.1.1';
+const CACHE_VERSION = '2.4.0';
 const STATIC_CACHE = 'mma-guessr-static-' + CACHE_VERSION;
 
 const PRECACHE_URLS = [
@@ -14,11 +14,15 @@ const PRECACHE_URLS = [
     './js/config.js',
     './js/data.js',
     './js/api.js',
+    './js/qq-sv.js',
     './js/game.js',
     './js/auth.js',
     './js/lb.js',
     './js/daily.js',
     './js/mp.js',
+    './js/packs.js',
+    './js/practice.js',
+    './js/features.js',
     './js/sw-register.js',
     './manifest.webmanifest',
     './icons/icon-192.svg',

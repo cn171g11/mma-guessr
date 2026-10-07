@@ -243,6 +243,10 @@ func validateLocationInput(input LocationInput) error {
 	if input.ImageID != nil && !imageIDPattern.MatchString(*input.ImageID) {
 		return httputil.BadRequest("imageId 包含非法字符")
 	}
+	// 空来源按 mapillary 处理，兼容旧客户端与地图选点；非空时须为已知图源
+	if input.Source != "" && !contains(SourceValues, input.Source) {
+		return httputil.BadRequest("无效的街景来源")
+	}
 	return nil
 }
 

@@ -16,7 +16,7 @@ import (
 
 const (
 	graphBaseURL     = "https://graph.mapillary.com"
-	mediaFields      = "thumb_256_url,thumb_1024_url,thumb_2048_url"
+	mediaFields      = "thumb_256_url,thumb_1024_url,thumb_2048_url,geometry,is_pano"
 	searchFields     = "id,geometry,is_pano,thumb_256_url,thumb_1024_url,thumb_2048_url"
 	imageContentType = "image/jpeg"
 
@@ -217,9 +217,51 @@ func (s *Service) ResolveMediaURL(imageID string, width int) (string, error) {
 }
 
 type mediaRecord struct {
-	Thumb256URL  *string `json:"thumb_256_url"`
-	Thumb1024URL *string `json:"thumb_1024_url"`
-	Thumb2048URL *string `json:"thumb_2048_url"`
+	Thumb256URL  *string       `json:"thumb_256_url"`
+	Thumb1024URL *string       `json:"thumb_1024_url"`
+	Thumb2048URL *string       `json:"thumb_2048_url"`
+	Geometry     imageGeometry `json:"geometry"`
+	IsPano       *bool         `json:"is_pano"`
+}
+
+type imageGeometry struct {
+	Type        string    `json:"type"`
+	Coordinates []float64 `json:"coordinates"`
+}
+
+// MediaMetadata is the coordinate-bearing metadata of a Mapillary image,
+// resolved by ID so pack owners can import existing images without a bbox.
+type MediaMetadata struct {
+	ID       string  `json:"id"`
+	Lat      float64 `json:"lat"`
+	Lng      float64 `json:"lng"`
+	IsPano   *bool   `json:"isPano,omitempty"`
+	ThumbURL string  `json:"url"`
+}
+
+// ResolveMetadata resolves an image ID to its coordinates and a public
+// thumbnail URL. Coordinates come from geometry.coordinates as [lng, lat].
+func (s *Service) ResolveMetadata(imageID string, width int) (*MediaMetadata, error) {
+	if s.token == "" {
+		return nil, httputil.ServiceUnavailable("Mapillary 代理未配置（缺少 MAPILLARY_TOKEN）")
+	}
+	media, err := s.resolveMedia(imageID)
+	if err != nil {
+		return nil, err
+	}
+	thumbURL, err := pickThumbURL(media, normalizeWidth(width))
+	if err != nil {
+		return nil, err
+	}
+	if err := assertSafeImageURL(thumbURL); err != nil {
+		return nil, err
+	}
+	out := &MediaMetadata{ID: imageID, ThumbURL: thumbURL, IsPano: media.IsPano}
+	if len(media.Geometry.Coordinates) >= 2 {
+		out.Lng = media.Geometry.Coordinates[0]
+		out.Lat = media.Geometry.Coordinates[1]
+	}
+	return out, nil
 }
 
 func (s *Service) resolveMedia(imageID string) (*mediaRecord, error) {

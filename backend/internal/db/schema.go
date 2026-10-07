@@ -243,6 +243,7 @@ func Migrate(conn *sql.DB) error {
 			region TEXT NOT NULL DEFAULT 'world',
 			image_id TEXT,
 			panorama_url TEXT,
+			source TEXT NOT NULL DEFAULT 'mapillary',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
@@ -263,6 +264,9 @@ func Migrate(conn *sql.DB) error {
 		return err
 	}
 	if err := migrateGameResultsPackID(conn); err != nil {
+		return err
+	}
+	if err := migratePackLocationsSource(conn); err != nil {
 		return err
 	}
 	if err := backfillLeaderboardBest(conn); err != nil {
@@ -367,6 +371,31 @@ func migrateGameResultsPackID(conn *sql.DB) error {
 				return err
 			}
 			_, err = conn.Exec(`ALTER TABLE game_results ADD COLUMN pack_id INTEGER`)
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// migratePackLocationsSource adds the source column to databases created
+// before custom packs could reference non-Mapillary street view providers.
+// Existing rows default to 'mapillary', preserving their original semantics.
+func migratePackLocationsSource(conn *sql.DB) error {
+	rows, err := conn.Query(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pack_locations'`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var createSQL string
+		if err := rows.Scan(&createSQL); err != nil {
+			_ = rows.Close() // #nosec G104 -- the pool is single-connection; release before returning
+			return err
+		}
+		if !strings.Contains(createSQL, "source") {
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			_, err = conn.Exec(`ALTER TABLE pack_locations ADD COLUMN source TEXT NOT NULL DEFAULT 'mapillary'`)
 			return err
 		}
 	}

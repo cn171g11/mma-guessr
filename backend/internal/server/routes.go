@@ -125,6 +125,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Mapillary proxy.
 	mux.Handle("GET /api/proxy/mapillary/search", middleware.RateLimit("rl:mapillary-search", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleMapillarySearch)))
 	mux.Handle("GET /api/proxy/mapillary/media/{imageId}", middleware.RateLimit("rl:mapillary-media", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleMapillaryMedia)))
+	mux.Handle("GET /api/proxy/mapillary/metadata/{imageId}", middleware.RateLimit("rl:mapillary-metadata", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleMapillaryMetadata)))
 	mux.Handle("GET /api/proxy/mapillary/image/{imageId}", middleware.RateLimit("rl:mapillary-image", proxyWindow, imageRateMax, nil)(http.HandlerFunc(s.handleMapillaryImage)))
 	mux.Handle("GET /api/proxy/imagery/{source}/search", middleware.RateLimit("rl:imagery-search", proxyWindow, searchRateMax, nil)(http.HandlerFunc(s.handleImagerySearch)))
 	mux.Handle("GET /api/proxy/imagery/{source}/image/{imageId}", middleware.RateLimit("rl:imagery-image", proxyWindow, imageRateMax, nil)(http.HandlerFunc(s.handleImageryImage)))
