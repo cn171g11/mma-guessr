@@ -460,8 +460,9 @@ function startGame(mode, region) {
     $('minimap-container').classList.add('show');
     $('submit-btn').classList.add('show');
     $('quit-btn').classList.add('show');
-    // 每日挑战 / 图包题单由服务端签发，不提供换题入口
-    $('swap-btn').classList.toggle('show', mode !== 'daily' && mode !== 'pack');
+    // 每日挑战 / 图包题单由服务端签发，练习题单长度即轮数，三者都不提供换题入口：
+    // 换题会额外消耗固定题单中的题目，导致末轮重复出题或题数不足
+    $('swap-btn').classList.toggle('show', !isFixedListMode());
     updateSwapButton();
 
     const cfg = MODES[mode];
@@ -511,6 +512,35 @@ function roundsFor() {
     if (state.mode === 'practice')
         return Math.max(1, Math.min(practiceChallenge.locations.length, MODES.practice.rounds));
     return MODES[state.mode].rounds;
+}
+
+// ==========================================================
+// 【固定题单维护】每日挑战 / 图包 / 练习的题目数量即轮数，题目不可补充
+// 取不到街景的题目必须从题单剔除：否则「换一个地点」会反复抽到同一道坏题，
+// 玩家永远进不了下一轮，且末轮会因为题数不足而重复出题。
+// ==========================================================
+function isFixedListMode() {
+    return state.mode === 'daily' || state.mode === 'pack' || state.mode === 'practice';
+}
+
+// 当前模式的固定题单（返回引用，剔除即生效）
+function currentFixedList() {
+    if (state.mode === 'daily') return dailyChallenge.locations;
+    if (state.mode === 'pack') return packChallenge.locations;
+    if (state.mode === 'practice') return practiceChallenge.locations;
+    return null;
+}
+
+// 剔除一道不可用题目：同步牌堆并刷新「共 N 轮」文案，使轮数与题单长度保持一致
+function dropFixedListItem(loc) {
+    const list = currentFixedList();
+    if (!list) return;
+    const listIndex = list.indexOf(loc);
+    if (listIndex >= 0) list.splice(listIndex, 1);
+    const bagIndex = state.drawBag.indexOf(loc);
+    if (bagIndex >= 0) state.drawBag.splice(bagIndex, 1);
+    const totalRounds = $('total-rounds');
+    if (totalRounds) totalRounds.textContent = String(roundsFor());
 }
 
 function quitGame() {
@@ -788,10 +818,18 @@ async function loadRound() {
     let found = null,
         loc = null;
     for (let i = 0; i < 4 && !found; i++) {
+        // 固定题单被抽干后无可选题目：直接落到街景失败提示，避免继续空转
+        if (isFixedListMode() && currentFixedList().length === 0) break;
         loc = pickLocation(roundTried);
+        if (!loc) break;
         roundTried.add(loc.name);
         if (state.mode === 'daily' || state.mode === 'pack') {
             // 每日挑战 / 图包由服务端下发题目，答案坐标绝不提前下发；直接用题单携带的图片标识渲染街景
+            // 没有图源的题目直接剔除：否则点「换一个地点」会反复抽到同一道坏题，永远进不了下一轮
+            if (!loc.mapillaryId && !loc.panoramaUrl) {
+                dropFixedListItem(loc);
+                continue;
+            }
             const source = loc.source || 'mapillary';
             if (source === 'tencent' && loc.mapillaryId) {
                 // 腾讯街景：svid 存于 mapillaryId，缩略图存于 panoramaUrl
@@ -814,6 +852,8 @@ async function loadRound() {
                 found = { imageId: loc.imageId, panoramaUrl: loc.panoramaUrl || null, lat: loc.lat, lng: loc.lng };
             } else {
                 found = await findMapillaryImage(loc.lat, loc.lng);
+                // 搜不到街景的练习题同样剔除，否则重练时会一直卡在同一道无覆盖的题目上
+                if (!found) dropFixedListItem(loc);
             }
         } else {
             found = await findMapillaryImage(loc.lat, loc.lng);
@@ -900,8 +940,8 @@ function updateSwapButton() {
 
 function swapQuestion() {
     if (state.finished || isSubmitting) return;
-    if (state.mode === 'daily' || state.mode === 'pack') {
-        showToast('❌ 该模式题单由服务端签发，不支持换题');
+    if (isFixedListMode()) {
+        showToast('❌ 该模式为固定题单，不支持换题');
         return;
     }
     if (swapsLeft() <= 0) {

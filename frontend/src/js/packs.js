@@ -216,16 +216,24 @@ async function onEditorMapClick(e) {
         lng: found.lng,
         source: 'mapillary',
     };
-    const img = found.panoramaUrl
-        ? `<img src="${found.panoramaUrl}" alt="街景预览" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px" />`
-        : '';
-    preview.innerHTML =
-        img +
-        '<div class="acc-stats">已解析街景坐标：' +
-        found.lat.toFixed(4) +
-        ', ' +
-        found.lng.toFixed(4) +
-        '</div>' +
+    // 预览图走 DOM 构建：URL 来自代理接口，拼进 innerHTML 会被注入出属性（如 onerror）
+    preview.innerHTML = '';
+    if (isSafeImageUrl(found.panoramaUrl)) {
+        const img = document.createElement('img');
+        img.src = found.panoramaUrl;
+        img.alt = '街景预览';
+        img.style.width = '100%';
+        img.style.maxHeight = '180px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '10px';
+        preview.appendChild(img);
+    }
+    const coords = document.createElement('div');
+    coords.className = 'acc-stats';
+    coords.textContent = '已解析街景坐标：' + found.lat.toFixed(4) + ', ' + found.lng.toFixed(4);
+    preview.appendChild(coords);
+    const picker = document.createElement('div');
+    picker.innerHTML =
         '<div class="acc-code-row">' +
         '<input id="pick-name" placeholder="地点名称（120 字以内）" maxlength="120" autocomplete="off" />' +
         '</div>' +
@@ -241,7 +249,18 @@ async function onEditorMapClick(e) {
         '</select>' +
         '<button class="acc-code-btn" id="pick-add-btn">＋ 添加</button>' +
         '</div>';
+    preview.appendChild(picker);
     $('pick-add-btn').addEventListener('click', addPickedLocation);
+}
+
+// 只接受 https 图片地址进入 <img src>，挡掉 javascript: / data: 等协议与畸形 URL
+function isSafeImageUrl(url) {
+    if (typeof url !== 'string' || url === '') return false;
+    try {
+        return new URL(url, window.location.href).protocol === 'https:';
+    } catch (e) {
+        return false;
+    }
 }
 
 function addPickedLocation() {

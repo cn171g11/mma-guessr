@@ -14,16 +14,18 @@
         <link rel="manifest" href="manifest.webmanifest" />
         <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="icons/icon-192.svg" />
-        <title>🌍 MmaGuessr v2.0.0 · 街景猜位置游戏 (OSM + Mapillary)</title>
+        <title>🌍 MmaGuessr v2.4.1 · 街景猜位置游戏 (OSM + Mapillary)</title>
 
         <!-- CSP：纯静态托管无响应头可加，故用 meta 声明。
              内联 onclick 已全部迁移至 js/events.js（addEventListener），故 script-src 无需 unsafe-inline；
              外部 CDN 脚本另以 SRI 锁定内容，防供应链接篡改。
-             connect-src 放行本地 API/Socket.IO（http://localhost:3000，仅开发环境可达）与 https 直连。
+             connect-src 改为显式域名白名单（后端 API + Socket.IO、腾讯街景、本地开发），
+             不再放行任意 https / ws 主机，避免脚本被注入后把数据发往任意站点。
+             ⚠️ 若修改 js/config.js 里的 API_BASE，必须同步更新此处 connect-src，否则接口会被 CSP 拦截。
              注意：CSP 头本身对该页面（静态托管）不生效，本 meta 是页面级兜底；生产另由 Nginx 下发同规则头。 -->
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss: ws: http://localhost:3000 http://127.0.0.1:3000; object-src 'none'; base-uri 'self'; form-action 'self'"
+            content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tuxun.edu-group.cn wss://tuxun.edu-group.cn http://localhost:3000 http://127.0.0.1:3000 ws://localhost:3000 ws://127.0.0.1:3000 https://sv.map.qq.com https://sv1.map.qq.com https://qq-api-proxy.map-making.app; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
 
         <!-- SRI：CDN 依赖锁定具体内容哈希，防供应链接篡改；crossorigin 使校验生效 -->
@@ -123,7 +125,7 @@
             </div>
             <div class="home-footer">
                 <span class="bank-badge" id="bank-count">📚 题库共 -- 题</span>
-                <span class="ver-badge" id="home-version">版本 v2.1.1</span>
+                <span class="ver-badge" id="home-version">版本 v2.4.1</span>
                 <button class="changelog-btn" id="btn-changelog">📋 更新记录</button>
                 <button class="changelog-btn" id="btn-basemap">🗺️ 底图设置</button>
                 <a

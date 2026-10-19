@@ -163,8 +163,9 @@ async function refreshCollections() {
             '<div class="hist-empty">还没有收集到地点<br><span style="font-size:12px">答对地点即可点亮图鉴</span></div>';
         return;
     }
+    const total = Number.isFinite(Number(data.total)) ? Number(data.total) : items.length;
     container.innerHTML =
-        `<div class="acc-stats">🗺️ 已点亮 ${data.total} 个地点</div>` +
+        `<div class="acc-stats">🗺️ 已点亮 ${total} 个地点</div>` +
         items
             .slice(0, 50)
             .map(

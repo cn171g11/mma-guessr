@@ -272,7 +272,8 @@ const MmaApi = (() => {
         getRecent: (limit) => request('/api/games/recent?limit=' + (limit || 20)),
         getSummary: () => request('/api/games/summary'),
         submitGame: (payload) => request('/api/games', { method: 'POST', body: payload }),
-        deleteGame: (id) => request('/api/games/' + id, { method: 'DELETE' }),
+        // 路径中的 id 一律编码：即便上游给出异常 id 也无法拼出越权路径
+        deleteGame: (id) => request('/api/games/' + encodeURIComponent(id), { method: 'DELETE' }),
         getProfile: () => request('/api/profile'),
         getAchievements: () => request('/api/achievements'),
         equipTitle: (title) => request('/api/achievements/title', { method: 'PUT', body: { title } }),
@@ -282,7 +283,7 @@ const MmaApi = (() => {
             if (date) params.set('date', date);
             return request('/api/leaderboard?' + params.toString());
         },
-        getGame: (id) => request('/api/games/' + id),
+        getGame: (id) => request('/api/games/' + encodeURIComponent(id)),
         getDailyLeaderboard: (date) =>
             request('/api/daily/leaderboard' + (date ? '?date=' + encodeURIComponent(date) : '')),
         getRatings: () => request('/api/ratings'),
@@ -291,20 +292,23 @@ const MmaApi = (() => {
         listPacks: (mine, search) =>
             request('/api/packs?mine=' + (mine ? '1' : '0') + (search ? '&q=' + encodeURIComponent(search) : '')),
         createPack: (payload) => request('/api/packs', { method: 'POST', body: payload }),
-        getPack: (id) => request('/api/packs/' + id),
-        updatePack: (id, payload) => request('/api/packs/' + id, { method: 'PATCH', body: payload }),
-        deletePack: (id) => request('/api/packs/' + id, { method: 'DELETE' }),
-        getPackLocations: (id) => request('/api/packs/' + id + '/locations'),
+        getPack: (id) => request('/api/packs/' + encodeURIComponent(id)),
+        updatePack: (id, payload) =>
+            request('/api/packs/' + encodeURIComponent(id), { method: 'PATCH', body: payload }),
+        deletePack: (id) => request('/api/packs/' + encodeURIComponent(id), { method: 'DELETE' }),
+        getPackLocations: (id) => request('/api/packs/' + encodeURIComponent(id) + '/locations'),
         replacePackLocations: (id, locations) =>
-            request('/api/packs/' + id + '/locations', { method: 'POST', body: { locations } }),
-        getPackPlay: (id) => request('/api/packs/' + id + '/play'),
+            request('/api/packs/' + encodeURIComponent(id) + '/locations', { method: 'POST', body: { locations } }),
+        getPackPlay: (id) => request('/api/packs/' + encodeURIComponent(id) + '/play'),
         listFriends: () => request('/api/friends'),
         listFriendRequests: () => request('/api/friends/requests'),
         sendFriendRequest: (targetUserId) =>
             request('/api/friends/requests', { method: 'POST', body: { targetUserId } }),
-        acceptFriendRequest: (userId) => request('/api/friends/requests/' + userId + '/accept', { method: 'POST' }),
-        rejectFriendRequest: (userId) => request('/api/friends/requests/' + userId + '/reject', { method: 'POST' }),
-        removeFriend: (userId) => request('/api/friends/' + userId, { method: 'DELETE' }),
+        acceptFriendRequest: (userId) =>
+            request('/api/friends/requests/' + encodeURIComponent(userId) + '/accept', { method: 'POST' }),
+        rejectFriendRequest: (userId) =>
+            request('/api/friends/requests/' + encodeURIComponent(userId) + '/reject', { method: 'POST' }),
+        removeFriend: (userId) => request('/api/friends/' + encodeURIComponent(userId), { method: 'DELETE' }),
         getSponsors: () => request('/api/sponsors'),
         getOAuthProviders: () => request('/api/oauth/providers'),
         login: (identifier, password) =>

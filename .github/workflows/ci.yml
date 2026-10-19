@@ -72,6 +72,8 @@ jobs:
                   node --check src/js/features.js
                   node --check src/js/packs.js
                   node --check src/js/practice.js
+                  node --check src/js/events.js
+                  node --check src/js/sw-register.js
                   node --check src/sw.js
                   for f in tools/*.js; do node --check "$f"; done
 
@@ -79,3 +81,9 @@ jobs:
               run: node tools/validate-data.js
               env:
                   EXPECTED_LOCATIONS: 1570
+
+            - name: Version consistency
+              run: node tools/verify-version-consistency.js
+
+            - name: Fixed question list regression
+              run: node tools/verify-fixed-list.js

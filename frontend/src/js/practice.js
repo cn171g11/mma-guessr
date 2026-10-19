@@ -224,5 +224,7 @@ function haversineKm(lat1, lng1, lat2, lng2) {
     const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    // 对跖点附近浮点误差会让 a 略微越界（>1 或 <0），sqrt(1 - a) 会得到 NaN，故先截断到 [0, 1]
+    const h = Math.min(1, Math.max(0, a));
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
