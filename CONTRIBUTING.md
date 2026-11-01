@@ -307,10 +307,9 @@ git status   # 确认无密钥/临时文件入库（backend/.env 已被 git 忽�
 
 ### 9.6 开源协议
 
-本项目以 [Apache License 2.0](LICENSE) 开源（版权所有 © 2026 yzuio, Dinnerb0ne）。
+本项目以 [GNU AGPL v3.0](LICENSE) 开源（版权所有 © 2026 yzuio, Dinnerb0ne）。
 
-- 按 Apache 2.0 第 5 条「Submission of Contributions」，你提交的 Issue / PR /
-  任何有意提交的贡献，默认视为以 Apache 2.0 条款授权本项目使用；
+- 你提交的 Issue / PR / 任何有意提交的贡献，默认视为以 AGPL-3.0 条款授权本项目使用；
 - 如需以其他条款贡献，请在提交中明确声明「Not a Contribution」。
 
 ---

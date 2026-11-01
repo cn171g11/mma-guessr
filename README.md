@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/release/cn171g11/mma-guessr?logo=github&color=blue)](https://github.com/cn171g11/mma-guessr/releases)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/cn171g11/mma-guessr/ci.yml?logo=githubactions&label=CI)](https://github.com/cn171g11/mma-guessr/actions)
-[![License](https://img.shields.io/badge/Apache%202.0-blue?logo=apache)](https://github.com/cn171g11/mma-guessr/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/AGPL%20v3.0-blue?logo=gnu)](https://github.com/cn171g11/mma-guessr/blob/main/LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/cn171g11/mma-guessr?logo=git)](https://github.com/cn171g11/mma-guessr/commits/main)
 
 [![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8?logo=go)](https://go.dev/)
@@ -87,14 +87,14 @@ mma-guessr/
 ├── .github/workflows/        # CI/CD 流水线
 ├── AGENTS.md                 # AI 助手项目指令（opencode 读取）
 ├── CONTRIBUTING.md           # 开发与贡献指南
-└── LICENSE                   # Apache License 2.0
+└── LICENSE                   # GNU AGPL v3.0
 ```
 
 ---
 
 ## 许可
 
-本项目以 [Apache License 2.0](LICENSE) 开源发布，版权所有 © 2026 yzuio, Dinnerb0ne
+本项目以 [GNU AGPL v3.0](LICENSE) 开源发布，版权所有 © 2026 yzuio, Dinnerb0ne
 
-- 你可以自由使用、修改、分发本项目（含商业化），但需保留版权与许可声明，详见 [LICENSE](LICENSE)。
+- 你可以自由使用、修改、分发本项目（含商业化），但衍生作品及对外提供网络服务时必须以 AGPL-3.0 开放源码（含第 13 条网络交互条款），详见 [LICENSE](LICENSE)。
 - Mapillary 街景数据的使用须遵守 [Mapillary 服务条款](https://www.mapillary.com/terms)。
